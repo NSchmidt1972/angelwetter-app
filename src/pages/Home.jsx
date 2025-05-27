@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import { useEffect, useState } from 'react';
 import WeatherNow from '../components/WeatherNow';
 import { fetchWeather } from '../api/weather';
@@ -7,27 +8,24 @@ export default function Home() {
 
   useEffect(() => {
     const cached = localStorage.getItem('cachedWeather');
-    let parsed = null;
-
     if (cached) {
-      parsed = JSON.parse(cached);
-      setWeatherData(parsed.data);
+      const parsed = JSON.parse(cached);
+      setWeatherData(parsed); // enthält: { data, savedAt }
     }
 
-    // Nur aktualisieren, wenn die Seite frisch geladen wurde (nicht bei internem Routing)
     const navType = performance.getEntriesByType("navigation")[0]?.type || "navigate";
-
     const isFullReload = navType === "reload" || navType === "navigate";
 
     if (isFullReload) {
       fetchWeather()
         .then((freshData) => {
           if (freshData) {
-            setWeatherData(freshData);
-            localStorage.setItem('cachedWeather', JSON.stringify({
+            const combined = {
               data: freshData,
               savedAt: Date.now()
-            }));
+            };
+            setWeatherData(combined);
+            localStorage.setItem('cachedWeather', JSON.stringify(combined));
           }
         })
         .catch(err =>
@@ -39,13 +37,12 @@ export default function Home() {
   const refreshWeather = async () => {
     try {
       const updated = await fetchWeather();
-      if (updated) {
-        setWeatherData(updated);
-        localStorage.setItem('cachedWeather', JSON.stringify({
-          data: updated,
-          savedAt: Date.now()
-        }));
-      }
+      const combined = {
+        data: updated,
+        savedAt: Date.now()
+      };
+      setWeatherData(combined);
+      localStorage.setItem('cachedWeather', JSON.stringify(combined));
     } catch (err) {
       console.error('Fehler beim manuellen Wetter-Update:', err);
       alert('Wetter konnte nicht aktualisiert werden.');
