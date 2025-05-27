@@ -21,3 +21,9 @@
 - 0.1.6
 - 💄 Vorbereitungen für Version 0.1.6
 - 📝 Update CHANGELOG für Version 0.1.5
+
+## [0.1.7] - 2025-05-27
+### Änderungen
+- 0.1.7
+- 💄 Vorbereitungen für Version 0.1.7
+- 📝 Update CHANGELOG für Version 0.1.6
