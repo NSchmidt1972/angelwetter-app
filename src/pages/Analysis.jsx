@@ -23,6 +23,10 @@ function getMonthName(dateStr) {
   return date.toLocaleDateString('de-DE', { month: 'long' });
 }
 
+function getDayOnly(dateStr) {
+  return new Date(dateStr).toISOString().split('T')[0];
+}
+
 export default function Analysis() {
   const [fishes, setFishes] = useState([]);
 
@@ -38,6 +42,22 @@ export default function Analysis() {
     return <p className="text-center text-gray-500 mt-6">Keine Fänge zum Auswerten.</p>;
   }
 
+  const isValidFish = f =>
+    !f.blank &&
+    f.fish &&
+    f.fish.trim().toLowerCase() !== 'unbekannt' &&
+    f.angler &&
+    f.angler.trim().toLowerCase() !== 'unbekannt';
+
+  const validFishes = fishes.filter(isValidFish);
+
+  const fangtage = new Set(
+    validFishes.map(f => `${f.angler}__${getDayOnly(f.timestamp)}`)
+  );
+  const schneidertage = new Set(
+    fishes.filter(f => f.blank).map(f => `${f.angler}__${getDayOnly(f.timestamp)}`)
+  );
+
   const statsReducer = (groupFn) => (map, f) => {
     const key = groupFn(f);
     if (!key) return map;
@@ -45,12 +65,12 @@ export default function Analysis() {
     return map;
   };
 
-  const tempStats = fishes.reduce(statsReducer(f => {
+  const tempStats = validFishes.reduce(statsReducer(f => {
     const t = f.weather?.temp;
     return t != null ? `${Math.floor(t / 5) * 5}–${Math.floor(t / 5) * 5 + 4}°C` : null;
   }), {});
 
-  const pressureStats = fishes.reduce(statsReducer(f => {
+  const pressureStats = validFishes.reduce(statsReducer(f => {
     const p = f.weather?.pressure;
     if (p == null) return null;
     if (p < 1000) return '<1000 hPa';
@@ -58,7 +78,7 @@ export default function Analysis() {
     return '≥1015 hPa';
   }), {});
 
-  const windStats = fishes.reduce(statsReducer(f => {
+  const windStats = validFishes.reduce(statsReducer(f => {
     const w = f.weather?.wind;
     if (w == null) return null;
     if (w <= 1) return '0–1 m/s';
@@ -66,28 +86,38 @@ export default function Analysis() {
     return '>3 m/s';
   }), {});
 
-  const windDirStats = fishes.reduce(statsReducer(f => {
+  const windDirStats = validFishes.reduce(statsReducer(f => {
     const deg = f.weather?.wind_deg;
     return deg != null ? windDirection(deg) : null;
   }), {});
 
-  const descStats = fishes.reduce(statsReducer(f => f.weather?.description || 'unbekannt'), {});
-  const moonStats = fishes.reduce(statsReducer(f => {
+  const humidityStats = validFishes.reduce(statsReducer(f => {
+    const h = f.weather?.humidity;
+    if (h == null) return null;
+    if (h < 40) return '<40 %';
+    if (h < 60) return '40–59 %';
+    if (h < 80) return '60–79 %';
+    return '≥80 %';
+  }), {});
+
+  const descStats = validFishes.reduce(statsReducer(f => f.weather?.description || 'unbekannt'), {});
+  const moonStats = validFishes.reduce(statsReducer(f => {
     const phase = f.weather?.moon_phase;
     if (phase == null) return 'unbekannt';
     return getMoonDescription(phase);
   }), {});
 
-  const totalFishCount = fishes.length;
-  const fishTypeStats = fishes.reduce((map, f) => {
-    const type = f.fish || 'Unbekannt';
+  const totalFishCount = validFishes.length;
+
+  const fishTypeStats = validFishes.reduce((map, f) => {
+    const type = f.fish.trim();
     map[type] = (map[type] || 0) + 1;
     return map;
   }, {});
 
-  const monthlyStats = fishes.reduce((map, f) => {
+  const monthlyStats = validFishes.reduce((map, f) => {
     const month = getMonthName(f.timestamp);
-    const type = f.fish || 'Unbekannt';
+    const type = f.fish.trim();
     if (!map[month]) map[month] = {};
     map[month][type] = (map[month][type] || 0) + 1;
     return map;
@@ -97,16 +127,40 @@ export default function Analysis() {
     new Date(`1 ${a[0]} 2000`) - new Date(`1 ${b[0]} 2000`)
   );
 
+  const descWithIcon = {};
+  validFishes.forEach(f => {
+    const desc = f.weather?.description;
+    const icon = f.weather?.icon;
+    if (desc && icon && !descWithIcon[desc]) {
+      descWithIcon[desc] = icon;
+    }
+  });
+
   const renderStatList = (title, stats) => (
     <div className="mb-6">
       <h3 className="text-lg font-semibold text-blue-700 mb-2">{title}</h3>
       <ul className="bg-white shadow rounded-lg divide-y divide-gray-200">
-        {Object.entries(stats).sort().map(([label, count]) => (
-          <li key={label} className="flex justify-between px-4 py-2 text-sm">
-            <span>{label}</span>
-            <span className="font-mono text-gray-700">{count}x</span>
-          </li>
-        ))}
+        {Object.entries(stats)
+          .sort((a, b) => b[1] - a[1])
+          .map(([label, count]) => (
+            <li key={label} className="flex justify-between px-4 py-2 text-sm">
+              {title === "🌦 Wetterbeschreibung" ? (
+                <span className="flex items-center gap-2">
+                  {descWithIcon[label] && (
+                    <img
+                      src={`https://openweathermap.org/img/wn/${descWithIcon[label]}@2x.png`}
+                      alt={label}
+                      className="w-6 h-6"
+                    />
+                  )}
+                  {label}
+                </span>
+              ) : (
+                <span>{label}</span>
+              )}
+              <span className="font-mono text-gray-700">{count}x</span>
+            </li>
+          ))}
       </ul>
     </div>
   );
@@ -117,7 +171,8 @@ export default function Analysis() {
 
       <div className="max-w-2xl mx-auto mb-10">
         <p className="text-center text-gray-700 text-lg mb-4">
-          Insgesamt <span className="font-bold">{totalFishCount}</span> Fische erfasst.
+          Insgesamt <span className="font-bold">{totalFishCount}</span> Fische gefangen.<br />
+          Fangtage: <span className="font-bold">{fangtage.size}</span>, Schneidertage: <span className="font-bold">{schneidertage.size}</span> – das sind {((schneidertage.size / (fangtage.size + schneidertage.size)) * 100).toFixed(1)} % Schneidertage
         </p>
         <ul className="bg-white shadow rounded-lg divide-y divide-gray-200">
           {Object.entries(fishTypeStats)
@@ -157,6 +212,7 @@ export default function Analysis() {
         {renderStatList("🧪 Luftdruck", pressureStats)}
         {renderStatList("💨 Windstärken", windStats)}
         {renderStatList("🧭 Windrichtungen", windDirStats)}
+        {renderStatList("💦 Luftfeuchtigkeit", humidityStats)}
         {renderStatList("🌦 Wetterbeschreibung", descStats)}
         {renderStatList("🌙 Mondphasen", moonStats)}
       </div>

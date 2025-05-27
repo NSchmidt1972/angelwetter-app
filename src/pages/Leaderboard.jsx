@@ -8,6 +8,9 @@ export default function Leaderboard() {
     async function loadData() {
       const { data, error } = await supabase.from('fishes').select('*');
       if (!error) setFishes(data);
+      const validFishes = data.filter(f => f.fish && f.fish !== 'Unbekannt' && f.angler && f.angler !== 'Unbekannt');
+setFishes(validFishes);
+
     }
 
     loadData();
@@ -37,7 +40,7 @@ export default function Leaderboard() {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <h2 className="text-3xl font-bold mb-6 text-center text-green-700">🏆 Rangliste der Angler</h2>
+      <h2 className="text-3xl font-bold mb-6 text-center text-green-700">🏆 The Winner is...</h2>
       <div className="space-y-6 max-w-3xl mx-auto">
         {ranking.map((a, i) => (
           <div

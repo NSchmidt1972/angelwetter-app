@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-
-
-
 function getMoonDescription(phase) {
   if (phase === 0 || phase === 1) return '🌑 Neumond';
   if (phase < 0.25) return '🌒 zunehmend';
@@ -21,10 +18,6 @@ function windDirection(deg) {
 }
 
 export default function CatchList({ anglerName }) {
-
-  console.log("Eingeloggter Benutzer:", anglerName);
-
-  
   const [catches, setCatches] = useState([]);
 
   useEffect(() => {
@@ -32,6 +25,7 @@ export default function CatchList({ anglerName }) {
       const { data, error } = await supabase
         .from('fishes')
         .select('*')
+        .eq('blank', false)
         .order('timestamp', { ascending: false });
 
       if (!error) {
@@ -75,7 +69,6 @@ export default function CatchList({ anglerName }) {
               key={entry.id || index}
               className="relative p-5 border border-gray-200 rounded-xl bg-white shadow-md hover:shadow-lg transition-shadow duration-200"
             >
-              {/* Delete-Button nur wenn der Angler mit dem eingeloggten übereinstimmt */}
               {entry.angler === anglerName && (
                 <button
                   onClick={() => handleDelete(entry.id)}
@@ -108,7 +101,7 @@ export default function CatchList({ anglerName }) {
                   <img
                     src={`https://openweathermap.org/img/wn/${entry.weather.icon}@2x.png`}
                     alt={entry.weather.description}
-                    className="w-16 h-16"
+                    className="w-12 h-12"
                   />
                   <div>
                     <p className="font-medium">
@@ -120,11 +113,18 @@ export default function CatchList({ anglerName }) {
                         <> aus {windDirection(entry.weather.wind_deg)} ({entry.weather.wind_deg}°)</>
                       )}
                     </p>
-                    <p>💧 {entry.weather.humidity}% • 🧪 {entry.weather.pressure} hPa</p>
+                    <p>
+                      💦 {entry.weather.humidity}% • 🧪 {entry.weather.pressure} hPa
+                      {entry.weather.rain !== undefined && (
+                        <> • 💧 {entry.weather.rain} mm</>
+                      )}
+                    </p>
                     <p>{getMoonDescription(entry.weather.moon_phase)}</p>
                   </div>
                 </div>
               )}
+
+             
             </li>
           );
         })}

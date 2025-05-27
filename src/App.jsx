@@ -10,6 +10,9 @@ import Catches from './pages/Catches';
 import NewCatch from './pages/NewCatch';
 import Analysis from './pages/Analysis';
 import Leaderboard from './pages/Leaderboard';
+import TopFishes from './pages/TopFishes';
+
+
 import Forecast from './pages/Forecast';
 import Navbar from './components/Navbar';
 import AuthForm from './components/AuthForm';
@@ -90,6 +93,10 @@ function AppContent() {
         <Route path="/catches" element={<Catches name={anglerName} />} />
         <Route path="/analysis" element={<Analysis />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+     
+<Route path="/top-fishes" element={<TopFishes />} />
+
+
         <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

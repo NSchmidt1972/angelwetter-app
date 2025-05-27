@@ -34,6 +34,8 @@ export default function AuthForm() {
     if (error) {
       if (error.message === 'Email not confirmed') {
         setError('Bitte bestätige deine E-Mail-Adresse (Link wurde per Mail gesendet).');
+      } else if (error.message === 'Invalid login credentials') {
+        setError('Ungültige Anmeldedaten. Bitte überprüfe E-Mail und Passwort. (Vielleicht noch nicht registriert?)');
       } else {
         setError(error.message);
       }
@@ -96,7 +98,7 @@ export default function AuthForm() {
     setLoading(false);
     setMode('login');
     resetForm();
-    alert("✅ Registrierung erfolgreich!");
+    alert("✅ Registrierung erfolgreich! Bitte überprüfe deine E-Mails, um deine Adresse zu bestätigen.");
   };
 
   return (

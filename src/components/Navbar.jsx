@@ -5,7 +5,8 @@ import { supabase } from '@/supabaseClient';
 
 export default function Navbar({ name }) {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); // gesamtes Menü (mobil)
+  const [openDropdown, setOpenDropdown] = useState(false); // Dropdown unter Statistik
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -18,10 +19,15 @@ export default function Navbar({ name }) {
     { label: 'Start', path: '/' },
     { label: 'Neuer Fang', path: '/new-catch' },
     { label: 'Fangliste', path: '/catches' },
-    { label: 'Rangliste', path: '/leaderboard' },
-    { label: 'Statistik', path: '/analysis' },
+    {
+      label: 'Statistik',
+      children: [
+        { label: 'Analyse', path: '/analysis' },
+        { label: 'Rangliste', path: '/leaderboard' },
+        { label: 'Top 10', path: '/top-fishes' }
+      ]
+    },
     { label: 'Prognose', path: '/forecast' }
-
   ];
 
   if (!user) return null;
@@ -40,17 +46,49 @@ export default function Navbar({ name }) {
           </button>
 
           <nav className={`flex-col md:flex md:flex-row md:gap-6 ${open ? 'flex' : 'hidden'} md:items-center`}>
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`block px-2 py-1 rounded hover:bg-blue-100 ${
-                  location.pathname === item.path ? 'font-bold text-blue-700' : ''
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {navItems.map((item) =>
+              item.children ? (
+                <div key={item.label} className="relative">
+                  <button
+                    onClick={() => setOpenDropdown(prev => !prev)}
+                    className="block px-2 py-1 rounded hover:bg-blue-100 font-medium text-gray-700"
+                  >
+                    {item.label} ▾
+                  </button>
+
+                  {openDropdown && (
+                    <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-50">
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.path}
+                          to={child.path}
+                          className={`block px-4 py-2 text-sm hover:bg-blue-50 ${
+                            location.pathname === child.path ? 'font-bold text-blue-700' : 'text-gray-800'
+                          }`}
+                          onClick={() => {
+                            setOpen(false);
+                            setOpenDropdown(false);
+                          }}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`block px-2 py-1 rounded hover:bg-blue-100 ${
+                    location.pathname === item.path ? 'font-bold text-blue-700' : ''
+                  }`}
+                  onClick={() => setOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              )
+            )}
           </nav>
         </div>
 
