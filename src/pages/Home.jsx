@@ -1,4 +1,3 @@
-// src/pages/Home.jsx
 import { useEffect, useState } from 'react';
 import WeatherNow from '../components/WeatherNow';
 import { fetchWeather } from '../api/weather';
@@ -8,15 +7,24 @@ export default function Home() {
 
   useEffect(() => {
     const cached = localStorage.getItem('cachedWeather');
-    if (cached) {
+
+    if (cached && !weatherData) {
       const parsed = JSON.parse(cached);
-      setWeatherData(parsed); // enthält: { data, savedAt }
+      console.log("🧪 CACHED DATA:", parsed);
+
+      // 🔄 Fallback: Falls savedAt fehlt, ergänzen und speichern
+      if (!parsed.savedAt) {
+        console.warn("⚠️ Kein savedAt im Cache – setze jetzt");
+        parsed.savedAt = Date.now();
+        localStorage.setItem('cachedWeather', JSON.stringify(parsed));
+      }
+
+      setWeatherData(parsed);
+      return; // ⛔ Kein weiterer fetch nötig
     }
 
-    const navType = performance.getEntriesByType("navigation")[0]?.type || "navigate";
-    const isFullReload = navType === "reload" || navType === "navigate";
-
-    if (isFullReload) {
+    // ⛔ Nur wenn kein Cache da ist → Wetter abrufen
+    if (!cached) {
       fetchWeather()
         .then((freshData) => {
           if (freshData) {
@@ -28,11 +36,11 @@ export default function Home() {
             localStorage.setItem('cachedWeather', JSON.stringify(combined));
           }
         })
-        .catch(err =>
-          console.error('Fehler beim automatischen Wetter-Update:', err)
-        );
+        .catch(err => {
+          console.error('Fehler beim automatischen Wetter-Update:', err);
+        });
     }
-  }, []);
+  }, [weatherData]);
 
   const refreshWeather = async () => {
     try {

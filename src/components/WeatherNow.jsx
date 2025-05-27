@@ -1,4 +1,4 @@
-// src/components/WeatherNow.jsx
+import { useCallback } from 'react';
 import { fetchWeather } from '../api/weather';
 
 function getMoonDescription(phase) {
@@ -18,12 +18,31 @@ function windDirection(deg) {
 }
 
 export default function WeatherNow({ data, onRefresh }) {
-  if (!data?.data) return <p>Lade aktuelles Wetter...</p>;
+  if (!data?.data) {
+    return (
+      <div className="p-4 bg-white shadow rounded-xl max-w-full mx-auto text-center text-red-600">
+        ⚠️ Keine Wetterdaten verfügbar.<br />
+        Bitte auf „Wetter aktualisieren“ klicken.
+      </div>
+    );
+  }
 
   const now = data.data.current;
   const hourly = data.data.hourly || [];
   const daily = data.data.daily || [];
-  const savedAt = data.savedAt;
+
+  // ✅ Robust gespeicherter Zeitstempel mit Plausibilitätsprüfung
+  let savedAt = data.savedAt;
+  let savedAtString = '';
+  let diffMinutes = Infinity;
+
+  if (savedAt && typeof savedAt === 'number' && savedAt > 1000000000000) {
+    savedAtString = new Date(savedAt).toLocaleTimeString('de-DE', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    diffMinutes = Math.abs(Date.now() - savedAt) / 1000 / 60;
+  }
 
   const desc = now.weather[0].description;
   const iconCode = now.weather[0].icon;
@@ -32,20 +51,25 @@ export default function WeatherNow({ data, onRefresh }) {
   const moonPhase = daily[0]?.moon_phase;
   const moonText = moonPhase !== undefined ? getMoonDescription(moonPhase) : null;
 
-  const dataTime = savedAt || now.dt * 1000;
-  const diffMinutes = Math.abs(Date.now() - dataTime) / 1000 / 60;
+  const handleRefresh = useCallback(async () => {
+    try {
+      const updatedData = await fetchWeather();
+      if (!updatedData) {
+        alert('Wetterdaten konnten nicht aktualisiert werden.');
+        return;
+      }
 
-  const handleRefresh = async () => {
-    const updatedData = await fetchWeather();
-    if (updatedData) {
       const newCombined = {
         data: updatedData,
-        savedAt: Date.now()
+        savedAt: Date.now(),
       };
       localStorage.setItem('cachedWeather', JSON.stringify(newCombined));
       onRefresh?.(newCombined);
+    } catch (err) {
+      console.error('Fehler beim Abrufen der Wetterdaten:', err);
+      alert('⚠️ Wetter konnte nicht aktualisiert werden.');
     }
-  };
+  }, [onRefresh]);
 
   const weekday = (dt) =>
     new Date(dt * 1000).toLocaleDateString('de-DE', { weekday: 'short' });
@@ -57,23 +81,17 @@ export default function WeatherNow({ data, onRefresh }) {
     <div className="p-4 bg-white shadow rounded-xl max-w-full mx-auto">
       <div className="flex justify-between items-baseline mb-2">
         <h2 className="text-xl font-bold text-blue-700">🌤 Aktuelles Wetter</h2>
-        {diffMinutes > 30 ? (
-          <button
-            onClick={handleRefresh}
-            className="text-sm text-red-500 hover:underline font-medium"
-            title="Wetterdaten aktualisieren"
-          >
-            Wetter aktualisieren
-          </button>
-        ) : (
-          <button
-            onClick={handleRefresh}
-            className="text-sm text-gray-500 hover:underline"
-            title="Wetterdaten aktualisieren"
-          >
-            Stand: {new Date(dataTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
-          </button>
-        )}
+        <button
+          onClick={handleRefresh}
+          className={
+            savedAtString
+              ? 'text-sm text-gray-500 hover:underline'
+              : 'text-sm text-red-500 hover:underline font-medium'
+          }
+          title="Wetterdaten aktualisieren"
+        >
+          {savedAtString ? `Stand: ${savedAtString} Uhr` : 'Wetter aktualisieren'}
+        </button>
       </div>
 
       <div className="flex items-center gap-3 mb-2">
