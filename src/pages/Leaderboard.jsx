@@ -8,17 +8,9 @@ export default function Leaderboard() {
     async function loadData() {
       const { data, error } = await supabase.from('fishes').select('*');
       if (!error) setFishes(data);
-      const validFishes = data.filter(f => f.fish && f.fish !== 'Unbekannt' && f.angler && f.angler !== 'Unbekannt');
-setFishes(validFishes);
-
     }
-
     loadData();
   }, []);
-
-  if (fishes.length === 0) {
-    return <p className="text-center text-gray-500 mt-6">Keine Fänge vorhanden.</p>;
-  }
 
   const byAngler = {};
   fishes.forEach(f => {
@@ -38,21 +30,25 @@ setFishes(validFishes);
     return { name, ...stats, totalPoints };
   }).sort((a, b) => b.totalPoints - a.totalPoints);
 
+  if (fishes.length === 0) {
+    return <p className="text-center text-gray-500 dark:text-gray-400 mt-6">Keine Fänge zum Anzeigen.</p>;
+  }
+
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <h2 className="text-3xl font-bold mb-6 text-center text-green-700">🏆 The Winner is...</h2>
+    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+      <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">🏆 Rangliste</h2>
       <div className="space-y-6 max-w-3xl mx-auto">
         {ranking.map((a, i) => (
           <div
             key={i}
-            className="p-5 border border-gray-200 rounded-xl bg-white shadow-md"
+            className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
           >
-            <h3 className="text-xl font-bold text-gray-800 mb-2">#{i + 1} {a.name}</h3>
-            <p className="text-sm text-gray-600">🎣 {a.total} Fänge • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)} cm</p>
-            <p className="text-sm text-gray-600 mb-3">🏆 Punkte: <span className="font-mono">{a.totalPoints.toFixed(0)} Pkt.</span></p>
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">#{i + 1} {a.name}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-300">🎣 {a.total} Fänge • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)} cm</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">🏆 Punkte: <span className="font-mono">{a.totalPoints.toFixed(0)} Pkt.</span></p>
             <ul className="ml-2 space-y-1">
               {Object.entries(a.byFish).map(([f, p]) => (
-                <li key={f} className="flex justify-between font-mono text-sm text-gray-700">
+                <li key={f} className="flex justify-between font-mono text-sm text-gray-700 dark:text-gray-300">
                   <span className="font-sans">{f}</span>
                   <span>{p.toFixed(0)} Pkt.</span>
                 </li>

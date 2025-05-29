@@ -1,68 +1,49 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import WeatherNow from '../components/WeatherNow';
-import { fetchWeather } from '../api/weather';
+import { supabase } from '../supabaseClient';
 
 export default function Home() {
   const [weatherData, setWeatherData] = useState(null);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const cached = localStorage.getItem('cachedWeather');
+  const loadWeatherFromSupabase = async () => {
+    const { data, error } = await supabase
+      .from('weather_cache')
+      .select('data, updated_at')
+      .eq('id', 'latest')
+      .single();
 
-    if (cached && !weatherData) {
-      const parsed = JSON.parse(cached);
-      console.log("🧪 CACHED DATA:", parsed);
-
-      // 🔄 Fallback: Falls savedAt fehlt, ergänzen und speichern
-      if (!parsed.savedAt) {
-        console.warn("⚠️ Kein savedAt im Cache – setze jetzt");
-        parsed.savedAt = Date.now();
-        localStorage.setItem('cachedWeather', JSON.stringify(parsed));
-      }
-
-      setWeatherData(parsed);
-      return; // ⛔ Kein weiterer fetch nötig
+    if (error || !data) {
+      console.error('Fehler beim Laden der Wetterdaten:', error);
+      setError('⚠️ Wetterdaten konnten nicht geladen werden.');
+      return;
     }
 
-    // ⛔ Nur wenn kein Cache da ist → Wetter abrufen
-    if (!cached) {
-      fetchWeather()
-        .then((freshData) => {
-          if (freshData) {
-            const combined = {
-              data: freshData,
-              savedAt: Date.now()
-            };
-            setWeatherData(combined);
-            localStorage.setItem('cachedWeather', JSON.stringify(combined));
-          }
-        })
-        .catch(err => {
-          console.error('Fehler beim automatischen Wetter-Update:', err);
-        });
-    }
-  }, [weatherData]);
-
-  const refreshWeather = async () => {
-    try {
-      const updated = await fetchWeather();
-      const combined = {
-        data: updated,
-        savedAt: Date.now()
-      };
-      setWeatherData(combined);
-      localStorage.setItem('cachedWeather', JSON.stringify(combined));
-    } catch (err) {
-      console.error('Fehler beim manuellen Wetter-Update:', err);
-      alert('Wetter konnte nicht aktualisiert werden.');
-    }
+    setWeatherData({
+      data: data.data,
+      savedAt: new Date(data.updated_at).getTime()
+    });
+    setError(null);
   };
 
+  useEffect(() => {
+    loadWeatherFromSupabase();
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    loadWeatherFromSupabase();
+  }, []);
+
   return (
-    <div style={{ padding: '1rem', fontFamily: 'sans-serif' }}>
-      {!weatherData ? (
-        <p className="text-gray-500 text-center">Lade Wetterdaten…</p>
-      ) : (
-        <WeatherNow data={weatherData} onRefresh={refreshWeather} />
+    <div className="p-4 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans">
+      {!weatherData && !error && (
+        <p className="text-gray-500 dark:text-gray-400 text-center">Lade Wetterdaten…</p>
+      )}
+      {error && (
+        <p className="text-red-600 text-center">{error}</p>
+      )}
+      {weatherData && (
+        <WeatherNow data={weatherData} onRefresh={handleRefresh} />
       )}
     </div>
   );

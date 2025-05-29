@@ -26,7 +26,7 @@ export default function AuthForm() {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
       password,
     });
@@ -35,11 +35,17 @@ export default function AuthForm() {
       if (error.message === 'Email not confirmed') {
         setError('Bitte bestätige deine E-Mail-Adresse (Link wurde per Mail gesendet).');
       } else if (error.message === 'Invalid login credentials') {
-        setError('Ungültige Anmeldedaten. Bitte überprüfe E-Mail und Passwort. (Vielleicht noch nicht registriert?)');
+        setError('Ungültige Anmeldedaten. Bitte überprüfe E-Mail und Passwort.');
       } else {
         setError(error.message);
       }
     } else {
+      // Nutzername aus user_metadata lesen
+      const { user } = data;
+      const fullName = user?.user_metadata?.name;
+      if (fullName) {
+        localStorage.setItem('anglerName', fullName);
+      }
       navigate('/');
     }
 
@@ -52,6 +58,13 @@ export default function AuthForm() {
     setError('');
 
     const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+
+    if (!cleanName.includes(' ')) {
+      setError('Bitte gib deinen Vor- und Nachnamen ein.');
+      setLoading(false);
+      return;
+    }
 
     const { data: whitelist, error: whitelistError } = await supabase
       .from('whitelist_emails')
@@ -69,7 +82,7 @@ export default function AuthForm() {
       email: cleanEmail,
       password,
       options: {
-        data: { name: name.trim() },
+        data: { name: cleanName },
         emailRedirectTo: 'https://asv-rotauge.de/angelwetter-app/auth-verified'
       },
     });
@@ -84,7 +97,7 @@ export default function AuthForm() {
     if (userId) {
       const { error: profileError } = await supabase.from('profiles').insert({
         id: userId,
-        name: name.trim(),
+        name: cleanName,
       });
 
       if (profileError) {
@@ -139,7 +152,7 @@ export default function AuthForm() {
           type="text"
           name="name"
           autoComplete="name"
-          placeholder="Name"
+          placeholder="Vor- und Nachname"
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400"

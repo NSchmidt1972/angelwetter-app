@@ -5,3 +5,14 @@
 @tailwind utilities;
 
 
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+html {
+  @apply bg-gray-50 text-gray-800 transition-colors duration-300;
+}
+
+html.dark {
+  @apply bg-gray-900 text-gray-100;
+}

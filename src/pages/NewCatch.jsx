@@ -1,18 +1,17 @@
-// ✅ NewCatch.jsx
+import { useEffect, useState } from 'react';
+import { fetchWeather } from '../api/weather';
 import FishCatchForm from '../components/FishCatchForm';
 
-export default function NewCatch({ anglerName, weatherData, setWeatherData }) {
+export default function NewCatch() {
+  const [weatherData, setWeatherData] = useState(null);
+
+  useEffect(() => {
+    fetchWeather().then(setWeatherData);
+  }, []);
+
   return (
-    <div style={{ padding: '1rem' }}>
-      {!weatherData ? (
-        <p className="text-gray-500 text-center">Lade Wetterdaten…</p>
-      ) : (
-        <FishCatchForm
-          weatherData={weatherData}
-          anglerName={anglerName}
-          setWeatherData={setWeatherData}
-        />
-      )}
+    <div className="p-4 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100">
+      <FishCatchForm weatherData={weatherData} />
     </div>
   );
 }
