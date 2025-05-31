@@ -1,4 +1,3 @@
-// unverändert
 import { useEffect, useState } from 'react';
 
 function getMoonDescription(phase) {
@@ -12,7 +11,6 @@ function getMoonDescription(phase) {
   if (phase > 0.75 && phase < 1) return '🌘 Abnehmender Sichelmond';
   return '❓ Unbekannt';
 }
-
 
 function windDirection(deg) {
   const dirs = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
@@ -54,7 +52,6 @@ export default function WeatherNow({ data, onRefresh }) {
   const iconUrl = `https://openweathermap.org/img/wn/${now.weather[0].icon}@2x.png`;
   const moonText = getMoonDescription(daily[0]?.moon_phase ?? -1);
 
-
   const weekday = (dt) =>
     new Date(dt * 1000).toLocaleDateString('de-DE', { weekday: 'short' });
 
@@ -63,15 +60,16 @@ export default function WeatherNow({ data, onRefresh }) {
 
   return (
     <div className="p-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow rounded-xl max-w-full mx-auto relative">
-      {autoUpdated && (
-        <div className="fixed top-4 right-4 z-50 bg-blue-100 dark:bg-gray-700 text-blue-700 dark:text-blue-300 text-xs px-4 py-2 rounded-full shadow-md animate-fadeInSlide">
-          🔄 Aktualisierung<span className="dot-typing ml-1"></span>
-        </div>
-
-      )}
-
       <div className="flex justify-between items-baseline mb-2">
-        <h2 className="text-xl font-bold text-blue-700 dark:text-blue-300">🌤 Aktuelles Wetter</h2>
+        <h2 className="text-xl font-bold text-blue-700 dark:text-blue-300">
+          {autoUpdated ? (
+            <span className="animate-fadeInSlide">
+              🔄 Aktualisierung<span className="dot-typing ml-1"></span>
+            </span>
+          ) : (
+            '🌤 Aktuelles Wetter'
+          )}
+        </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Stand: {savedAtString} Uhr
         </p>
