@@ -1,6 +1,26 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
+const PUBLIC_FROM = new Date('2025-05-29');
+
+function isWeatherSimilar(w, current, timestamp) {
+  const fangDatum = new Date(timestamp);
+
+  const basicMatch =
+    Math.abs(w.temp - current.temp) <= 10 &&
+    Math.abs(w.pressure - current.pressure) <= 10 &&
+    Math.abs(w.humidity - current.humidity) <= 25 &&
+    Math.abs(w.wind_deg - current.wind_deg) <= 45;
+
+  if (fangDatum < PUBLIC_FROM) {
+    return basicMatch; // vor dem Stichtag: wind kann fehlen
+  } else {
+    return basicMatch &&
+      typeof w.wind === 'number' &&
+      Math.abs(w.wind - current.wind) <= 3;
+  }
+}
+
 function FishForecast({ fishes, currentWeather }) {
   if (!currentWeather) {
     return <p className="text-gray-500 dark:text-gray-400">Keine aktuellen Wetterdaten verfügbar.</p>;
@@ -13,16 +33,7 @@ function FishForecast({ fishes, currentWeather }) {
     f.fish.trim() !== ''
   );
 
-  const similar = fishesWithWeather.filter(f => {
-    const w = f.weather;
-    return (
-      Math.abs(w.temp - currentWeather.temp) <= 10 &&
-      Math.abs(w.pressure - currentWeather.pressure) <= 5 &&
-      Math.abs(w.wind - currentWeather.wind) <= 2 &&
-      Math.abs(w.humidity - currentWeather.humidity) <= 25 &&
-      Math.abs(w.wind_deg - currentWeather.wind_deg) <= 45
-    );
-  });
+  const similar = fishesWithWeather.filter(f => isWeatherSimilar(f.weather, currentWeather, f.timestamp));
 
   const chance =
     fishesWithWeather.length > 0

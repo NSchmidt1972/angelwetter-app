@@ -2,20 +2,27 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { formatNameList } from '../utils/nameFormatter';
 
+function formatTime(iso) {
+  const date = new Date(iso);
+  return date.toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 export default function AdminOverview() {
   const [weatherUpdatedAt, setWeatherUpdatedAt] = useState(null);
   const [activeUsers, setActiveUsers] = useState([]);
   const [latestCatch, setLatestCatch] = useState(null);
   const [catchCount, setCatchCount] = useState(null);
   const [nameShort, setNameShort] = useState(null);
+  const [recentBlanks, setRecentBlanks] = useState([]);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const {
-          data: weatherData,
-          error: weatherError
-        } = await supabase
+        // Wetterzeit
+        const { data: weatherData, error: weatherError } = await supabase
           .from('weather_cache')
           .select('updated_at')
           .eq('id', 'latest')
@@ -31,13 +38,11 @@ export default function AdminOverview() {
           );
         }
 
-        const {
-          data: users,
-          error: userError
-        } = await supabase
+        // Aktive Nutzer
+        const { data: users, error: userError } = await supabase
           .from('user_activity')
           .select('user_id, last_active')
-          .gt('last_active', new Date(Date.now() - 60 * 60 * 1000).toISOString());
+          .gt('last_active', new Date(Date.now() - 1440 * 1440 * 1000).toISOString());
 
         if (userError && userError.message.includes('does not exist')) {
           console.warn('⚠️ Tabelle user_activity existiert nicht – wird übersprungen.');
@@ -53,23 +58,20 @@ export default function AdminOverview() {
 
           if (profileError) throw profileError;
 
-          const enrichedUsers = users.map(u => {
-            const match = profiles.find(p => p.id === u.user_id);
-            return {
-              ...u,
-              name: match?.name || u.user_id
-            };
-          });
+          const enrichedUsers = users
+            .map(u => {
+              const match = profiles.find(p => p.id === u.user_id);
+              return match ? { ...u, name: match.name } : null;
+            })
+            .filter(Boolean);
 
           const formatted = formatNameList(enrichedUsers.map(u => u.name));
           const enrichedFormatted = enrichedUsers.map((u, i) => ({ ...u, displayName: formatted[i] }));
           setActiveUsers(enrichedFormatted);
         }
 
-        const {
-          data: fishes,
-          error: fishError
-        } = await supabase
+        // Letzter Fang
+        const { data: fishes, error: fishError } = await supabase
           .from('fishes')
           .select('*')
           .order('timestamp', { ascending: false })
@@ -78,6 +80,7 @@ export default function AdminOverview() {
         if (fishError) throw fishError;
         setLatestCatch(fishes?.[0] || null);
 
+        // Anzahl Fänge
         const { count, error: countError } = await supabase
           .from('fishes')
           .select('*', { count: 'exact', head: true })
@@ -89,6 +92,7 @@ export default function AdminOverview() {
           setCatchCount(count);
         }
 
+        // Abkürzung Name für letzten Fang
         const { data: profileList } = await supabase.from('profiles').select('name');
         if (profileList && fishes?.[0]?.angler) {
           const fullName = fishes[0].angler;
@@ -96,6 +100,20 @@ export default function AdminOverview() {
           const count = profileList.filter(p => p.name.startsWith(first + ' ')).length;
           const short = count > 1 && last ? `${first} ${last[0]}.` : first;
           setNameShort(short);
+        }
+
+        // Schneidertage letzte 7 Tage
+        const { data: blanks, error: blankError } = await supabase
+          .from('fishes')
+          .select('angler, timestamp')
+          .eq('blank', true)
+          .gt('timestamp', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+          .order('timestamp', { ascending: false });
+
+        if (blankError) {
+          console.error('❌ Fehler beim Laden der Schneidertage:', blankError);
+        } else {
+          setRecentBlanks(blanks);
         }
       } catch (error) {
         console.error('❌ Fehler beim Laden der Admin-Daten:', error.message);
@@ -114,11 +132,16 @@ export default function AdminOverview() {
           <strong>☁️ Letztes Wetterupdate:</strong> {weatherUpdatedAt || 'Lade...'}
         </li>
         <li>
-          <strong>👥 Aktive Nutzer (letzte Stunde):</strong> {activeUsers.length}
+          <strong>👥 Aktive Nutzer (24h):</strong> {activeUsers.length}
           {activeUsers.length > 0 && (
             <ul className="list-disc list-inside ml-4 mt-1">
               {activeUsers.map((u, i) => (
-                <li key={i}>{u.displayName}</li>
+                <li key={i}>
+                  {u.displayName}
+                  <span className="text-gray-500 text-xs ml-2">
+                    (aktiv um {formatTime(u.last_active)})
+                  </span>
+                </li>
               ))}
             </ul>
           )}
@@ -140,6 +163,22 @@ export default function AdminOverview() {
             'Lade...'
           )}
         </li>
+        {recentBlanks.length > 0 && (
+          <li>
+            <strong>❌ Schneidertage (7 Tage):</strong>
+            <ul className="list-disc list-inside ml-4 mt-1">
+              {recentBlanks.map((b, i) => (
+                <li key={i}>
+                  {b.angler} am {new Date(b.timestamp).toLocaleDateString('de-DE')} um{' '}
+                  {new Date(b.timestamp).toLocaleTimeString('de-DE', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </li>
+              ))}
+            </ul>
+          </li>
+        )}
       </ul>
     </div>
   );

@@ -3,14 +3,16 @@ import { useEffect, useState } from 'react';
 
 function getMoonDescription(phase) {
   if (phase === 0 || phase === 1) return '🌑 Neumond';
-  if (phase < 0.25) return '🌒 zunehmend';
-  if (phase === 0.25) return '🌓 erstes Viertel';
-  if (phase < 0.5) return '🌔 zunehmend';
+  if (phase > 0 && phase < 0.25) return '🌒 Zunehmender Sichelmond';
+  if (phase === 0.25) return '🌓 Erstes Viertel';
+  if (phase > 0.25 && phase < 0.5) return '🌔 Zunehmender Dreiviertelmond';
   if (phase === 0.5) return '🌕 Vollmond';
-  if (phase < 0.75) return '🌖 abnehmend';
-  if (phase === 0.75) return '🌗 letztes Viertel';
-  return '🌘 abnehmend';
+  if (phase > 0.5 && phase < 0.75) return '🌖 Abnehmender Dreiviertelmond';
+  if (phase === 0.75) return '🌗 Letztes Viertel';
+  if (phase > 0.75 && phase < 1) return '🌘 Abnehmender Sichelmond';
+  return '❓ Unbekannt';
 }
+
 
 function windDirection(deg) {
   const dirs = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
@@ -50,7 +52,8 @@ export default function WeatherNow({ data, onRefresh }) {
 
   const desc = now.weather[0].description;
   const iconUrl = `https://openweathermap.org/img/wn/${now.weather[0].icon}@2x.png`;
-  const moonText = daily[0]?.moon_phase !== undefined ? getMoonDescription(daily[0].moon_phase) : null;
+  const moonText = getMoonDescription(daily[0]?.moon_phase ?? -1);
+
 
   const weekday = (dt) =>
     new Date(dt * 1000).toLocaleDateString('de-DE', { weekday: 'short' });

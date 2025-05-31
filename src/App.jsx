@@ -33,45 +33,49 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (user === undefined) return;
+  if (user === undefined) return;
 
-    if (user === null) {
-      setAnglerName(null);
-      setUserEmail(null);
+  if (user === null) {
+    setAnglerName(null);
+    setUserEmail(null);
+    localStorage.removeItem('anglerName');
+    localStorage.removeItem('shortAnglerName');
+    setNameLoading(false);
+    return;
+  }
+
+  setNameLoading(true);
+  setUserEmail(user.email);
+
+  supabase
+    .from('profiles')
+    .select('name')
+    .eq('id', user.id)
+    .single()
+    .then(({ data, error }) => {
+      if (data?.name) {
+        const fullName = data.name.trim();
+        setAnglerName(fullName);
+        localStorage.setItem('anglerName', fullName); // ✅ Hier: automatischer Eintrag
+
+        const [first, last] = fullName.split(' ');
+        supabase
+          .from('profiles')
+          .select('name')
+          .then(({ data: allProfiles }) => {
+            const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
+            const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
+            localStorage.setItem('shortAnglerName', shortName);
+          });
+      } else {
+        console.warn('⚠️ Kein Name im Profil gefunden oder Fehler:', error);
+        setAnglerName(null);
+        localStorage.removeItem('anglerName');
+        localStorage.removeItem('shortAnglerName');
+      }
       setNameLoading(false);
-      return;
-    }
-
-    setNameLoading(true);
-    setUserEmail(user.email);
-
-    supabase
-      .from('profiles')
-      .select('name')
-      .eq('id', user.id)
-      .single()
-      .then(({ data, error }) => {
-        if (data?.name) {
-          setAnglerName(data.name);
-
-          const fullName = data.name.trim();
-          const [first, last] = fullName.split(' ');
-
-          supabase
-            .from('profiles')
-            .select('name')
-            .then(({ data: allProfiles }) => {
-              const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
-              const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
-              localStorage.setItem('shortAnglerName', shortName);
-            });
-        } else {
-          console.warn('⚠️ Kein Name im Profil gefunden oder Fehler:', error);
-          setAnglerName(null);
-        }
-        setNameLoading(false);
-      });
-  }, [user]);
+    });
+}, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -137,6 +141,9 @@ function AppContent() {
   const isLoggedIn = user && anglerName;
   const isAdmin = userEmail === 'nicol@schmidt-2006.de';
 
+  console.log("localStorage:", localStorage.getItem('anglerName'));
+
+
   return isLoggedIn ? (
     <>
       <Navbar name={anglerName} isAdmin={isAdmin} />
@@ -147,10 +154,11 @@ function AppContent() {
           element={<NewCatch anglerName={anglerName} weatherData={weatherData} setWeatherData={setWeatherData} />}
         />
         <Route path="/catches" element={<Catches name={anglerName} />} />
-        <Route path="/analysis" element={<Analysis />} />
+        <Route path="/analysis" element={<Analysis anglerName={anglerName} />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/top-fishes" element={<TopFishes />} />
         <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
+
         <Route
           path="/admin"
           element={isAdmin ? <AdminOverview /> : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>}
