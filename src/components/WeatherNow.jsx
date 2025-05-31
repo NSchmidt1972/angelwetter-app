@@ -64,9 +64,10 @@ export default function WeatherNow({ data, onRefresh }) {
   return (
     <div className="p-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow rounded-xl max-w-full mx-auto relative">
       {autoUpdated && (
-        <div className="absolute top-2 right-2 bg-blue-100 dark:bg-gray-700 text-blue-700 dark:text-blue-300 text-xs px-3 py-1 rounded-full shadow-sm animate-pulse">
-          🔄 Aktualisierung...
+        <div className="fixed top-4 right-4 z-50 bg-blue-100 dark:bg-gray-700 text-blue-700 dark:text-blue-300 text-xs px-4 py-2 rounded-full shadow-md animate-fadeInSlide">
+          🔄 Aktualisierung<span className="dot-typing ml-1"></span>
         </div>
+
       )}
 
       <div className="flex justify-between items-baseline mb-2">
