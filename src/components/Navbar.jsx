@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
@@ -7,15 +7,26 @@ export default function Navbar({ name, isAdmin }) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(false);
+  const [showLogout, setShowLogout] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-
   const location = useLocation();
   const navigate = useNavigate();
+  const dropdownRef = useRef();
 
   useEffect(() => {
     const stored = localStorage.getItem('darkMode') === 'true';
     setDarkMode(stored);
     document.documentElement.classList.toggle('dark', stored);
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowLogout(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const toggleDark = () => {
@@ -116,23 +127,33 @@ export default function Navbar({ name, isAdmin }) {
           </nav>
         </div>
 
-        {/* Benutzer + Darkmode + Logout */}
-        <div className="flex items-center gap-3 text-sm">
+        {/* Benutzer, Darkmode und Dropdown für Logout */}
+        <div className="flex items-center gap-3 text-sm relative" ref={dropdownRef}>
           <button
             onClick={toggleDark}
             className="text-sm hover:text-blue-600 dark:hover:text-blue-300"
           >
             {darkMode ? '☀️ Hell' : '🌙 Nachtangeln'}
           </button>
-          <span>👤 {displayName}</span>
-          <button
-            onClick={handleLogout}
-            className="text-red-600 hover:underline"
-          >
-            Abmelden
-          </button>
-        </div>
 
+          <button
+            onClick={() => setShowLogout(prev => !prev)}
+            className="hover:underline focus:outline-none"
+          >
+            👤 {displayName}
+          </button>
+
+          {showLogout && (
+            <div className="absolute right-0 top-8 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 w-40 text-sm">
+              <button
+                onClick={handleLogout}
+                className="block w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
+              >
+                Abmelden
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
