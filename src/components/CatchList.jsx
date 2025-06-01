@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { formatNameList } from '../utils/nameFormatter';
 
 function getMoonDescription(phase) {
   if (phase === 0 || phase === 1) return '🌑 Neumond';
@@ -88,15 +87,30 @@ export default function CatchList({ anglerName }) {
   };
 
   const handleShare = async (entry) => {
+
+    const FISH_ARTICLES = {
+  Aal: 'einen',
+  Barsch: 'einen',
+  Brasse: 'eine',
+  Hecht: 'einen',
+  Karpfen: 'einen',
+  Rotauge: 'ein',
+  Rotfeder: 'eine',
+  Schleie: 'eine',
+  Wels: 'einen',
+  Zander: 'einen',
+};
+
     const date = new Date(entry.timestamp).toLocaleDateString('de-DE');
     const weather = entry.weather;
 
-    const shareText = `🎣 Ich habe am ${date} einen ${entry.fish} gefangen!\n` +
-      `📏 Größe: ${entry.size} cm\n` +
-      `🌡 Wetter: ${weather?.temp ?? '?'} °C, ${weather?.description ?? 'unbekannt'}\n` +
-      `💨 Wind: ${weather?.wind ?? '?'} m/s${weather?.wind_deg !== undefined ? ` aus ${windDirection(weather.wind_deg)}` : ''}\n` +
-      `🧪 Luftdruck: ${weather?.pressure ?? '?'} hPa • 💦 Feuchte: ${weather?.humidity ?? '?'}%\n` +
-      `🌙 Mond: ${getMoonDescription(weather?.moon_phase)}`;
+   const article = FISH_ARTICLES[entry.fish] || 'einen';
+const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n` +
+  `📏 Größe: ${entry.size} cm\n` +
+  `🌡 Wetter: ${weather?.temp ?? '?'} °C, ${weather?.description ?? 'unbekannt'}\n` +
+  `💨 Wind: ${weather?.wind ?? '?'} m/s${weather?.wind_deg !== undefined ? ` aus ${windDirection(weather.wind_deg)}` : ''}\n` +
+  `🧪 Luftdruck: ${weather?.pressure ?? '?'} hPa • 💦 Feuchte: ${weather?.humidity ?? '?'}%\n` +
+  `🌙 Mond: ${getMoonDescription(weather?.moon_phase)}`;
 
     if (navigator.share) {
       try {
@@ -123,7 +137,7 @@ export default function CatchList({ anglerName }) {
           </h2>
           {catches.length > 0 && (
             <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-              🎯 {onlyMine ? 'Meine' : 'Gesamt'}: {catches.length} Fang{catches.length === 1 ? '' : 'e'}
+         🎯 {onlyMine ? 'Meine' : 'Gesamt'}: {catches.length} {catches.length === 1 ? 'Fang' : 'Fänge'}
             </p>
           )}
         </div>

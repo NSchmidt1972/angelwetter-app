@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
 const PUBLIC_FROM = new Date('2025-05-29');
+const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
 
 function isWeatherSimilar(w, current, timestamp) {
   const fangDatum = new Date(timestamp);
@@ -63,6 +64,8 @@ export default function Forecast() {
   const [weatherData, setWeatherData] = useState(null);
 
   useEffect(() => {
+    const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
+
     const loadWeatherAndFishes = async () => {
       const { data: weatherRow, error: weatherError } = await supabase
         .from('weather_cache')
@@ -95,9 +98,18 @@ export default function Forecast() {
 
       if (catchError) {
         console.error("❌ Fehler beim Laden der Fänge:", catchError);
-      } else {
-        setFishes(catchData);
+        return;
       }
+
+      const filteredFishes = catchData.filter(f => {
+        const fangDatum = new Date(f.timestamp);
+        const istAbNeu = fangDatum >= PUBLIC_FROM;
+        const istVertrauter = vertraute.includes(f.angler);
+        const darfSehen = istAbNeu || (istVertrauter && vertraute.includes(anglerName));
+        return darfSehen;
+      });
+
+      setFishes(filteredFishes);
     };
 
     loadWeatherAndFishes();

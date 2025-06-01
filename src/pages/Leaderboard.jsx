@@ -73,7 +73,7 @@ export default function Leaderboard() {
       {vertraute.includes(anglerName) && (
         <div className="flex justify-center items-center mb-6">
           <label className="flex items-center space-x-3 cursor-pointer">
-            <span className="text-sm text-gray-600 dark:text-gray-300">Intern-Modus:</span>
+            <span className="text-sm text-gray-600 dark:text-gray-300">Laura vs. Nicol</span>
             <input
               type="checkbox"
               checked={showIntern}
@@ -92,7 +92,7 @@ export default function Leaderboard() {
           >
             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">#{i + 1} {a.name}</h3>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              🎣 {a.total} Fänge • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)} cm
+            🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)} cm
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
               🏆 Punkte: <span className="font-mono">{a.totalPoints.toFixed(0)} Pkt.</span>

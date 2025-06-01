@@ -4,7 +4,7 @@ import { fetchWeather } from '../api/weather';
 import { useNavigate } from 'react-router-dom';
 
 const FISH_TYPES = [
-  'Aal', 'Barsch', 'Brasse','Güster', 'Hecht', 'Karausche', 'Karpfen',
+  'Aal', 'Barsch', 'Brasse', 'Güster', 'Hecht', 'Karausche', 'Karpfen',
   'Rotauge', 'Rotfeder', 'Schleie', 'Wels', 'Zander'
 ];
 
@@ -18,61 +18,70 @@ export default function FishCatchForm({ weatherData, setWeatherData }) {
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
 
   const handleSubmit = async () => {
-    if (!fish || !size) {
-      alert("Bitte alles ausfüllen!");
-      return;
-    }
+  if (!fish || !size) {
+    alert("Bitte alles ausfüllen!");
+    return;
+  }
 
-    setLoading(true);
+  const rawSize = size.replace(',', '.');
+  const sizeNumber = parseFloat(rawSize);
 
-    let currentWeather;
-    try {
-      const data = await fetchWeather();
-      currentWeather = {
-        temp: data.current.temp ?? null,
-        description: data.current.weather?.[0]?.description ?? '',
-        icon: data.current.weather?.[0]?.icon ?? '',
-        wind: data.current.wind_speed ?? null,
-        wind_deg: data.current.wind_deg ?? null,
-        humidity: data.current.humidity ?? null,
-        pressure: data.current.pressure ?? null,
-        moon_phase: data.daily?.[0]?.moon_phase ?? null
-      };
+  if (isNaN(sizeNumber) || sizeNumber <= 0) {
+    alert("Bitte eine gültige Zahl größer als 0 für die Größe eingeben.");
+    return;
+  }
 
-      if (setWeatherData) {
-        setWeatherData(data);
-      }
-    } catch (err) {
-      console.error('❌ Fehler beim Abrufen des Wetters:', err);
-      alert("Fehler beim Abrufen der aktuellen Wetterdaten.");
-      setLoading(false);
-      return;
-    }
+  setLoading(true);
 
-    const newEntry = {
-      fish,
-      size: parseFloat(size),
-      note,
-      angler: anglerName,
-      timestamp: new Date().toISOString(),
-      weather: currentWeather,
-      blank: false
+  let currentWeather;
+  try {
+    const data = await fetchWeather();
+    currentWeather = {
+      temp: data.current.temp ?? null,
+      description: data.current.weather?.[0]?.description ?? '',
+      icon: data.current.weather?.[0]?.icon ?? '',
+      wind: data.current.wind_speed ?? null,
+      wind_deg: data.current.wind_deg ?? null,
+      humidity: data.current.humidity ?? null,
+      pressure: data.current.pressure ?? null,
+      moon_phase: data.daily?.[0]?.moon_phase ?? null
     };
 
-    const { error } = await supabase.from('fishes').insert([newEntry]);
-    setLoading(false);
-
-    if (error) {
-      console.error('❌ Fehler beim Speichern:', error);
-      alert('Fehler beim Speichern des Fangs.');
-    } else {
-      setFish('');
-      setSize('');
-      setNote('');
-      alert("✅ Fang erfolgreich gespeichert!");
-      navigate('/catches');
+    if (setWeatherData) {
+      setWeatherData(data);
     }
+  } catch (err) {
+    console.error('❌ Fehler beim Abrufen des Wetters:', err);
+    alert("Fehler beim Abrufen der aktuellen Wetterdaten.");
+    setLoading(false);
+    return;
+  }
+
+  const newEntry = {
+    fish,
+    size: sizeNumber,
+    note,
+    angler: anglerName,
+    timestamp: new Date().toISOString(),
+    weather: currentWeather,
+    blank: false
   };
+
+  const { error } = await supabase.from('fishes').insert([newEntry]);
+  setLoading(false);
+
+  if (error) {
+    console.error('❌ Fehler beim Speichern:', error);
+    alert('Fehler beim Speichern des Fangs.');
+  } else {
+    setFish('');
+    setSize('');
+    setNote('');
+    alert("✅ Petri Heil! Fang gespeichert.");
+    navigate('/catches');
+  }
+};
+
 
   const handleBlankSubmit = async () => {
     setLoading(true);
@@ -120,13 +129,11 @@ export default function FishCatchForm({ weatherData, setWeatherData }) {
     } else {
       alert("❌ Schneidertag gespeichert!");
       navigate('/');
-
     }
   };
 
   return (
-   <div className="p-6 max-w-md mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
-
+    <div className="p-6 max-w-md mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
       <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-300 mb-4 text-center">🎣 Fang eintragen</h2>
 
       <div className="space-y-4">
@@ -142,7 +149,9 @@ export default function FishCatchForm({ weatherData, setWeatherData }) {
         </select>
 
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
+          pattern="[0-9]*[.,]?[0-9]*"
           placeholder="Größe (cm)"
           value={size}
           onChange={e => setSize(e.target.value)}
@@ -157,25 +166,23 @@ export default function FishCatchForm({ weatherData, setWeatherData }) {
           className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
 
-       <div className="space-y-8">
-  <button
-    onClick={handleSubmit}
-    disabled={loading}
-    className={`w-full text-white py-2 rounded font-semibold transition ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-  >
-    {loading ? 'Speichere...' : 'Fang speichern'}
-  </button>
+        <div className="space-y-8">
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className={`w-full text-white py-2 rounded font-semibold transition ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+          >
+            {loading ? 'Speichere...' : 'Fang speichern'}
+          </button>
 
-  <button
-    onClick={handleBlankSubmit}
-    disabled={loading}
-    className="w-full bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-black dark:text-gray-100 py-2 rounded font-semibold"
-  >
-    {loading ? 'Speichere...' : '❌ Heute nichts gefangen 😩'}
-  </button>
-</div>
-
-
+          <button
+            onClick={handleBlankSubmit}
+            disabled={loading}
+            className="w-full bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-black dark:text-gray-100 py-2 rounded font-semibold"
+          >
+            {loading ? 'Speichere...' : '❌ Heute nichts gefangen 😩'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ export default function WeatherNow({ data, onRefresh }) {
       setAutoUpdated(true);
       onRefresh?.();
       setTimeout(() => setAutoUpdated(false), 2000);
-    }, 5 * 60 * 1000);
+    }, 1 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [onRefresh]);
@@ -61,15 +61,16 @@ export default function WeatherNow({ data, onRefresh }) {
   return (
     <div className="p-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow rounded-xl max-w-full mx-auto relative">
       <div className="flex justify-between items-baseline mb-2">
-        <h2 className="text-xl font-bold text-blue-700 dark:text-blue-300">
+        <h2 className="text-xl font-bold">
           {autoUpdated ? (
-            <span className="animate-fadeInSlide">
+            <span className="text-green-700 dark:text-green-400 animate-fadeInSlide">
               🔄 Aktualisierung<span className="dot-typing ml-1"></span>
             </span>
           ) : (
-            '🌤 Aktuelles Wetter'
+            <span className="text-blue-700 dark:text-blue-300">🌤 Aktuelles Wetter</span>
           )}
         </h2>
+
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Stand: {savedAtString} Uhr
         </p>
