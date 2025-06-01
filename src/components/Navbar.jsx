@@ -50,7 +50,9 @@ export default function Navbar({ name, isAdmin }) {
       children: [
         { label: 'Analyse', path: '/analysis' },
         { label: 'Rangliste', path: '/leaderboard' },
-        { label: 'Top 10', path: '/top-fishes' }
+        { label: 'Top 10', path: '/top-fishes' },
+        { label: 'Kalender', path: '/calendar' }
+
       ]
     },
     { label: 'Prognose', path: '/forecast' },
@@ -133,7 +135,7 @@ export default function Navbar({ name, isAdmin }) {
             onClick={toggleDark}
             className="text-sm hover:text-blue-600 dark:hover:text-blue-300"
           >
-            {darkMode ? '☀️ Hell' : '🌙 Nachtangeln'}
+            {darkMode ? '☀️ Tageslicht' : '🌙 Nachtangeln'}
           </button>
 
           <button

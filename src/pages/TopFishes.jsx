@@ -49,7 +49,7 @@ export default function TopFishes() {
 
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
-      <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-300">🏅 Top 10 einer Fischart</h2>
+      <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-300">🏅 Top 10</h2>
 
       <div className="max-w-md mx-auto mb-8">
         <select

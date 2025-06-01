@@ -15,6 +15,7 @@ import AdminOverview from './pages/AdminOverview';
 
 import Navbar from './components/Navbar';
 import AuthForm from './components/AuthForm';
+import Calendar from './pages/Calendar';
 
 import './index.css';
 
@@ -157,6 +158,7 @@ function AppContent() {
         <Route path="/analysis" element={<Analysis anglerName={anglerName} />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/top-fishes" element={<TopFishes />} />
+        <Route path="/calendar" element={<Calendar />} />
         <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
 
         <Route

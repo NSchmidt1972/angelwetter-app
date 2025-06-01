@@ -215,7 +215,7 @@ export default function Analysis({ anglerName }) {
                   {label} {activeKey === label && <span className="ml-2 text-green-600 dark:text-green-400 text-xs">(Jetzt)</span>}
                 </span>
               </div>
-              <span className="font-mono text-gray-700 dark:text-gray-300">{count}x</span>
+              <span className="font-mono text-gray-700 dark:text-gray-300">{count}</span>
             </li>
           );
         })}
@@ -225,7 +225,7 @@ export default function Analysis({ anglerName }) {
 
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
-      <h2 className="text-3xl font-bold mb-2 text-center text-blue-700 dark:text-blue-300">📊 Monatsstatistik & Wetteranalyse</h2>
+      <h2 className="text-3xl font-bold mb-2 text-center text-blue-700 dark:text-blue-300">📊 Statistik & Analyse</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700 dark:text-gray-300 max-w-xl mx-auto mb-8 bg-white dark:bg-gray-800 rounded-xl p-4 shadow">
         <div className="flex items-center gap-2">
@@ -292,7 +292,7 @@ export default function Analysis({ anglerName }) {
                         .map(([fish, count]) => (
                           <li key={fish} className="flex justify-between px-2 py-1 text-sm">
                             <span>{fish}</span>
-                            <span className="font-mono text-gray-700 dark:text-gray-300">{count}x</span>
+                            <span className="font-mono text-gray-700 dark:text-gray-300">{count}</span>
                           </li>
                         ))}
                     </ul>

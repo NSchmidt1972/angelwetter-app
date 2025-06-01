@@ -77,38 +77,75 @@ export default function FishCatchForm({ setWeatherData }) {
     setFish('');
     setSize('');
     setNote('');
-    alert("✅ Petri Heil! Fang gespeichert.");
+    alert("Petri Heil! 🎣 Dein Fang ist gespeichert. ✅");
     navigate('/catches');
   }
 };
 
 
   const handleBlankSubmit = async () => {
-    setLoading(true);
+  setLoading(true);
 
-    let currentWeather;
-    try {
-      const data = await fetchWeather();
-      currentWeather = {
-        temp: data.current.temp ?? null,
-        description: data.current.weather?.[0]?.description ?? '',
-        icon: data.current.weather?.[0]?.icon ?? '',
-        wind: data.current.wind_speed ?? null,
-        wind_deg: data.current.wind_deg ?? null,
-        humidity: data.current.humidity ?? null,
-        pressure: data.current.pressure ?? null,
-        moon_phase: data.daily?.[0]?.moon_phase ?? null
-      };
+  let currentWeather;
+try {
+  const data = await fetchWeather();
+  currentWeather = {
+    temp: data.current.temp ?? null,
+    description: data.current.weather?.[0]?.description ?? '',
+    icon: data.current.weather?.[0]?.icon ?? '',
+    wind: data.current.wind_speed ?? null,
+    wind_deg: data.current.wind_deg ?? null,
+    humidity: data.current.humidity ?? null,
+    pressure: data.current.pressure ?? null,
+    moon_phase: data.daily?.[0]?.moon_phase ?? null
+  };
 
-      if (setWeatherData) {
-        setWeatherData(data);
-      }
-    } catch (err) {
-      console.error('❌ Fehler beim Abrufen des Wetters:', err);
-      alert("Fehler beim Abrufen der aktuellen Wetterdaten.");
+  if (setWeatherData) {
+    setWeatherData(data);
+  }
+} catch (err) {
+  console.error('❌ Fehler beim Abrufen des Wetters:', err);
+  alert("Fehler beim Abrufen der aktuellen Wetterdaten.");
+  setLoading(false);
+  return;
+}
+
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isoTodayStart = today.toISOString();
+  const isoTodayEnd = new Date(today.getTime() + 86400000).toISOString();
+
+  const { data: existing, error: checkError } = await supabase
+    .from('fishes')
+    .select('id, fish')
+    .eq('angler', anglerName)
+    .gte('timestamp', isoTodayStart)
+    .lt('timestamp', isoTodayEnd);
+
+  if (checkError) {
+    console.error('Fehler bei der Prüfung des Tages:', checkError);
+    alert("Fehler bei der Prüfung des Tages.");
+    setLoading(false);
+    return;
+  }
+
+  if (existing.length > 0) {
+    const hatSchonFang = existing.some(entry => entry.fish);
+    const hatSchonBlank = existing.some(entry => !entry.fish);
+
+    if (hatSchonFang) {
+      alert("Du hast heute bereits einen Fisch eingetragen. Kein Schneidertag mehr möglich.");
       setLoading(false);
       return;
     }
+
+    if (hatSchonBlank) {
+      alert("Du hast heute bereits einen Schneidertag eingetragen.");
+      setLoading(false);
+      return;
+    }
+  }
 
     const blankEntry = {
       fish: null,
@@ -127,7 +164,7 @@ export default function FishCatchForm({ setWeatherData }) {
       console.error('❌ Fehler beim Speichern des Schneidertags:', error);
       alert('Fehler beim Speichern.');
     } else {
-      alert("❌ Schneidertag gespeichert!");
+      alert("Schneidertag gespeichert! 😩");
       navigate('/');
     }
   };
