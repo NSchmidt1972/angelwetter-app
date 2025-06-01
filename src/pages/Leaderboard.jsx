@@ -92,16 +92,16 @@ export default function Leaderboard() {
           >
             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">#{i + 1} {a.name}</h3>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-            🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)} cm
+            🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)}cm
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              🏆 Punkte: <span className="font-mono">{a.totalPoints.toFixed(0)} Pkt.</span>
+              🏆 Punkte: <span className="font-mono">{a.totalPoints.toFixed(0)}Pkt.</span>
             </p>
             <ul className="ml-2 space-y-1">
               {Object.entries(a.byFish).map(([f, p]) => (
                 <li key={f} className="flex justify-between font-mono text-sm text-gray-700 dark:text-gray-300">
                   <span className="font-sans">{f}</span>
-                  <span>{p.toFixed(0)} Pkt.</span>
+                  <span>{p.toFixed(0)}Pkt.</span>
                 </li>
               ))}
             </ul>

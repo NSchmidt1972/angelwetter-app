@@ -8,7 +8,7 @@ const FISH_TYPES = [
   'Rotauge', 'Rotfeder', 'Schleie', 'Wels', 'Zander'
 ];
 
-export default function FishCatchForm({ weatherData, setWeatherData }) {
+export default function FishCatchForm({ setWeatherData }) {
   const [fish, setFish] = useState('');
   const [size, setSize] = useState('');
   const [note, setNote] = useState('');

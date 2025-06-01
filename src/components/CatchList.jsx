@@ -89,28 +89,28 @@ export default function CatchList({ anglerName }) {
   const handleShare = async (entry) => {
 
     const FISH_ARTICLES = {
-  Aal: 'einen',
-  Barsch: 'einen',
-  Brasse: 'eine',
-  Hecht: 'einen',
-  Karpfen: 'einen',
-  Rotauge: 'ein',
-  Rotfeder: 'eine',
-  Schleie: 'eine',
-  Wels: 'einen',
-  Zander: 'einen',
-};
+      Aal: 'einen',
+      Barsch: 'einen',
+      Brasse: 'eine',
+      Hecht: 'einen',
+      Karpfen: 'einen',
+      Rotauge: 'ein',
+      Rotfeder: 'eine',
+      Schleie: 'eine',
+      Wels: 'einen',
+      Zander: 'einen',
+    };
 
     const date = new Date(entry.timestamp).toLocaleDateString('de-DE');
     const weather = entry.weather;
 
-   const article = FISH_ARTICLES[entry.fish] || 'einen';
-const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n` +
-  `📏 Größe: ${entry.size} cm\n` +
-  `🌡 Wetter: ${weather?.temp ?? '?'} °C, ${weather?.description ?? 'unbekannt'}\n` +
-  `💨 Wind: ${weather?.wind ?? '?'} m/s${weather?.wind_deg !== undefined ? ` aus ${windDirection(weather.wind_deg)}` : ''}\n` +
-  `🧪 Luftdruck: ${weather?.pressure ?? '?'} hPa • 💦 Feuchte: ${weather?.humidity ?? '?'}%\n` +
-  `🌙 Mond: ${getMoonDescription(weather?.moon_phase)}`;
+    const article = FISH_ARTICLES[entry.fish] || 'einen';
+    const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n` +
+      `📏 Größe: ${entry.size}cm\n` +
+      `🌡 Wetter: ${weather?.temp ?? '?'}°C, ${weather?.description ?? 'unbekannt'}\n` +
+      `💨 Wind: ${weather?.wind ?? '?'}m/s${weather?.wind_deg !== undefined ? ` aus ${windDirection(weather.wind_deg)}` : ''}\n` +
+      `🧪 Luftdruck: ${weather?.pressure ?? '?'}hPa • 💦 Feuchte: ${weather?.humidity ?? '?'}%\n` +
+      `🌙 Mond: ${getMoonDescription(weather?.moon_phase)}`;
 
     if (navigator.share) {
       try {
@@ -122,7 +122,7 @@ const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n
       try {
         await navigator.clipboard.writeText(shareText);
         alert('📋 Fanginfo kopiert! Jetzt z. B. in WhatsApp einfügen.');
-      } catch (err) {
+      } catch {
         alert('Teilen nicht unterstützt. Bitte manuell kopieren.');
       }
     }
@@ -137,7 +137,7 @@ const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n
           </h2>
           {catches.length > 0 && (
             <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-         🎯 {onlyMine ? 'Meine' : 'Gesamt'}: {catches.length} {catches.length === 1 ? 'Fang' : 'Fänge'}
+              🎯 {onlyMine ? 'Meine' : 'Gesamt'}: {catches.length} {catches.length === 1 ? 'Fang' : 'Fänge'}
             </p>
           )}
         </div>
@@ -187,7 +187,7 @@ const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-lg">🐟</span>
                   <span className="text-blue-600 dark:text-blue-300 font-medium">{entry.fish}</span>
-                  <span className="text-gray-600 dark:text-gray-300">{entry.size} cm</span>
+                  <span className="text-gray-600 dark:text-gray-300">{entry.size}cm</span>
                 </div>
 
                 {entry.note && (
@@ -203,18 +203,18 @@ const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n
                     />
                     <div>
                       <p className="font-medium">
-                        {entry.weather.temp} °C, {entry.weather.description}
+                        {entry.weather.temp}°C, {entry.weather.description}
                       </p>
                       <p>
-                        💨 {entry.weather.wind} m/s
+                        💨 {entry.weather.wind}m/s
                         {entry.weather.wind_deg !== undefined && (
                           <> aus {windDirection(entry.weather.wind_deg)} ({entry.weather.wind_deg}°)</>
                         )}
                       </p>
                       <p>
-                        💦 {entry.weather.humidity}% • 🧪 {entry.weather.pressure} hPa
+                        💦 {entry.weather.humidity}% • 🧪 {entry.weather.pressure}hPa
                         {entry.weather.rain !== undefined && (
-                          <> • 💧 {entry.weather.rain} mm</>
+                          <> • 💧 {entry.weather.rain}mm</>
                         )}
                       </p>
                       <p>{getMoonDescription(entry.weather.moon_phase)}</p>
