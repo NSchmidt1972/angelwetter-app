@@ -48,7 +48,7 @@ export default function FishCatchForm({ setWeatherData }) {
     };
 
     if (setWeatherData) {
-      setWeatherData(data);
+      setWeatherData({ data, savedAt: Date.now() });
     }
   } catch (err) {
     console.error('❌ Fehler beim Abrufen des Wetters:', err);
@@ -101,7 +101,7 @@ try {
   };
 
   if (setWeatherData) {
-    setWeatherData(data);
+    setWeatherData({ data, savedAt: Date.now() });
   }
 } catch (err) {
   console.error('❌ Fehler beim Abrufen des Wetters:', err);
