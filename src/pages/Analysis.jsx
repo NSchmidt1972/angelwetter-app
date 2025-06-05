@@ -113,17 +113,17 @@ export default function Analysis({ anglerName }) {
 
   const tempStats = validFishes.reduce(statsReducer(f => {
     const t = f.weather?.temp;
-    return t != null ? `${Math.floor(t / 5) * 5}–${Math.floor(t / 5) * 5 + 5}°C` : null;
+    return t != null ? `${Math.floor(t / 5) * 5}–${Math.floor(t / 5) * 5 + 5} °C` : null;
   }), {});
 
   const pressureStats = validFishes.reduce(statsReducer(f => {
     const p = f.weather?.pressure;
-    return p != null ? `${Math.floor(p / 10) * 10}–${Math.floor(p / 10) * 10 + 9} hPa` : null;
+    return p != null ? `${Math.floor(p / 10) * 10}–${Math.floor(p / 10) * 10 + 9} hPa` : null;
   }), {});
 
   const windStats = validFishes.reduce(statsReducer(f => {
     const w = f.weather?.wind;
-    return w != null ? `${Math.floor(w / 3) * 3}–${Math.floor(w / 3) * 3 + 3} m/s` : null;
+    return w != null ? `${Math.floor(w / 3) * 3}–${Math.floor(w / 3) * 3 + 3} m/s` : null;
   }), {});
 
   const windDirStats = validFishes.reduce(statsReducer(f => {

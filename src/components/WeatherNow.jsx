@@ -81,11 +81,11 @@ export default function WeatherNow({ data, onRefresh }) {
         <div>
           <p className="text-lg font-semibold">{now.temp.toFixed(0)} °C – {desc}</p>
           <p className="text-sm text-gray-600 dark:text-gray-300">
-            🌅 Sonnenaufgang: {new Date(now.sunrise * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr<br />
-            🌄 Sonnenuntergang: {new Date(now.sunset * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+            🌅 Sonnenaufgang: {new Date(now.sunrise * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr<br />
+            🌄 Sonnenuntergang: {new Date(now.sunset * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-300">🧪 {now.pressure} hPa • 💦 {now.humidity} %</p>
-          <p className="text-sm text-gray-600 dark:text-gray-300">💨 {now.wind_speed} m/s • 🧭 {windDirection(now.wind_deg)} ({now.wind_speed.toFixed(1)} m/s)</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">💨 {now.wind_speed} m/s • 🧭 {windDirection(now.wind_deg)} ({now.wind_speed.toFixed(1)} m/s)</p>
           <p className="text-sm text-gray-600 dark:text-gray-300">🔆 UV-Index: {now.uvi}</p>
           {moonText && <p className="text-sm text-gray-600 dark:text-gray-300">🌙 Mondphase: {moonText}</p>}
         </div>
@@ -107,11 +107,11 @@ export default function WeatherNow({ data, onRefresh }) {
             <p className="text-sm text-gray-700 dark:text-gray-300">{h.weather?.[0]?.description}</p>
             <p className="text-lg font-semibold">{h.temp.toFixed(0)} °C</p>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              🌧 {Math.round(h.pop * 100)}%
-              {h.pop > 0 && h.rain?.["1h"] && <> • 💧 {h.rain["1h"].toFixed(1)} mm</>}
+              🌧 {Math.round(h.pop * 100)} %
+              {h.pop > 0 && h.rain?.["1h"] && <> • 💧 {h.rain["1h"].toFixed(1)} mm</>}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">🧪 {h.pressure} hPa • 💦 {h.humidity} %</p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">🧭 {windDirection(h.wind_deg)} ({h.wind_speed.toFixed(1)} m/s)</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">🧪 {h.pressure} hPa • 💦 {h.humidity} %</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">🧭 {windDirection(h.wind_deg)} ({h.wind_speed.toFixed(1)} m/s)</p>
           </div>
         ))}
       </div>
@@ -132,11 +132,11 @@ export default function WeatherNow({ data, onRefresh }) {
             <p className="text-sm text-gray-700 dark:text-gray-300">{day.weather?.[0]?.description}</p>
             <p className="text-lg font-semibold">{day.temp.day.toFixed(0)} °C</p>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              🌧 {Math.round(day.pop * 100)}%
-              {day.pop > 0 && day.rain && <> • 💧 {day.rain.toFixed(1)} mm</>}
+              🌧 {Math.round(day.pop * 100)} %
+              {day.pop > 0 && day.rain && <> • 💧 {day.rain.toFixed(1)} mm</>}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">🧪 {day.pressure} hPa • 💦 {day.humidity} %</p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">🧭 {windDirection(day.wind_deg)} ({day.wind_speed.toFixed(1)} m/s)</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">🧪 {day.pressure} hPa • 💦 {day.humidity} %</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">🧭 {windDirection(day.wind_deg)} ({day.wind_speed.toFixed(1)} m/s)</p>
             <p className="text-sm text-gray-600 dark:text-gray-400">{getMoonDescription(day.moon_phase)}</p>
           </div>
         ))}

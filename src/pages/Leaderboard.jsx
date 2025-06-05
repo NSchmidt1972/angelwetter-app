@@ -3,13 +3,12 @@ import { supabase } from '../supabaseClient';
 
 export default function Leaderboard() {
   const [fishes, setFishes] = useState([]);
+  const [formattedNamesMap, setFormattedNamesMap] = useState({});
   const [showIntern, setShowIntern] = useState(false);
 
-  // robusten Namen lesen und normalisieren
   const rawName = localStorage.getItem('anglerName') || 'Unbekannt';
   const anglerName = rawName.trim().toLowerCase();
 
-  // vertraute Namen ebenfalls normalisiert
   const vertraute = ['nicol schmidt', 'laura rittlinger'];
   const PUBLIC_FROM = new Date('2025-05-29');
 
@@ -21,37 +20,68 @@ export default function Leaderboard() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    async function prepareFormattedNames() {
+      const { data: profileData, error } = await supabase.from('profiles').select('name');
+      if (error) {
+        console.error('Fehler beim Laden der Profile:', error);
+        return;
+      }
+
+      const vornameHäufigkeit = {};
+      profileData.forEach(p => {
+        const [first] = p.name.trim().split(' ');
+        vornameHäufigkeit[first] = (vornameHäufigkeit[first] || 0) + 1;
+      });
+
+      const mapping = {};
+      profileData.forEach(p => {
+        const [first, last] = p.name.trim().split(' ');
+        const mehrfach = vornameHäufigkeit[first] > 1;
+        mapping[p.name.trim()] = mehrfach && last ? `${first} ${last[0]}.` : first;
+      });
+
+      setFormattedNamesMap(mapping);
+    }
+
+    prepareFormattedNames();
+  }, []);
+
   const filteredFishes = fishes.filter(f => {
-  const fangDatum = new Date(f.timestamp);
-  const istAbNeu = fangDatum >= PUBLIC_FROM;
-  const istVertrauter = vertraute.includes((f.angler || '').trim().toLowerCase());
+    const fangDatum = new Date(f.timestamp);
+    const istAbNeu = fangDatum >= PUBLIC_FROM;
+    const istVertrauter = vertraute.includes((f.angler || '').trim().toLowerCase());
 
-  let darfSehen = false;
+    let darfSehen = false;
+    if (showIntern) {
+      darfSehen = vertraute.includes(anglerName) && istVertrauter;
+    } else {
+      darfSehen = istAbNeu;
+    }
 
-  if (showIntern) {
-    darfSehen = vertraute.includes(anglerName) && istVertrauter;
-  } else {
-    darfSehen = istAbNeu;
-  }
+    const size = parseFloat(f.size);
+    const istVerwertbar = f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
 
-  const size = parseFloat(f.size);
-  const istVerwertbar = f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
-
-  return darfSehen && istVerwertbar;
-});
-
+    return darfSehen && istVerwertbar;
+  });
 
   const byAngler = {};
   filteredFishes.forEach(f => {
     const name = f.angler || 'Unbekannt';
     if (!byAngler[name]) {
-      byAngler[name] = { total: 0, sizeSum: 0, byFish: {} };
+      byAngler[name] = { total: 0, sizeSum: 0, byFish: {}, sizesByFish: {} };
     }
     const size = parseFloat(f.size) || 0;
     byAngler[name].total += 1;
     byAngler[name].sizeSum += size;
     const fishType = f.fish || 'Unbekannt';
     byAngler[name].byFish[fishType] = (byAngler[name].byFish[fishType] || 0) + size;
+
+    if (!byAngler[name].sizesByFish[fishType]) {
+      byAngler[name].sizesByFish[fishType] = { sum: 0, count: 0 };
+    }
+    byAngler[name].sizesByFish[fishType].sum += size;
+    byAngler[name].sizesByFish[fishType].count += 1;
   });
 
   const ranking = Object.entries(byAngler)
@@ -69,7 +99,6 @@ export default function Leaderboard() {
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
       <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">🏆 Rangliste</h2>
 
-      {/* Toggle-Switch nur für vertraute Angler */}
       {vertraute.includes(anglerName) && (
         <div className="flex justify-center items-center mb-6">
           <label className="flex items-center space-x-3 cursor-pointer">
@@ -90,24 +119,47 @@ export default function Leaderboard() {
             key={i}
             className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
           >
-            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">#{i + 1} {a.name}</h3>
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">
+              #{i + 1} {formattedNamesMap[a.name] || a.name}
+            </h3>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-            🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)}cm
+              🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)} cm
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              🏆 Punkte: <span className="font-mono">{a.totalPoints.toFixed(0)}Pkt.</span>
+              🏆 Punkte: <span className="font-mono">{a.totalPoints.toFixed(0)} Punkte</span>
             </p>
-            <ul className="ml-2 space-y-1">
-              {Object.entries(a.byFish).map(([f, p]) => (
-                <li key={f} className="flex justify-between font-mono text-sm text-gray-700 dark:text-gray-300">
-                  <span className="font-sans">{f}</span>
-                  <span>{p.toFixed(0)}Pkt.</span>
-                </li>
-              ))}
-            </ul>
+
+            <table className="w-full text-sm font-mono text-left text-gray-700 dark:text-gray-300 mt-2">
+              <thead>
+                <tr>
+                  <th className="text-left font-sans">Fischart</th>
+                  <th className="text-right">Ø Größe</th>
+                  <th className="text-right pr-2">Punkte</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(a.byFish)
+                  .sort(([, pointsA], [, pointsB]) => pointsB - pointsA)
+                  .map(([f, p]) => {
+                    const sizeData = a.sizesByFish?.[f];
+                    const avg =
+                      sizeData && sizeData.count > 0
+                        ? (sizeData.sum / sizeData.count).toFixed(1)
+                        : '-';
+                    return (
+                      <tr key={f}>
+                        <td className="font-sans">{f}</td>
+                        <td className="text-right">{avg} cm</td>
+                        <td className="text-right pr-2">{p.toFixed(0)} Pkt.</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
           </div>
         ))}
       </div>
     </div>
   );
 }
+
