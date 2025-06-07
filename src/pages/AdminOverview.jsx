@@ -19,6 +19,7 @@ export default function AdminOverview() {
   const [catchCount, setCatchCount] = useState(null);
   const [nameShort, setNameShort] = useState(null);
   const [recentBlanks, setRecentBlanks] = useState([]);
+  const [allProfiles, setAllProfiles] = useState([]);
 
   useEffect(() => {
     async function loadData() {
@@ -127,6 +128,19 @@ export default function AdminOverview() {
         } else {
           setRecentBlanks(blanks);
         }
+
+        // Alle registrierten Mitglieder
+        const { data: allProfilesData, error: allProfilesError } = await supabase
+          .from('profiles')
+          .select('name, created_at')
+          .order('created_at', { ascending: false });
+
+        if (allProfilesError) {
+          console.error('❌ Fehler beim Laden der Profile:', allProfilesError);
+        } else {
+          setAllProfiles(allProfilesData);
+        }
+
       } catch (error) {
         console.error('❌ Fehler beim Laden der Admin-Daten:', error.message);
       }
@@ -192,6 +206,24 @@ export default function AdminOverview() {
           </li>
         )}
       </ul>
+
+      {allProfiles.length > 0 && (
+        <div className="mt-10">
+          <p className="font-semibold text-blue-700 dark:text-blue-300 mb-2">
+            🗓 Registrierte Nutzer mit Anmeldedatum:
+          </p>
+          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
+            {allProfiles.map((p, i) => (
+              <li key={i}>
+                {p.name}
+                <span className="text-gray-500 text-xs ml-2">
+                  (registriert am {new Date(p.created_at).toLocaleDateString('de-DE')})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

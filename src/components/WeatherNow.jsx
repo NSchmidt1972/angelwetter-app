@@ -25,7 +25,7 @@ export default function WeatherNow({ data, onRefresh }) {
       setAutoUpdated(true);
       onRefresh?.();
       setTimeout(() => setAutoUpdated(false), 2000);
-    }, 1 * 60 * 1000);
+    }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [onRefresh]);

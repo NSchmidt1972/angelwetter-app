@@ -42,7 +42,7 @@ export default function Navbar({ name, isAdmin }) {
   };
 
   const navItems = [
-    { label: 'Start', path: '/' },
+    { label: 'Wetter', path: '/' },
     { label: 'Neuer Fang', path: '/new-catch' },
     { label: 'Fangliste', path: '/catches' },
     {
@@ -52,7 +52,6 @@ export default function Navbar({ name, isAdmin }) {
         { label: 'Rangliste', path: '/leaderboard' },
         { label: 'Top 10', path: '/top-fishes' },
         { label: 'Kalender', path: '/calendar' }
-
       ]
     },
     { label: 'Prognose', path: '/forecast' },
@@ -69,38 +68,38 @@ export default function Navbar({ name, isAdmin }) {
 
   return (
     <header className="bg-white dark:bg-gray-900 shadow-md sticky top-0 z-50 text-black dark:text-white">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
         {/* Navigation */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => setOpen(!open)}
-            className="md:hidden text-3xl p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+            className="md:hidden text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
             aria-label="Menü öffnen"
           >
             ☰
           </button>
 
-          <nav className={`flex-col md:flex md:flex-row md:gap-6 ${open ? 'flex' : 'hidden'} md:items-center`}>
+          <nav className={`md:flex md:flex-row md:gap-6 ${open ? 'absolute top-full left-0 w-full bg-white dark:bg-gray-900 shadow-lg flex flex-col p-4 gap-4 z-40' : 'hidden'} md:items-center`}>
             {navItems.map((item) =>
               item.children ? (
                 <div key={item.label} className="relative">
                   <button
                     onClick={() => setOpenDropdown(prev => !prev)}
-                    className="block px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-gray-700 font-medium"
+                    className="block px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
                   >
                     {item.label} ▾
                   </button>
 
                   {openDropdown && (
-                    <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50">
+                    <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base">
                       {item.children.map((child) => (
                         <Link
                           key={child.path}
                           to={child.path}
-                          className={`block px-4 py-2 text-sm hover:bg-blue-50 dark:hover:bg-gray-700 ${location.pathname === child.path
-                              ? 'font-bold text-blue-700 dark:text-blue-300'
-                              : 'text-gray-800 dark:text-gray-100'
-                            }`}
+                          className={`block px-5 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 rounded ${location.pathname === child.path
+                            ? 'font-bold text-blue-700 dark:text-blue-300'
+                            : 'text-gray-800 dark:text-gray-100'
+                          }`}
                           onClick={() => {
                             setOpen(false);
                             setOpenDropdown(false);
@@ -116,10 +115,10 @@ export default function Navbar({ name, isAdmin }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`block px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-gray-700 ${location.pathname === item.path
-                      ? 'font-bold text-blue-700 dark:text-blue-300'
-                      : ''
-                    }`}
+                  className={`block px-4 py-3 rounded text-lg hover:bg-blue-100 dark:hover:bg-gray-700 ${location.pathname === item.path
+                    ? 'font-bold text-blue-700 dark:text-blue-300'
+                    : ''
+                  }`}
                   onClick={() => setOpen(false)}
                 >
                   {item.label}
@@ -129,27 +128,27 @@ export default function Navbar({ name, isAdmin }) {
           </nav>
         </div>
 
-        {/* Benutzer, Darkmode und Dropdown für Logout */}
-        <div className="flex items-center gap-3 text-sm relative" ref={dropdownRef}>
+        {/* Benutzer, Darkmode und Logout */}
+        <div className="flex items-center gap-4 text-base relative" ref={dropdownRef}>
           <button
             onClick={toggleDark}
-            className="text-sm hover:text-blue-600 dark:hover:text-blue-300"
+            className="px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300"
           >
             {darkMode ? '☀️ Tageslicht' : '🌙 Nachtangeln'}
           </button>
 
           <button
             onClick={() => setShowLogout(prev => !prev)}
-            className="hover:underline focus:outline-none"
+            className="px-3 py-2 rounded hover:underline"
           >
             👤 {displayName}
           </button>
 
           {showLogout && (
-            <div className="absolute right-0 top-8 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 w-40 text-sm">
+            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base">
               <button
                 onClick={handleLogout}
-                className="block w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
+                className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
               >
                 Abmelden
               </button>
