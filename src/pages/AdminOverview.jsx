@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { formatNameList } from '../utils/nameFormatter';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
 
 function formatTime(iso) {
   const date = new Date(iso);
@@ -38,11 +40,11 @@ export default function AdminOverview() {
           );
         }
 
-        // Aktive Nutzer
+        // Aktive Nutzer der letzten 7 Tage
         const { data: users, error: userError } = await supabase
           .from('user_activity')
           .select('user_id, last_active')
-          .gt('last_active', new Date(Date.now() - 1440 * 1440 * 1000).toISOString());
+          .gt('last_active', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
 
         if (userError && userError.message.includes('does not exist')) {
           console.warn('⚠️ Tabelle user_activity existiert nicht – wird übersprungen.');
@@ -61,12 +63,22 @@ export default function AdminOverview() {
           const enrichedUsers = users
             .map(u => {
               const match = profiles.find(p => p.id === u.user_id);
-              return match ? { ...u, name: match.name } : null;
+              return match
+                ? {
+                    ...u,
+                    name: match.name,
+                    formattedDate: format(new Date(u.last_active), "dd.MM.yyyy HH:mm", { locale: de })
+                  }
+                : null;
             })
             .filter(Boolean);
 
-          const formatted = formatNameList(enrichedUsers.map(u => u.name));
-          const enrichedFormatted = enrichedUsers.map((u, i) => ({ ...u, displayName: formatted[i] }));
+          const formattedNames = formatNameList(enrichedUsers.map(u => u.name));
+          const enrichedFormatted = enrichedUsers.map((u, i) => ({
+            ...u,
+            displayName: formattedNames[i],
+          }));
+
           setActiveUsers(enrichedFormatted);
         }
 
@@ -132,14 +144,14 @@ export default function AdminOverview() {
           <strong>☁️ Letztes Wetterupdate:</strong> {weatherUpdatedAt || 'Lade...'}
         </li>
         <li>
-          <strong>👥 Aktive Nutzer (24h):</strong> {activeUsers.length}
+          <strong>👥 Aktive Nutzer (7 Tage):</strong> {activeUsers.length}
           {activeUsers.length > 0 && (
             <ul className="list-disc list-inside ml-4 mt-1">
               {activeUsers.map((u, i) => (
                 <li key={i}>
                   {u.displayName}
                   <span className="text-gray-500 text-xs ml-2">
-                    (aktiv um {formatTime(u.last_active)})
+                    (aktiv am {u.formattedDate})
                   </span>
                 </li>
               ))}

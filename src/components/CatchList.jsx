@@ -21,6 +21,7 @@ export default function CatchList({ anglerName }) {
   const [catches, setCatches] = useState([]);
   const [onlyMine, setOnlyMine] = useState(false);
   const [formattedNames, setFormattedNames] = useState([]);
+  const [modalPhoto, setModalPhoto] = useState(null);
 
   useEffect(() => {
     async function loadFishes() {
@@ -88,44 +89,55 @@ export default function CatchList({ anglerName }) {
 
   const handleShare = async (entry) => {
     const FISH_ARTICLES = {
-      Aal: 'einen',
-      Barsch: 'einen',
-      Brasse: 'eine',
-      Hecht: 'einen',
-      Karpfen: 'einen',
-      Rotauge: 'ein',
-      Rotfeder: 'eine',
-      Schleie: 'eine',
-      Wels: 'einen',
-      Zander: 'einen',
+      Aal: 'einen', Barsch: 'einen', Brasse: 'eine', Hecht: 'einen', Karpfen: 'einen',
+      Rotauge: 'ein', Rotfeder: 'eine', Schleie: 'eine', Wels: 'einen', Zander: 'einen'
     };
 
     const date = new Date(entry.timestamp).toLocaleDateString('de-DE');
     const weather = entry.weather;
-
     const article = FISH_ARTICLES[entry.fish] || 'einen';
-    const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n` +
-      `📏 Größe: ${entry.size}\u202Fcm\n` +
-      `🌡 Wetter: ${weather?.temp ?? '?'}\u202F°C, ${weather?.description ?? 'unbekannt'}\n` +
-      `💨 Wind: ${weather?.wind ?? '?'}\u202Fm/s${weather?.wind_deg !== undefined ? ` aus ${windDirection(weather.wind_deg)}` : ''}\n` +
-      `🧪 Luftdruck: ${weather?.pressure ?? '?'}\u202FhPa • 💦 Feuchte: ${weather?.humidity ?? '?'}\u202F%\n` +
-      `🌙 Mond: ${getMoonDescription(weather?.moon_phase)}`;
 
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Mein Fang', text: shareText });
-      } catch (err) {
-        console.warn('❌ Teilen abgebrochen oder nicht möglich:', err);
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText(shareText);
-        alert('📋 Fanginfo kopiert! Jetzt z. B. in WhatsApp einfügen.');
-      } catch {
-        alert('Teilen nicht unterstützt. Bitte manuell kopieren.');
+    const shareText =
+    `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n` +
+    `📏 Größe: ${entry.size} cm\n` +
+    `🌡 Wetter: ${weather?.temp ?? '?'} °C, ${weather?.description ?? 'unbekannt'}\n` +
+    `💨 Wind: ${weather?.wind ?? '?'} m/s${weather?.wind_deg !== undefined ? ` aus ${windDirection(weather.wind_deg)}` : ''}\n` +
+    `🧪 Luftdruck: ${weather?.pressure ?? '?'} hPa • 💦 Feuchte: ${weather?.humidity ?? '?'} %\n` +
+    `🌙 Mond: ${getMoonDescription(weather?.moon_phase)}`;
+
+  try {
+    let file;
+
+    if (navigator.canShare && entry.photo_url) {
+      const response = await fetch(entry.photo_url);
+      const blob = await response.blob();
+      file = new File([blob], `Fang_${date.replace(/\./g, '-')}.jpg`, { type: blob.type });
+
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'Mein Fang',
+          text: shareText,
+          files: [file],
+        });
+        return;
       }
     }
-  };
+
+    const fallbackText = entry.photo_url
+      ? shareText + `\n🔗 Link zum Foto: ${entry.photo_url}`
+      : shareText;
+
+    await navigator.share({ title: 'Mein Fang', text: fallbackText });
+  } catch (err) {
+    console.warn('❌ Teilen nicht möglich:', err);
+    try {
+      await navigator.clipboard.writeText(shareText);
+      alert('📋 Fanginfo kopiert! Jetzt z. B. in WhatsApp einfügen.');
+    } catch {
+      alert('Teilen nicht unterstützt. Bitte manuell kopieren.');
+    }
+  }
+};
 
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
@@ -186,7 +198,20 @@ export default function CatchList({ anglerName }) {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-lg">🐟</span>
                   <span className="text-blue-600 dark:text-blue-300 font-medium">{entry.fish}</span>
-                  <span className="text-gray-600 dark:text-gray-300">{`${entry.size}\u202Fcm`}</span>
+                  <span className="text-gray-600 dark:text-gray-300">{`${entry.size} cm`}</span>
+                  {entry.photo_url && (
+                    <button
+                      onClick={() => setModalPhoto(entry.photo_url)}
+                      className="ml-auto"
+                      title="Foto anzeigen"
+                    >
+                      <img
+                        src={entry.photo_url}
+                        alt="Fangfoto"
+                        className="w-16 h-16 rounded-full object-cover shadow-sm hover:shadow-md transition"
+                      />
+                    </button>
+                  )}
                 </div>
 
                 {entry.note && (
@@ -235,6 +260,20 @@ export default function CatchList({ anglerName }) {
             );
           })}
         </ul>
+      )}
+
+      {modalPhoto && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
+          onClick={() => setModalPhoto(null)}
+        >
+          <img
+            src={modalPhoto}
+            alt="Fangfoto groß"
+            className="max-w-[90vw] max-h-[80vh] rounded-md shadow-lg cursor-pointer"
+            onClick={() => setModalPhoto(null)}
+          />
+        </div>
       )}
     </div>
   );
