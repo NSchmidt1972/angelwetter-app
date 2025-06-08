@@ -62,7 +62,8 @@ export default function Analysis({ anglerName }) {
   const totalFishes = fishes.filter(f => f.fish && f.fish.trim() !== '').length;
   const fishingDays = new Set(fishes.map(f => new Date(f.timestamp).toDateString())).size;
   const blankDays = fishes.filter(f => f.blank).length;
-  const blankRatio = fishingDays > 0 ? ((blankDays / fishingDays) * 100).toFixed(1) : '0.0';
+  const sumDays = fishingDays + blankDays;
+  const blankRatio = sumDays > 0 ? ((blankDays / sumDays) * 100).toFixed(1) : '0.0';
 
   const validFishes = fishes.filter(f =>
     !f.blank && f.fish && f.fish.trim().toLowerCase() !== 'unbekannt'
@@ -316,3 +317,4 @@ export default function Analysis({ anglerName }) {
     </div>
   );
 }
+
