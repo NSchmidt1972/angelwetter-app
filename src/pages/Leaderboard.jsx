@@ -36,10 +36,10 @@ export default function Leaderboard() {
 
       const mapping = {};
       profileData.forEach(p => {
-        const [first, last] = p.name.trim().split(' ');
-        const mehrfach = vornameHäufigkeit[first] > 1;
-        mapping[p.name.trim()] = mehrfach && last ? `${first} ${last[0]}.` : first;
+        mapping[p.name.trim()] = p.name.trim(); // immer vollständiger Name
       });
+      setFormattedNamesMap(mapping);
+
 
       setFormattedNamesMap(mapping);
     }

@@ -57,12 +57,28 @@ export default function Analysis({ anglerName }) {
     }
     fetchWeather().then(setWeatherNow);
     loadData();
-  }, []);
+  }, [anglerName]);
 
   const totalFishes = fishes.filter(f => f.fish && f.fish.trim() !== '').length;
-  const fishingDays = new Set(fishes.map(f => new Date(f.timestamp).toDateString())).size;
-  const blankDays = fishes.filter(f => f.blank).length;
-  const sumDays = fishingDays + blankDays;
+
+  // Neu: Angler-spezifische Tagesauswertung
+  const anglerTageMap = {};
+  fishes.forEach(f => {
+    const dateStr = new Date(f.timestamp).toDateString();
+    const key = `${dateStr}__${f.angler}`;
+    if (!anglerTageMap[key]) anglerTageMap[key] = [];
+    anglerTageMap[key].push(f);
+  });
+
+  const blankDays = Object.values(anglerTageMap).filter(entries =>
+    entries.every(f => f.blank === true)
+  ).length;
+
+  const catchDays = Object.values(anglerTageMap).filter(entries =>
+    entries.some(f => !f.blank)
+  ).length;
+
+  const sumDays = blankDays + catchDays;
   const blankRatio = sumDays > 0 ? ((blankDays / sumDays) * 100).toFixed(1) : '0.0';
 
   const validFishes = fishes.filter(f =>
@@ -98,7 +114,7 @@ export default function Analysis({ anglerName }) {
         inline: 'center'
       });
     }
-  }, [selectedYear]);
+  }, [selectedYear, currentMonthIndex]);
 
   const statsReducer = (groupFn) => (map, f) => {
     const key = groupFn(f);
@@ -237,7 +253,7 @@ export default function Analysis({ anglerName }) {
         <div className="flex items-center gap-2">
           <span className="text-xl">📅</span>
           <span>Fangtage:</span>
-          <span className="ml-auto font-bold text-right">{fishingDays}</span>
+          <span className="ml-auto font-bold text-right">{catchDays}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xl">❌</span>

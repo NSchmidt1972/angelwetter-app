@@ -61,11 +61,8 @@ export default function CatchList({ anglerName }) {
         return darfSehen;
       });
 
-      const formatted = filteredFishes.map(f => {
-        const [first, last] = f.angler.split(' ');
-        const count = profileData.filter(p => p.name.startsWith(first + ' ')).length;
-        return count > 1 && last ? `${first} ${last[0]}.` : first;
-      });
+      const formatted = filteredFishes.map(f => f.angler);
+
 
       setCatches(filteredFishes);
       setFormattedNames(formatted);

@@ -34,18 +34,11 @@ export default function TopFishes() {
         return;
       }
 
-      const vornameHäufigkeit = {};
-      profiles.forEach(p => {
-        const [first] = p.name.trim().split(' ');
-        vornameHäufigkeit[first] = (vornameHäufigkeit[first] || 0) + 1;
-      });
-
       const mapping = {};
-      profiles.forEach(p => {
-        const [first, last] = p.name.trim().split(' ');
-        const mehrfach = vornameHäufigkeit[first] > 1;
-        mapping[p.name.trim()] = mehrfach && last ? `${first} ${last[0]}.` : first;
-      });
+profiles.forEach(p => {
+  mapping[p.name.trim()] = p.name.trim(); // immer vollständiger Name
+});
+
 
       setFormattedNamesMap(mapping);
     }

@@ -47,15 +47,21 @@ export default function AdminOverview() {
               return { ...u, name: match.name };
             })
             .filter(Boolean);
-          const names = formatNameList(enriched.map(u => u.name));
-          setActiveUsers(enriched.map((u, i) => ({
-            ...u, displayName: names[i]
+          setActiveUsers(enriched.map(u => ({
+            ...u,
+            displayName: u.name  // vollständiger Name
           })));
+
         }
 
         // Letzter Fang
         const { data: fishes, error: fishError } = await supabase
-          .from('fishes').select('*').order('timestamp', { ascending: false }).limit(1);
+  .from('fishes')
+  .select('*')
+  .order('timestamp', { ascending: false })
+  .not('blank', 'is', true)  // nur Fänge, keine Schneidertage
+  .limit(1);
+
         if (fishError) throw fishError;
         setLatestCatch(fishes?.[0] || null);
 
@@ -68,14 +74,13 @@ export default function AdminOverview() {
         if (countError) throw countError;
         if (typeof count === 'number') setCatchCount(count);
 
-        // Abkürzung Name
+        // Namen der Angler
         const { data: profileList } = await supabase.from('profiles').select('name');
         if (profileList && fishes?.[0]?.angler) {
           const fullName = fishes[0].angler;
-          const [first, last] = fullName.split(' ');
-          const duplicates = profileList.filter(p => p.name.startsWith(first + ' ')).length;
-          setNameShort(duplicates > 1 && last ? `${first} ${last[0]}.` : first);
+          setNameShort(fullName);
         }
+
 
         // Schneidertage
         const { data: blanks, error: blankError } = await supabase
@@ -145,28 +150,28 @@ export default function AdminOverview() {
 
         {/* 4. Letzter Schneidertag (7 Tage) */}
         <li>
-          <strong>❌ Letzter Schneidertag (7 Tage):</strong>{' '}
-          {recentBlanks.length > 0 ? (
-            <ul className="list-disc list-inside ml-4 mt-1">
-              {recentBlanks
-                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                .slice(0, 1)
-                .map((b, i) => (
-                  <li key={i}>
-                    {b.angler} am{' '}
-                    {new Date(b.timestamp)
-                      .toLocaleDateString('de-DE')} um{' '}
-                    {new Date(b.timestamp)
-                      .toLocaleTimeString('de-DE', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                  </li>
-                ))}
-            </ul>
-          ) : (
-            'Keine Schneidertage'
-          )}
+          <strong>❌ Letzte Schneidertage (7 Tage):</strong>{' '}
+       {recentBlanks.length > 0 ? (
+  <ul className="list-disc list-inside ml-4 mt-1">
+    {recentBlanks
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .map((b, i) => (
+        <li key={i}>
+          {b.angler} am{' '}
+          {new Date(b.timestamp)
+            .toLocaleDateString('de-DE')} um{' '}
+          {new Date(b.timestamp)
+            .toLocaleTimeString('de-DE', {
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+        </li>
+      ))}
+  </ul>
+) : (
+  'Keine Schneidertage'
+)}
+
         </li>
 
         {/* 5. Aktive User (7 Tage) */}
@@ -183,9 +188,9 @@ export default function AdminOverview() {
                 const display = isNaN(corrected)
                   ? 'Ungültiges Datum'
                   : corrected.toLocaleString('de-DE', {
-                      dateStyle: 'short',
-                      timeStyle: 'short'
-                    });
+                    dateStyle: 'short',
+                    timeStyle: 'short'
+                  });
                 return (
                   <li key={i}>
                     {u.displayName}
@@ -200,7 +205,8 @@ export default function AdminOverview() {
 
         {/* 6. Registrierte User */}
         <li>
-          <strong>🗓 Registrierte User:</strong>
+          <strong>🗓 Registrierte User:</strong>{' '}
+          {allProfiles.length}
           {allProfiles.length > 0 && (
             <ul className="list-disc list-inside ml-4 mt-1">
               {allProfiles.map((p, i) => (
@@ -215,6 +221,7 @@ export default function AdminOverview() {
             </ul>
           )}
         </li>
+
       </ul>
     </div>
   );
