@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
 
+
+
 import Home from './pages/Home';
 import Catches from './pages/Catches';
 import NewCatch from './pages/NewCatch';
@@ -16,6 +18,7 @@ import AdminOverview from './pages/AdminOverview';
 import Navbar from './components/Navbar';
 import AuthForm from './components/AuthForm';
 import Calendar from './pages/Calendar';
+
 
 import './index.css';
 
@@ -145,6 +148,7 @@ function AppContent() {
   console.log("localStorage:", localStorage.getItem('anglerName'));
 
 
+
   return isLoggedIn ? (
     <>
       <Navbar name={anglerName} isAdmin={isAdmin} />
@@ -177,7 +181,7 @@ function AppContent() {
 
 export default function App() {
   return (
-    <Router basename="/angelwetter-app">
+    <Router basename={import.meta.env.BASE_URL}>
       <AppContent />
     </Router>
   );
