@@ -152,6 +152,29 @@ export default function Navbar({ name, isAdmin }) {
               >
                 Abmelden
               </button>
+
+{['Nicol Schmidt', 'Laura Rittlinger'].includes(name) && (
+  <div className="border-t border-gray-300 dark:border-gray-600 mt-1 pt-1 px-4">
+    <button
+      onClick={() => {
+        const newValue = localStorage.getItem('dataFilter') === 'recent' ? 'all' : 'recent';
+        localStorage.setItem('dataFilter', newValue);
+        const message = newValue === 'recent'
+          ? 'Nur Daten ab 01.06.2025 werden verwendet.'
+          : 'Alle Daten werden verwendet.';
+        alert(message);
+        window.location.reload();
+      }}
+      className="block w-full text-left py-2 text-sm text-blue-600 hover:underline dark:text-blue-300"
+    >
+      {localStorage.getItem('dataFilter') === 'recent'
+        ? ' ❤️ Love On'
+        : ' 📅 ab 01.06.25'}
+    </button>
+  </div>
+)}
+
+
             </div>
           )}
         </div>

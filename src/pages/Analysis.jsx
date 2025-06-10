@@ -39,16 +39,24 @@ export default function Analysis({ anglerName }) {
         return;
       }
 
-      const PUBLIC_FROM = new Date('2025-05-29');
-      const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
+      const PUBLIC_FROM = new Date('2025-06-01');
+const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
+const istVertrauter = vertraute.includes(anglerName);
+const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
 
-      const filtered = data.filter(f => {
-        const fangDatum = new Date(f.timestamp);
-        const istAbNeu = fangDatum >= PUBLIC_FROM;
-        const istVertrauter = vertraute.includes(f.angler);
-        const darfSehen = istAbNeu || (istVertrauter && vertraute.includes(anglerName));
-        return darfSehen;
-      });
+const filtered = data.filter(f => {
+  const fangDatum = new Date(f.timestamp);
+
+  if (istVertrauter) {
+    // Vertraute dürfen alles sehen – je nach Einstellung
+    if (filterSetting === 'all') return true;
+    return fangDatum >= PUBLIC_FROM;
+  }
+
+  // Alle anderen sehen nur neue Fänge
+  return fangDatum >= PUBLIC_FROM;
+});
+
 
       console.log("Angemeldet als:", anglerName);
       console.log("Sichtbare Fänge:", filtered.length, "von", data.length);

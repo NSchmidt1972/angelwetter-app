@@ -14,16 +14,25 @@ export default function TopFishes() {
         return;
       }
 
-      const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
+
       const PUBLIC_FROM = new Date('2025-05-29');
       const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
 
+      const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
+      const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
+      const istVertrauter = vertraute.includes(anglerName);
+
       const filtered = data.filter(f => {
         const fangDatum = new Date(f.timestamp);
-        const istAbNeu = fangDatum >= PUBLIC_FROM;
-        const istVertrauter = vertraute.includes(f.angler);
-        return istAbNeu || (istVertrauter && vertraute.includes(anglerName));
+
+        if (istVertrauter) {
+          if (filterSetting === 'all') return true;
+          return fangDatum >= PUBLIC_FROM;
+        }
+
+        return fangDatum >= PUBLIC_FROM;
       });
+
 
       setFishes(filtered);
 
@@ -35,9 +44,9 @@ export default function TopFishes() {
       }
 
       const mapping = {};
-profiles.forEach(p => {
-  mapping[p.name.trim()] = p.name.trim(); // immer vollständiger Name
-});
+      profiles.forEach(p => {
+        mapping[p.name.trim()] = p.name.trim(); // immer vollständiger Name
+      });
 
 
       setFormattedNamesMap(mapping);
