@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
 
-
+// 🔥 Firebase für Push
+import { messaging, getToken } from './firebase';
 
 import Home from './pages/Home';
 import Catches from './pages/Catches';
@@ -14,11 +15,9 @@ import Leaderboard from './pages/Leaderboard';
 import TopFishes from './pages/TopFishes';
 import Forecast from './pages/Forecast';
 import AdminOverview from './pages/AdminOverview';
-
 import Navbar from './components/Navbar';
 import AuthForm from './components/AuthForm';
 import Calendar from './pages/Calendar';
-
 
 import './index.css';
 
@@ -37,49 +36,75 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-  if (user === undefined) return;
+    if (user === undefined) return;
 
-  if (user === null) {
-    setAnglerName(null);
-    setUserEmail(null);
-    localStorage.removeItem('anglerName');
-    localStorage.removeItem('shortAnglerName');
-    setNameLoading(false);
-    return;
-  }
-
-  setNameLoading(true);
-  setUserEmail(user.email);
-
-  supabase
-    .from('profiles')
-    .select('name')
-    .eq('id', user.id)
-    .single()
-    .then(({ data, error }) => {
-      if (data?.name) {
-        const fullName = data.name.trim();
-        setAnglerName(fullName);
-        localStorage.setItem('anglerName', fullName); // ✅ Hier: automatischer Eintrag
-
-        const [first, last] = fullName.split(' ');
-        supabase
-          .from('profiles')
-          .select('name')
-          .then(({ data: allProfiles }) => {
-            const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
-            const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
-            localStorage.setItem('shortAnglerName', shortName);
-          });
-      } else {
-        console.warn('⚠️ Kein Name im Profil gefunden oder Fehler:', error);
-        setAnglerName(null);
-        localStorage.removeItem('anglerName');
-        localStorage.removeItem('shortAnglerName');
-      }
+    if (user === null) {
+      setAnglerName(null);
+      setUserEmail(null);
+      localStorage.removeItem('anglerName');
+      localStorage.removeItem('shortAnglerName');
       setNameLoading(false);
+      return;
+    }
+
+    setNameLoading(true);
+    setUserEmail(user.email);
+
+    supabase
+      .from('profiles')
+      .select('name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data, error }) => {
+        if (data?.name) {
+          const fullName = data.name.trim();
+          setAnglerName(fullName);
+          localStorage.setItem('anglerName', fullName);
+
+          const [first, last] = fullName.split(' ');
+          supabase
+            .from('profiles')
+            .select('name')
+            .then(({ data: allProfiles }) => {
+              const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
+              const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
+              localStorage.setItem('shortAnglerName', shortName);
+            });
+        } else {
+          console.warn('⚠️ Kein Name im Profil gefunden oder Fehler:', error);
+          setAnglerName(null);
+          localStorage.removeItem('anglerName');
+          localStorage.removeItem('shortAnglerName');
+        }
+        setNameLoading(false);
+      });
+  }, [user]);
+
+  // ✅ Hier holen wir den FCM Token NACHDEM der User erfolgreich eingeloggt ist:
+  useEffect(() => {
+    if (user && anglerName) {
+      requestNotificationPermission();
+    }
+  }, [user, anglerName]);
+
+  const requestNotificationPermission = async () => {
+  try {
+    // Service Worker explizit registrieren, absoluter Pfad:
+    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+
+    // Token holen mit expliziter ServiceWorker-Referenz:
+    const token = await getToken(messaging, { 
+      vapidKey: 'BDvm4-EWQpVSeC9ISO8bOiVOqvogQXLU4BABAvYcAt0qkYf53-syzPzrWIJHM44KPSUTntuquQwBBPmrOqlUjfQ',
+      serviceWorkerRegistration: swReg
     });
-}, [user]);
+
+    console.log('✅ FCM Token:', token);
+    // Hier optional: den Token in Supabase speichern
+  } catch (err) {
+    console.error('❌ Fehler beim Holen des FCM Tokens:', err);
+  }
+};
+
 
   useEffect(() => {
     if (!user) return;
@@ -147,28 +172,19 @@ function AppContent() {
 
   console.log("localStorage:", localStorage.getItem('anglerName'));
 
-
-
   return isLoggedIn ? (
     <>
       <Navbar name={anglerName} isAdmin={isAdmin} />
       <Routes>
         <Route path="/" element={<Home weatherData={weatherData} />} />
-        <Route
-          path="/new-catch"
-          element={<NewCatch anglerName={anglerName} weatherData={weatherData} setWeatherData={setWeatherData} />}
-        />
+        <Route path="/new-catch" element={<NewCatch anglerName={anglerName} weatherData={weatherData} setWeatherData={setWeatherData} />} />
         <Route path="/catches" element={<Catches name={anglerName} />} />
         <Route path="/analysis" element={<Analysis anglerName={anglerName} />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/top-fishes" element={<TopFishes />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
-
-        <Route
-          path="/admin"
-          element={isAdmin ? <AdminOverview /> : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>}
-        />
+        <Route path="/admin" element={isAdmin ? <AdminOverview /> : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>

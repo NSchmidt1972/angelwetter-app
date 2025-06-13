@@ -1,17 +1,29 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.1/firebase-messaging-compat.js');
 
-// Deine Initialisierung
+// Deine Firebase Config HIER identisch wie in deiner src/firebase.js
 firebase.initializeApp({
-  apiKey: "...",
-  // Rest siehe oben
+  apiKey: "AIzaSyDqI809hFmeQ-K_eJSTgPPiVQPcDdavlmA",
+  authDomain: "angelwetter-app.firebaseapp.com",
+  projectId: "angelwetter-app",
+  storageBucket: "angelwetter-app.appspot.com",
+  messagingSenderId: "656005849246",
+  appId: "1:656005849246:web:330d523db82e6e64541b8f",
+  measurementId: "G-HRCMPRWC6D"
 });
 
+// Initialisiere Messaging
 const messaging = firebase.messaging();
 
+// Verarbeitung eingehender Hintergrund-Pushes:
 messaging.onBackgroundMessage(function(payload) {
-  console.log('Hintergrund-Push erhalten:', payload);
-  const { title, body } = payload.notification;
-  self.registration.showNotification(title, { body });
-});
+  console.log('[firebase-messaging-sw.js] Hintergrundnachricht empfangen', payload);
 
+  const notificationTitle = payload.notification.title;
+  const notificationOptions = {
+    body: payload.notification.body,
+    icon: '/icons/logo.png'  // optional dein App-Icon
+  };
+
+  self.registration.showNotification(notificationTitle, notificationOptions);
+});
