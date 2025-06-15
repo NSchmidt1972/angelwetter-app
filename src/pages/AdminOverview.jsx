@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
-import { formatNameList } from '../utils/nameFormatter';
-import { format } from 'date-fns';
-import { de } from 'date-fns/locale';
 import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
-
 
 export default function AdminOverview() {
   const [weatherUpdatedAt, setWeatherUpdatedAt] = useState(null);
@@ -14,95 +10,62 @@ export default function AdminOverview() {
   const [nameShort, setNameShort] = useState(null);
   const [recentBlanks, setRecentBlanks] = useState([]);
   const [allProfiles, setAllProfiles] = useState([]);
-  const [healthCheckKey, setHealthCheckKey] = useState(0);  // NEU für Refresh
 
   useEffect(() => {
     async function loadData() {
       try {
-        // Wetterzeit
         const { data: weatherData, error: weatherError } = await supabase
           .from('weather_cache').select('updated_at').eq('id', 'latest').single();
-        if (weatherError) throw weatherError;
-        if (weatherData?.updated_at) {
+        if (!weatherError && weatherData?.updated_at) {
           setWeatherUpdatedAt(new Date(weatherData.updated_at)
             .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
         }
 
-        // Aktive Nutzer der letzten 7 Tage
         const { data: users, error: userError } = await supabase
           .from('user_activity')
           .select('user_id, last_active')
           .gt('last_active', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
-        if (userError && userError.message.includes('does not exist')) {
-          console.warn('⚠️ Tabelle user_activity existiert nicht – wird übersprungen.');
-        } else if (userError) {
-          throw userError;
-        } else {
+        if (!userError) {
           const userIds = users.map(u => u.user_id);
-          const { data: profiles, error: profileError } = await supabase
+          const { data: profiles } = await supabase
             .from('profiles').select('id, name').in('id', userIds);
-          if (profileError) throw profileError;
-
-          const enriched = users
-            .map(u => {
-              const match = profiles.find(p => p.id === u.user_id);
-              if (!match) return null;
-              return { ...u, name: match.name };
-            })
-            .filter(Boolean);
-          setActiveUsers(enriched.map(u => ({
-            ...u,
-            displayName: u.name  // vollständiger Name
-          })));
-
+          const enriched = users.map(u => {
+            const match = profiles.find(p => p.id === u.user_id);
+            return match ? { ...u, name: match.name } : null;
+          }).filter(Boolean);
+          setActiveUsers(enriched);
         }
 
-        // Letzter Fang
-        const { data: fishes, error: fishError } = await supabase
+        const { data: fishes } = await supabase
           .from('fishes')
           .select('*')
           .order('timestamp', { ascending: false })
-          .not('blank', 'is', true)  // nur Fänge, keine Schneidertage
+          .not('blank', 'is', true)
           .limit(1);
-
-        if (fishError) throw fishError;
         setLatestCatch(fishes?.[0] || null);
 
-        // Anzahl Fänge
-        const { count, error: countError } = await supabase
+        const { count } = await supabase
           .from('fishes')
           .select('*', { count: 'exact', head: true })
           .not('fish', 'is', null)
           .neq('fish', '');
-        if (countError) throw countError;
-        if (typeof count === 'number') setCatchCount(count);
+        setCatchCount(count);
 
-        // Namen der Angler
-        const { data: profileList } = await supabase.from('profiles').select('name');
-        if (profileList && fishes?.[0]?.angler) {
-          const fullName = fishes[0].angler;
-          setNameShort(fullName);
+        if (fishes?.[0]?.angler) {
+          setNameShort(fishes[0].angler);
         }
 
-        // Schneidertage
-        const { data: blanks, error: blankError } = await supabase
+        const { data: blanks } = await supabase
           .from('fishes')
           .select('angler, timestamp')
           .eq('blank', true)
           .gt('timestamp', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
           .order('timestamp', { ascending: false });
-        if (blankError) {
-          console.error('❌ Fehler beim Laden der Schneidertage:', blankError);
-        } else {
-          setRecentBlanks(blanks);
-        }
+        setRecentBlanks(blanks);
 
-        // Alle registrierten Mitglieder
-        const { data: allProfilesData, error: allProfilesError } = await supabase
+        const { data: allProfilesData } = await supabase
           .from('profiles').select('name, created_at').order('created_at', { ascending: false });
-        if (allProfilesError) console.error('❌ Fehler beim Laden der Profile:', allProfilesError);
-        else setAllProfiles(allProfilesData);
-
+        setAllProfiles(allProfilesData);
       } catch (error) {
         console.error('❌ Fehler beim Laden der Admin-Daten:', error.message);
       }
@@ -110,108 +73,98 @@ export default function AdminOverview() {
     loadData();
   }, []);
 
+  const Section = ({ title, value, children }) => (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="text-lg font-semibold text-blue-700">{title}</h3>
+        {value && <div className="text-sm text-gray-700">{value}</div>}
+      </div>
+      {children}
+    </div>
+  );
+
   return (
-    <div className="p-6 max-w-3xl mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-6 text-gray-800 dark:text-gray-100">
-      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-300 mb-6">
-        🔧 Admin‑Übersicht
-      </h2>
+    <div className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
+      <h2 className="text-2xl font-bold text-blue-700 mb-6">🔧 Admin‑Übersicht</h2>
 
-      <ul className="space-y-6 text-sm text-gray-700 dark:text-gray-300">
-        <li>
-          <strong>☁️ Letzte Wetteraktualisierung:</strong> {weatherUpdatedAt || 'Lade...'}
-        </li>
+      <Section title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
 
-        <li>
-          <strong>🎣 Gesamtanzahl Fänge:</strong> {catchCount === null ? 'Lade...' : catchCount}
-        </li>
+      <Section title="🎣 Gesamtanzahl Fänge" value={catchCount === null ? 'Lade...' : catchCount} />
 
-        <li>
-          <strong>🐟 Letzter Fang (7 Tage):</strong>{' '}
-          {latestCatch ? (
-            <>
-              {nameShort || latestCatch.angler} – {latestCatch.fish} ({latestCatch.size} cm) am{' '}
-              {new Date(latestCatch.timestamp).toLocaleDateString('de-DE')} um{' '}
-              {new Date(latestCatch.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-            </>
-          ) : (
-            'Keine Daten'
-          )}
-        </li>
-
-        <li>
-          <strong>❌ Letzte Schneidertage (7 Tage):</strong>{' '}
-          {recentBlanks.length > 0 ? (
-            <ul className="list-disc list-inside ml-4 mt-1">
-              {recentBlanks
-                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                .map((b, i) => (
-                  <li key={i}>
-                    {b.angler} am{' '}
-                    {new Date(b.timestamp).toLocaleDateString('de-DE')} um{' '}
-                    {new Date(b.timestamp).toLocaleTimeString('de-DE', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </li>
-                ))}
+      <Section title="🐟 Letzter Fang (7 Tage)">
+        {latestCatch ? (
+          <div className="max-h-60 overflow-y-auto">
+            <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+              <li>
+                {nameShort} – {latestCatch.fish} ({latestCatch.size} cm)
+                <span className="text-xs text-gray-400"> {' am '}
+                  {(() => {
+                    const time = new Date(new Date(latestCatch.timestamp).getTime() + 2 * 60 * 60 * 1000);
+                    return time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+                  })()}
+                </span>
+              </li>
             </ul>
-          ) : (
-            'Keine Schneidertage'
-          )}
-        </li>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-700">Keine Daten</div>
+        )}
+      </Section>
 
-        <li>
-          <strong>👥 Aktive User (7 Tage):</strong> {activeUsers.length}
-          <ul className="list-disc list-inside ml-4 mt-1">
-            {activeUsers
-              .filter(u => u.last_active)
-              .sort((a, b) => new Date(b.last_active) - new Date(a.last_active))
-              .map((u, i) => {
-                const raw = new Date(u.last_active);
-                const corrected = new Date(raw.getTime() + 2 * 60 * 60 * 1000);
-                const display = isNaN(corrected)
-                  ? 'Ungültiges Datum'
-                  : corrected.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
-                return (
-                  <li key={i}>
-                    {u.displayName}
-                    <span className="text-gray-500 text-xs ml-2">(aktiv am {display})</span>
-                  </li>
-                );
-              })}
-          </ul>
-        </li>
-
-        <li>
-          <strong>🗓 Registrierte User:</strong> {allProfiles.length}
-          {allProfiles.length > 0 && (
-            <ul className="list-disc list-inside ml-4 mt-1">
-              {allProfiles.map((p, i) => (
+      <Section title="❌ Letzte Schneidertage (7 Tage)">
+        {recentBlanks.length > 0 ? (
+          <div className="max-h-60 overflow-y-auto">
+            <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+              {recentBlanks.map((b, i) => (
                 <li key={i}>
-                  {p.name}
-                  <span className="text-gray-500 text-xs ml-2">
-                    (registriert am {new Date(p.created_at).toLocaleDateString('de-DE')})
+                  {b.angler}
+                  <span className="text-xs text-gray-400"> {' am '}
+                    {(() => {
+                      const time = new Date(new Date(b.timestamp).getTime() + 2 * 60 * 60 * 1000);
+                      return time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+                    })()}
                   </span>
                 </li>
               ))}
             </ul>
-          )}
-        </li>
-      </ul>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-700">Keine Schneidertage</div>
+        )}
+      </Section>
 
-      {/* NEU: OneSignal Health Check */}
-      <div className="mt-10">
-        <h3 className="text-xl font-bold mb-4 text-blue-700">🔔 OneSignal Debug</h3>
-        <div className="mb-4">
-          <button
-            onClick={() => setHealthCheckKey(prev => prev + 1)}
-            className="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700"
-          >
-            🔄 HealthCheck erneut ausführen
-          </button>
+      <Section title="👥 Aktive User (7 Tage)">
+        <div className="text-sm text-gray-700 mb-2">{activeUsers.length} aktive Nutzer</div>
+        <div className="max-h-60 overflow-y-auto">
+          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+            {activeUsers.map((u, i) => {
+              const time = new Date(new Date(u.last_active).getTime() + 2 * 60 * 60 * 1000);
+              return (
+                <li key={i}>
+                  {u.name} <span className="text-xs text-gray-400">(aktiv am {time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })})</span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
-        <OneSignalHealthCheck key={healthCheckKey} />
-      </div>
+      </Section>
+
+      <Section title="🗓 Registrierte User">
+        <div className="text-sm text-gray-700 mb-2">{allProfiles.length} registrierte Nutzer</div>
+        <div className="max-h-60 overflow-y-auto">
+          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+            {allProfiles.map((p, i) => (
+              <li key={i}>
+                {p.name} <span className="text-xs text-gray-400">(seit {new Date(p.created_at).toLocaleDateString('de-DE')})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Section>
+
+      <Section title="🔔 OneSignal Debug">
+        <OneSignalHealthCheck />
+      </Section>
     </div>
   );
 }

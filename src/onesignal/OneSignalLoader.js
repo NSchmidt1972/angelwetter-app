@@ -6,7 +6,7 @@ export function initOneSignal() {
     return;
   }
 
-  // Typischer Hack für reines JavaScript:
+  // OneSignal global safer cast für Editor
   const w = window;
   w.OneSignal = w.OneSignal || [];
 
