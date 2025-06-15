@@ -1,11 +1,11 @@
-// ✅ App.jsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
+import PushInit from './components/PushInit';
 
-// 🔥 Firebase für Push
-import { messaging, getToken } from './firebase';
+
+
 
 import Home from './pages/Home';
 import Catches from './pages/Catches';
@@ -18,6 +18,8 @@ import AdminOverview from './pages/AdminOverview';
 import Navbar from './components/Navbar';
 import AuthForm from './components/AuthForm';
 import Calendar from './pages/Calendar';
+
+
 
 import './index.css';
 
@@ -80,32 +82,6 @@ function AppContent() {
       });
   }, [user]);
 
-  // ✅ Hier holen wir den FCM Token NACHDEM der User erfolgreich eingeloggt ist:
-  useEffect(() => {
-    if (user && anglerName) {
-      requestNotificationPermission();
-    }
-  }, [user, anglerName]);
-
-  const requestNotificationPermission = async () => {
-  try {
-    // Service Worker explizit registrieren, absoluter Pfad:
-    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-
-    // Token holen mit expliziter ServiceWorker-Referenz:
-    const token = await getToken(messaging, { 
-      vapidKey: 'BDvm4-EWQpVSeC9ISO8bOiVOqvogQXLU4BABAvYcAt0qkYf53-syzPzrWIJHM44KPSUTntuquQwBBPmrOqlUjfQ',
-      serviceWorkerRegistration: swReg
-    });
-
-    console.log('✅ FCM Token:', token);
-    // Hier optional: den Token in Supabase speichern
-  } catch (err) {
-    console.error('❌ Fehler beim Holen des FCM Tokens:', err);
-  }
-};
-
-
   useEffect(() => {
     if (!user) return;
 
@@ -152,52 +128,60 @@ function AppContent() {
 
   if (authLoading || nameLoading || user === undefined || showSplash) {
     return (
-      <div className="flex flex-col justify-center items-center h-screen bg-white relative">
-        <img
-          src={`${import.meta.env.BASE_URL}icons/logo.png`}
-          alt="Lade Angelwetter..."
-          className={`w-32 h-32 mb-4 transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-          onLoad={() => setImageLoaded(true)}
-        />
-        <p className="text-blue-600 text-lg mb-4">Angelwetter wird geladen...</p>
-        <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-500 animate-pulse w-full"></div>
+      <>
+        <PushInit />
+        <div className="flex flex-col justify-center items-center h-screen bg-white relative">
+          <img
+            src="logo.png"
+            alt="Lade Angelwetter..."
+            className={`w-32 h-32 mb-4 transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setImageLoaded(true)}
+          />
+          <p className="text-blue-600 text-lg mb-4">Angelwetter wird geladen...</p>
+          <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 animate-pulse w-full"></div>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   const isLoggedIn = user && anglerName;
   const isAdmin = userEmail === 'nicol@schmidt-2006.de';
 
-  console.log("localStorage:", localStorage.getItem('anglerName'));
-
-  return isLoggedIn ? (
+  return (
     <>
-      <Navbar name={anglerName} isAdmin={isAdmin} />
-      <Routes>
-        <Route path="/" element={<Home weatherData={weatherData} />} />
-        <Route path="/new-catch" element={<NewCatch anglerName={anglerName} weatherData={weatherData} setWeatherData={setWeatherData} />} />
-        <Route path="/catches" element={<Catches name={anglerName} />} />
-        <Route path="/analysis" element={<Analysis anglerName={anglerName} />} />
-        <Route path="/leaderboard" element={<Leaderboard />} />
-        <Route path="/top-fishes" element={<TopFishes />} />
-        <Route path="/calendar" element={<Calendar />} />
-        <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
-        <Route path="/admin" element={isAdmin ? <AdminOverview /> : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+      <PushInit /> {/* PushInit immer nur einmal pro App-Session */}
+      {isLoggedIn ? (
+        <>
+          <Navbar name={anglerName} isAdmin={isAdmin} />
+          <Routes>
+            <Route path="/" element={<Home weatherData={weatherData} />} />
+            <Route path="/new-catch" element={<NewCatch anglerName={anglerName} weatherData={weatherData} setWeatherData={setWeatherData} />} />
+            <Route path="/catches" element={<Catches name={anglerName} />} />
+            <Route path="/analysis" element={<Analysis anglerName={anglerName} />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/top-fishes" element={<TopFishes />} />
+            <Route path="/calendar" element={<Calendar />} />
+            <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
+            <Route path="/admin" element={isAdmin ? <AdminOverview /> : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </>
+      ) : (
+        <Routes>
+          <Route path="*" element={<AuthForm />} />
+        </Routes>
+      )}
     </>
-  ) : (
-    <Routes>
-      <Route path="*" element={<AuthForm />} />
-    </Routes>
   );
 }
 
+
+
 export default function App() {
   return (
-    <Router basename={import.meta.env.BASE_URL}>
+    <Router basename="/">
       <AppContent />
     </Router>
   );

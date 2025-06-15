@@ -3,6 +3,8 @@ import { supabase } from '@/supabaseClient';
 import { formatNameList } from '../utils/nameFormatter';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
+
 
 export default function AdminOverview() {
   const [weatherUpdatedAt, setWeatherUpdatedAt] = useState(null);
@@ -12,6 +14,7 @@ export default function AdminOverview() {
   const [nameShort, setNameShort] = useState(null);
   const [recentBlanks, setRecentBlanks] = useState([]);
   const [allProfiles, setAllProfiles] = useState([]);
+  const [healthCheckKey, setHealthCheckKey] = useState(0);  // NEU für Refresh
 
   useEffect(() => {
     async function loadData() {
@@ -56,11 +59,11 @@ export default function AdminOverview() {
 
         // Letzter Fang
         const { data: fishes, error: fishError } = await supabase
-  .from('fishes')
-  .select('*')
-  .order('timestamp', { ascending: false })
-  .not('blank', 'is', true)  // nur Fänge, keine Schneidertage
-  .limit(1);
+          .from('fishes')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .not('blank', 'is', true)  // nur Fänge, keine Schneidertage
+          .limit(1);
 
         if (fishError) throw fishError;
         setLatestCatch(fishes?.[0] || null);
@@ -80,7 +83,6 @@ export default function AdminOverview() {
           const fullName = fishes[0].angler;
           setNameShort(fullName);
         }
-
 
         // Schneidertage
         const { data: blanks, error: blankError } = await supabase
@@ -115,69 +117,51 @@ export default function AdminOverview() {
       </h2>
 
       <ul className="space-y-6 text-sm text-gray-700 dark:text-gray-300">
-        {/* 1. Letztes Wetterupdate */}
         <li>
-          <strong>☁️ Letzte Wetteraktualisierung:</strong>{' '}
-          {weatherUpdatedAt || 'Lade...'}
+          <strong>☁️ Letzte Wetteraktualisierung:</strong> {weatherUpdatedAt || 'Lade...'}
         </li>
 
-        {/* 2. Gesamtanzahl Fänge */}
         <li>
-          <strong>🎣 Gesamtanzahl Fänge:</strong>{' '}
-          {catchCount === null ? 'Lade...' : catchCount}
+          <strong>🎣 Gesamtanzahl Fänge:</strong> {catchCount === null ? 'Lade...' : catchCount}
         </li>
 
-        {/* 3. Letzter Fang (7 Tage) */}
         <li>
           <strong>🐟 Letzter Fang (7 Tage):</strong>{' '}
           {latestCatch ? (
             <>
-              {nameShort || latestCatch.angler} – {latestCatch.fish} (
-              {latestCatch.size} cm) am{' '}
-              {new Date(latestCatch.timestamp)
-                .toLocaleDateString('de-DE')}{' '}
-              um{' '}
-              {new Date(latestCatch.timestamp)
-                .toLocaleTimeString('de-DE', {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
+              {nameShort || latestCatch.angler} – {latestCatch.fish} ({latestCatch.size} cm) am{' '}
+              {new Date(latestCatch.timestamp).toLocaleDateString('de-DE')} um{' '}
+              {new Date(latestCatch.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
             </>
           ) : (
             'Keine Daten'
           )}
         </li>
 
-        {/* 4. Letzter Schneidertag (7 Tage) */}
         <li>
           <strong>❌ Letzte Schneidertage (7 Tage):</strong>{' '}
-       {recentBlanks.length > 0 ? (
-  <ul className="list-disc list-inside ml-4 mt-1">
-    {recentBlanks
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .map((b, i) => (
-        <li key={i}>
-          {b.angler} am{' '}
-          {new Date(b.timestamp)
-            .toLocaleDateString('de-DE')} um{' '}
-          {new Date(b.timestamp)
-            .toLocaleTimeString('de-DE', {
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-        </li>
-      ))}
-  </ul>
-) : (
-  'Keine Schneidertage'
-)}
-
+          {recentBlanks.length > 0 ? (
+            <ul className="list-disc list-inside ml-4 mt-1">
+              {recentBlanks
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                .map((b, i) => (
+                  <li key={i}>
+                    {b.angler} am{' '}
+                    {new Date(b.timestamp).toLocaleDateString('de-DE')} um{' '}
+                    {new Date(b.timestamp).toLocaleTimeString('de-DE', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </li>
+                ))}
+            </ul>
+          ) : (
+            'Keine Schneidertage'
+          )}
         </li>
 
-        {/* 5. Aktive User (7 Tage) */}
         <li>
-          <strong>👥 Aktive User (7 Tage):</strong>{' '}
-          {activeUsers.length}
+          <strong>👥 Aktive User (7 Tage):</strong> {activeUsers.length}
           <ul className="list-disc list-inside ml-4 mt-1">
             {activeUsers
               .filter(u => u.last_active)
@@ -187,42 +171,47 @@ export default function AdminOverview() {
                 const corrected = new Date(raw.getTime() + 2 * 60 * 60 * 1000);
                 const display = isNaN(corrected)
                   ? 'Ungültiges Datum'
-                  : corrected.toLocaleString('de-DE', {
-                    dateStyle: 'short',
-                    timeStyle: 'short'
-                  });
+                  : corrected.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
                 return (
                   <li key={i}>
                     {u.displayName}
-                    <span className="text-gray-500 text-xs ml-2">
-                      (aktiv am {display})
-                    </span>
+                    <span className="text-gray-500 text-xs ml-2">(aktiv am {display})</span>
                   </li>
                 );
               })}
           </ul>
         </li>
 
-        {/* 6. Registrierte User */}
         <li>
-          <strong>🗓 Registrierte User:</strong>{' '}
-          {allProfiles.length}
+          <strong>🗓 Registrierte User:</strong> {allProfiles.length}
           {allProfiles.length > 0 && (
             <ul className="list-disc list-inside ml-4 mt-1">
               {allProfiles.map((p, i) => (
                 <li key={i}>
                   {p.name}
                   <span className="text-gray-500 text-xs ml-2">
-                    (registriert am{' '}
-                    {new Date(p.created_at).toLocaleDateString('de-DE')})
+                    (registriert am {new Date(p.created_at).toLocaleDateString('de-DE')})
                   </span>
                 </li>
               ))}
             </ul>
           )}
         </li>
-
       </ul>
+
+      {/* NEU: OneSignal Health Check */}
+      <div className="mt-10">
+        <h3 className="text-xl font-bold mb-4 text-blue-700">🔔 OneSignal Debug</h3>
+        <div className="mb-4">
+          <button
+            onClick={() => setHealthCheckKey(prev => prev + 1)}
+            className="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700"
+          >
+            🔄 HealthCheck erneut ausführen
+          </button>
+        </div>
+        <OneSignalHealthCheck key={healthCheckKey} />
+      </div>
     </div>
   );
 }
