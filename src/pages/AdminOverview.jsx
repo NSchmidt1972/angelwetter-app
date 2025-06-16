@@ -76,16 +76,20 @@ export default function AdminOverview() {
   const Section = ({ title, value, children }) => (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
       <div className="flex justify-between items-center mb-3">
-        <h3 className="text-lg font-semibold text-blue-700">{title}</h3>
-        {value && <div className="text-sm text-gray-700">{value}</div>}
+        <h3 className="text-lg font-semibold text-blue-700 dark:text-blue-400">{title}</h3>
+        {value && <div className="text-sm text-gray-700 dark:text-gray-300">{value}</div>}
       </div>
       {children}
     </div>
   );
 
+  const listItemClass = "list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-200";
+  const fallbackTextClass = "text-sm text-gray-700 dark:text-gray-300";
+  const metaTextClass = "text-xs text-gray-400 dark:text-gray-400";
+
   return (
     <div className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
-      <h2 className="text-2xl font-bold text-blue-700 mb-6">🔧 Admin‑Übersicht</h2>
+      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Admin‑Übersicht</h2>
 
       <Section title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
 
@@ -94,10 +98,10 @@ export default function AdminOverview() {
       <Section title="🐟 Letzter Fang (7 Tage)">
         {latestCatch ? (
           <div className="max-h-60 overflow-y-auto">
-            <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+            <ul className={listItemClass}>
               <li>
                 {nameShort} – {latestCatch.fish} ({latestCatch.size} cm)
-                <span className="text-xs text-gray-400"> {' am '}
+                <span className={metaTextClass}> {' am '}
                   {(() => {
                     const time = new Date(new Date(latestCatch.timestamp).getTime() + 2 * 60 * 60 * 1000);
                     return time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
@@ -107,18 +111,18 @@ export default function AdminOverview() {
             </ul>
           </div>
         ) : (
-          <div className="text-sm text-gray-700">Keine Daten</div>
+          <div className={fallbackTextClass}>Keine Daten</div>
         )}
       </Section>
 
       <Section title="❌ Letzte Schneidertage (7 Tage)">
         {recentBlanks.length > 0 ? (
           <div className="max-h-60 overflow-y-auto">
-            <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+            <ul className={listItemClass}>
               {recentBlanks.map((b, i) => (
                 <li key={i}>
                   {b.angler}
-                  <span className="text-xs text-gray-400"> {' am '}
+                  <span className={metaTextClass}> {' am '}
                     {(() => {
                       const time = new Date(new Date(b.timestamp).getTime() + 2 * 60 * 60 * 1000);
                       return time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
@@ -129,42 +133,50 @@ export default function AdminOverview() {
             </ul>
           </div>
         ) : (
-          <div className="text-sm text-gray-700">Keine Schneidertage</div>
+          <div className={fallbackTextClass}>Keine Schneidertage</div>
         )}
       </Section>
 
       <Section title="👥 Aktive User (7 Tage)">
-        <div className="text-sm text-gray-700 mb-2">{activeUsers.length} aktive Nutzer</div>
-        <div className="max-h-60 overflow-y-auto">
-          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
-            {activeUsers.map((u, i) => {
-              const time = new Date(new Date(u.last_active).getTime() + 2 * 60 * 60 * 1000);
-              return (
-                <li key={i}>
-                  {u.name} <span className="text-xs text-gray-400">(aktiv am {time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })})</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </Section>
+  <div className={`${fallbackTextClass} mb-2`}>{activeUsers.length} aktive Nutzer</div>
+  <div className="max-h-60 overflow-y-auto">
+    <ul className={listItemClass}>
+      {activeUsers
+        .slice() // Kopie erstellen, um original nicht zu mutieren
+        .sort((a, b) => new Date(b.last_active) - new Date(a.last_active))
+        .map((u, i) => {
+          const time = new Date(new Date(u.last_active).getTime() + 2 * 60 * 60 * 1000);
+          return (
+            <li key={i}>
+              {u.name} <span className={metaTextClass}>(aktiv am {time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })})</span>
+            </li>
+          );
+        })}
+    </ul>
+  </div>
+</Section>
 
-      <Section title="🗓 Registrierte User">
-        <div className="text-sm text-gray-700 mb-2">{allProfiles.length} registrierte Nutzer</div>
-        <div className="max-h-60 overflow-y-auto">
-          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
-            {allProfiles.map((p, i) => (
-              <li key={i}>
-                {p.name} <span className="text-xs text-gray-400">(seit {new Date(p.created_at).toLocaleDateString('de-DE')})</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Section>
 
-      <Section title="🔔 OneSignal Debug">
-        <OneSignalHealthCheck />
-      </Section>
+     <Section title="🗓 Registrierte User">
+  <div className={`${fallbackTextClass} mb-2`}>{allProfiles.length} registrierte Nutzer</div>
+  <div className="max-h-60 overflow-y-auto">
+    <ul className={listItemClass}>
+      {allProfiles
+        .slice()
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .map((p, i) => (
+          <li key={i}>
+            {p.name} <span className={metaTextClass}>(seit {new Date(p.created_at).toLocaleDateString('de-DE')})</span>
+          </li>
+        ))}
+    </ul>
+  </div>
+</Section>
+
+<Section title="🔔 OneSignal Debug">
+  <OneSignalHealthCheck />
+</Section>
+
     </div>
   );
 }
