@@ -4,10 +4,13 @@ import { fetchWeather } from '../api/weather';
 import { useNavigate } from 'react-router-dom';
 import heic2any from "heic2any";
 
+
 const FISH_TYPES = [
   'Aal', 'Barsch', 'Brasse', 'Güster', 'Hecht', 'Karausche', 'Karpfen',
   'Rotauge', 'Rotfeder', 'Schleie', 'Wels', 'Zander'
 ];
+
+
 
 export default function FishCatchForm({ setWeatherData }) {
   const [fish, setFish] = useState('');
@@ -20,7 +23,9 @@ export default function FishCatchForm({ setWeatherData }) {
   const navigate = useNavigate();
 
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
- const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
+  const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
+ 
+
 
   function sanitizeFilename(name) {
     return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -170,13 +175,19 @@ export default function FishCatchForm({ setWeatherData }) {
 
       // Push nach Fang
       try {
-        console.log("Aufruf Supabase Edge Function:", `${functionUrl}/send-push-notification`);
-
+        console.log("Aufruf Supabase Edge Function:", `${functionUrl}`);
+         
         await fetch(`${functionUrl}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ angler: anglerName, fish, size: sizeNumber })
+          body: JSON.stringify({
+            angler: anglerName,
+            fish,
+            size: sizeNumber,
+            
+          })
         });
+
       } catch (pushError) {
         console.error('Push Fehler:', pushError);
       }

@@ -1,3 +1,7 @@
+
+import { runOneSignalHealthCheck } from './OneSignalSync';
+
+
 let initialized = false;
 
 export function initOneSignal() {
@@ -19,5 +23,8 @@ export function initOneSignal() {
 
     console.log("✅ OneSignal init abgeschlossen");
     initialized = true;
+
+     // Direkt nach dem Init den HealthCheck machen
+    runOneSignalHealthCheck();
   });
 }

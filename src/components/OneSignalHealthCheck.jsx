@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
 export default function OneSignalHealthCheck() {
+  const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
+
   const [state, setState] = useState({
     isPushEnabled: null,
     userId: null,
@@ -8,17 +10,18 @@ export default function OneSignalHealthCheck() {
   });
 
   useEffect(() => {
-    const check = async () => {
-      try {
-        const isEnabled = await window.OneSignal.isPushNotificationsEnabled();
-        const userId = await window.OneSignal.getUserId();
-        setState({ isPushEnabled: isEnabled, userId, error: null });
-      } catch (err) {
-        setState(s => ({ ...s, error: err.message }));
-      }
+    const check = () => {
+      window.OneSignal.push(async () => {
+        try {
+          const isEnabled = await window.OneSignal.isPushNotificationsEnabled();
+          const userId = await window.OneSignal.getUserId();
+          setState({ isPushEnabled: isEnabled, userId, error: null });
+        } catch (err) {
+          setState({ isPushEnabled: null, userId: null, error: err.message });
+        }
+      });
     };
-
-    window.OneSignal.push(check);
+    check();
   }, []);
 
   return (

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
 import PushInit from './components/PushInit';
-
+import { initOneSignal } from './onesignal/OneSignalLoader';
 
 
 
@@ -62,6 +62,9 @@ function AppContent() {
           const fullName = data.name.trim();
           setAnglerName(fullName);
           localStorage.setItem('anglerName', fullName);
+
+          // Hier kommt dein OneSignal-Init
+          initOneSignal(fullName);
 
           const [first, last] = fullName.split(' ');
           supabase
