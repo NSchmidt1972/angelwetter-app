@@ -43,18 +43,18 @@ export default function Navbar({ name, isAdmin }) {
 
   const navItems = [
     { label: 'Wetter', path: '/' },
-    { label: 'Neuer Fang', path: '/new-catch' },
+    { label: '  ➕ 🎣  ', path: '/new-catch' },
     { label: 'Fangliste', path: '/catches' },
+    { label: 'Rangliste', path: '/leaderboard' },
     {
-      label: 'Statistik',
+      label: '...',
       children: [
         { label: 'Analyse', path: '/analysis' },
-        { label: 'Rangliste', path: '/leaderboard' },
         { label: 'Top 10', path: '/top-fishes' },
+        { label: 'Prognose', path: '/forecast' },
         { label: 'Kalender', path: '/calendar' }
       ]
     },
-    { label: 'Prognose', path: '/forecast' },
     ...(isAdmin ? [{ label: '🔧 Admin', path: '/admin' }] : [])
   ];
 
