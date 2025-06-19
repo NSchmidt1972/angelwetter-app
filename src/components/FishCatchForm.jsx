@@ -4,13 +4,10 @@ import { fetchWeather } from '../api/weather';
 import { useNavigate } from 'react-router-dom';
 import heic2any from "heic2any";
 
-
 const FISH_TYPES = [
   'Aal', 'Barsch', 'Brasse', 'Güster', 'Hecht', 'Karausche', 'Karpfen',
   'Rotauge', 'Rotfeder', 'Schleie', 'Wels', 'Zander'
 ];
-
-
 
 export default function FishCatchForm({ setWeatherData }) {
   const [fish, setFish] = useState('');
@@ -18,18 +15,32 @@ export default function FishCatchForm({ setWeatherData }) {
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [hours, setHours] = useState(4);
+  const [showHourDialog, setShowHourDialog] = useState(false);
   const [loadingCatch, setLoadingCatch] = useState(false);
   const [loadingBlank, setLoadingBlank] = useState(false);
   const navigate = useNavigate();
 
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
-  const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
- 
-
 
   function sanitizeFilename(name) {
-    return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+    return name.normalize("NFD").replace(/[^a-zA-Z0-9_-]/g, "_");
   }
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file || !file.type.startsWith("image/")) {
+      alert("Nur Bilddateien erlaubt!");
+      return;
+    }
+    setPhoto(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const removePhoto = () => {
+    setPhoto(null);
+    setPreviewUrl(null);
+  };
 
   async function optimizeImage(file, maxSize = 1600, quality = 0.85) {
     return new Promise((resolve, reject) => {
@@ -40,22 +51,18 @@ export default function FishCatchForm({ setWeatherData }) {
           const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
-          if (width > height) {
-            if (width > maxSize) {
-              height = height * (maxSize / width);
-              width = maxSize;
-            }
-          } else {
-            if (height > maxSize) {
-              width = width * (maxSize / height);
-              height = maxSize;
-            }
+          if (width > height && width > maxSize) {
+            height = height * (maxSize / width);
+            width = maxSize;
+          } else if (height > maxSize) {
+            width = width * (maxSize / height);
+            height = maxSize;
           }
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext("2d");
           ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob((blob) => {
+          canvas.toBlob(blob => {
             resolve(new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: "image/jpeg" }));
           }, "image/jpeg", quality);
         };
@@ -84,16 +91,12 @@ export default function FishCatchForm({ setWeatherData }) {
   }
 
   const handleSubmit = async () => {
-
-    console.log("VITE_SUPABASE_FUNCTION_URL: ", functionUrl);
-
     if (!fish || !size) {
       alert("Bitte alles ausfüllen!");
       return;
     }
 
-    const rawSize = size.replace(',', '.');
-    const sizeNumber = parseFloat(rawSize);
+    const sizeNumber = parseFloat(size.replace(',', '.'));
     if (isNaN(sizeNumber) || sizeNumber <= 0) {
       alert("Bitte eine gültige Zahl größer als 0 für die Größe eingeben.");
       return;
@@ -101,7 +104,6 @@ export default function FishCatchForm({ setWeatherData }) {
 
     setLoadingCatch(true);
     let currentWeather;
-
     try {
       currentWeather = await loadWeather();
     } catch (err) {
@@ -114,15 +116,10 @@ export default function FishCatchForm({ setWeatherData }) {
     let photoUrl = '';
     if (photo) {
       let file = photo;
-      let extension = file.name.split('.').pop().toLowerCase();
-
+      const extension = file.name.split('.').pop().toLowerCase();
       if (extension === "heic" || extension === "heif") {
         try {
-          const convertedBlob = await heic2any({
-            blob: file,
-            toType: "image/jpeg",
-            quality: 0.9,
-          });
+          const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
           file = new File([convertedBlob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: "image/jpeg" });
         } catch (err) {
           console.error("HEIC-Konvertierung fehlgeschlagen:", err);
@@ -133,7 +130,7 @@ export default function FishCatchForm({ setWeatherData }) {
       }
 
       try {
-        file = await optimizeImage(file, 1600, 0.85);
+        file = await optimizeImage(file);
       } catch (err) {
         console.error("Optimierung fehlgeschlagen:", err);
         alert("Bild konnte nicht optimiert werden.");
@@ -166,114 +163,97 @@ export default function FishCatchForm({ setWeatherData }) {
       console.error('Fehler beim Speichern:', error);
       alert('Fehler beim Speichern des Fangs.');
     } else {
-      setFish('');
-      setSize('');
-      setNote('');
-      setPhoto(null);
-      setPreviewUrl(null);
       alert("Petri Heil! 🎣 Dein Fang ist gespeichert. ✅");
-
-      // Push nach Fang
-      try {
-        console.log("Aufruf Supabase Edge Function:", `${functionUrl}`);
-         
-        await fetch(`${functionUrl}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            angler: anglerName,
-            fish,
-            size: sizeNumber,
-            
-          })
-        });
-
-      } catch (pushError) {
-        console.error('Push Fehler:', pushError);
-      }
       navigate('/catches');
     }
   };
 
   const handleBlankSubmit = async () => {
-    setLoadingBlank(true);
-    let currentWeather;
-    try {
-      currentWeather = await loadWeather();
-    } catch (err) {
-      console.error('Wetterfehler:', err);
-      alert("Fehler beim Abrufen der Wetterdaten.");
+  setLoadingBlank(true);
+
+  try {
+    // Session und Access Token holen
+    const sessionResult = await supabase.auth.getSession();
+    const accessToken = sessionResult.data?.session?.access_token;
+
+    if (!accessToken) {
+      alert("Nicht eingeloggt – bitte zuerst anmelden.");
       setLoadingBlank(false);
       return;
     }
 
+    // Prüfen: Gibt es heute schon einen Schneidertag?
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const isoTodayStart = today.toISOString();
-    const isoTodayEnd = new Date(today.getTime() + 86400000).toISOString();
+    const isoStart = today.toISOString();
+    const isoEnd = new Date(today.getTime() + 86400000).toISOString();
 
     const { data: existing, error: checkError } = await supabase
       .from('fishes')
-      .select('id, fish')
+      .select('id')
       .eq('angler', anglerName)
-      .gte('timestamp', isoTodayStart)
-      .lt('timestamp', isoTodayEnd);
+      .eq('blank', true)
+      .gte('timestamp', isoStart)
+      .lt('timestamp', isoEnd);
 
     if (checkError) {
-      console.error('Tagesprüfung fehlgeschlagen:', checkError);
+      console.error("Fehler bei der Tagesprüfung:", checkError);
       alert("Fehler bei der Tagesprüfung.");
       setLoadingBlank(false);
       return;
     }
 
     if (existing.length > 0) {
-      const hatSchonFang = existing.some(entry => entry.fish);
-      const hatSchonBlank = existing.some(entry => !entry.fish);
-      if (hatSchonFang) {
-        alert("Du hast heute bereits einen Fang eingetragen.");
-        setLoadingBlank(false);
-        return;
-      }
-      if (hatSchonBlank) {
-        alert("Du hast heute bereits einen Schneidertag eingetragen.");
-        setLoadingBlank(false);
-        return;
-      }
-    }
-
-    const blankEntry = {
-      fish: null, size: null, note: 'Schneidertag',
-      angler: anglerName, timestamp: new Date().toISOString(),
-      weather: currentWeather, blank: true
-    };
-
-    const { error } = await supabase.from('fishes').insert([blankEntry]);
-    setLoadingBlank(false);
-
-    if (error) {
-      console.error('Fehler beim Schneidertag speichern:', error);
-      alert('Fehler beim Speichern.');
-    } else {
-      alert("Schneidertag gespeichert! 😩");
-      navigate('/');
-    }
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      alert("Nur Bilddateien erlaubt!");
+      alert("Du hast heute bereits einen Schneidertag eingetragen.");
+      setLoadingBlank(false);
       return;
     }
-    setPhoto(file);
-    setPreviewUrl(URL.createObjectURL(file));
-  };
 
-  const removePhoto = () => {
-    setPhoto(null);
-    setPreviewUrl(null);
-  };
+    // Wetterzusammenfassung speichern
+    const response = await fetch('https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/blank_weather_summary', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        angler: anglerName,
+        hours: hours
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('Fehler vom Server:', result);
+      throw new Error(result.error || 'Unbekannter Fehler');
+    }
+
+    // Schneidertag in 'fishes' speichern
+    const insertResult = await supabase.from('fishes').insert([{
+      angler: anglerName,
+      note: 'Schneidertag',
+      blank: true,
+      timestamp: new Date().toISOString()
+    }]);
+
+    if (insertResult.error) {
+      console.error('Fehler beim Speichern in fishes:', insertResult.error);
+      alert('Wetter wurde gespeichert, aber Fehler beim Eintrag in die Fangliste.');
+    } else {
+      alert('Schneidertag gespeichert! 😩');
+      navigate('/');
+    }
+  } catch (error) {
+    console.error('Fehler:', error);
+    alert('Fehler beim Speichern.');
+  }
+
+  setLoadingBlank(false);
+};
+
+
+
 
   return (
     <div className="p-6 max-w-md mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
@@ -304,10 +284,31 @@ export default function FishCatchForm({ setWeatherData }) {
           {loadingCatch ? 'Speichern...' : 'Fang speichern'}
         </button>
 
-        <button onClick={handleBlankSubmit} disabled={loadingCatch || loadingBlank} className="w-full bg-gray-400 text-black py-2 rounded">
-          {loadingBlank ? 'Speichern...' : '❌ Heute nichts gefangen'}
+        <button onClick={() => setShowHourDialog(true)} disabled={loadingCatch || loadingBlank} className="w-full bg-gray-400 text-black py-2 rounded">
+          ❌ Heute nichts gefangen
         </button>
       </div>
+
+      {showHourDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">⏱ Wie viele Stunden warst du angeln?</h3>
+            <select
+              value={hours}
+              onChange={e => setHours(parseInt(e.target.value))}
+              className="w-full border rounded px-3 py-2 mb-4 bg-white dark:bg-gray-700 dark:text-white"
+            >
+              {Array.from({ length: 24 }, (_, i) => i + 1).map(h => (
+                <option key={h} value={h}>{h} {h === 1 ? 'Stunde' : 'Stunden'}</option>
+              ))}
+            </select>
+            <div className="flex justify-between gap-2">
+              <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 text-white py-2 rounded">Speichern</button>
+              <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-300 text-black py-2 rounded">Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

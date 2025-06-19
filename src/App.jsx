@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
 import PushInit from './components/PushInit';
-import { initOneSignal } from './onesignal/OneSignalLoader';
+import OneSignalHealthCheck from './components/OneSignalHealthCheck';
+
 
 
 
@@ -62,9 +63,6 @@ function AppContent() {
           const fullName = data.name.trim();
           setAnglerName(fullName);
           localStorage.setItem('anglerName', fullName);
-
-          // Hier kommt dein OneSignal-Init
-          initOneSignal(fullName);
 
           const [first, last] = fullName.split(' ');
           supabase
@@ -157,6 +155,7 @@ function AppContent() {
       <PushInit /> {/* PushInit immer nur einmal pro App-Session */}
       {isLoggedIn ? (
         <>
+          <OneSignalHealthCheck anglerName={anglerName} />
           <Navbar name={anglerName} isAdmin={isAdmin} />
           <Routes>
             <Route path="/" element={<Home weatherData={weatherData} />} />

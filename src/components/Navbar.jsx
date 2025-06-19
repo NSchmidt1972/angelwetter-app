@@ -47,7 +47,7 @@ export default function Navbar({ name, isAdmin }) {
     { label: 'Fangliste', path: '/catches' },
     { label: 'Rangliste', path: '/leaderboard' },
     {
-      label: '...',
+      label: 'Statistik',
       children: [
         { label: 'Analyse', path: '/analysis' },
         { label: 'Top 10', path: '/top-fishes' },
