@@ -1,28 +1,24 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense, lazy } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
 import PushInit from './components/PushInit';
-import OneSignalHealthCheck from './components/OneSignalHealthCheck';
-
-
-
-
-import Home from './pages/Home';
-import Catches from './pages/Catches';
-import NewCatch from './pages/NewCatch';
-import Analysis from './pages/Analysis';
-import Leaderboard from './pages/Leaderboard';
-import TopFishes from './pages/TopFishes';
-import Forecast from './pages/Forecast';
-import AdminOverview from './pages/AdminOverview';
 import Navbar from './components/Navbar';
-import AuthForm from './components/AuthForm';
-import Calendar from './pages/Calendar';
-
-
+import MapView from './pages/MapView';
 
 import './index.css';
+
+// Lazy-loaded Seiten und Komponenten
+const Home = lazy(() => import('./pages/Home'));
+const Catches = lazy(() => import('./pages/Catches'));
+const NewCatch = lazy(() => import('./pages/NewCatch'));
+const Analysis = lazy(() => import('./pages/Analysis'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const TopFishes = lazy(() => import('./pages/TopFishes'));
+const Forecast = lazy(() => import('./pages/Forecast'));
+const AdminOverview = lazy(() => import('./pages/AdminOverview'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const AuthForm = lazy(() => import('./components/AuthForm'));
 
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
@@ -152,34 +148,36 @@ function AppContent() {
 
   return (
     <>
-      <PushInit /> {/* PushInit immer nur einmal pro App-Session */}
+      <PushInit />
       {isLoggedIn ? (
         <>
-          <OneSignalHealthCheck anglerName={anglerName} />
           <Navbar name={anglerName} isAdmin={isAdmin} />
-          <Routes>
-            <Route path="/" element={<Home weatherData={weatherData} />} />
-            <Route path="/new-catch" element={<NewCatch anglerName={anglerName} weatherData={weatherData} setWeatherData={setWeatherData} />} />
-            <Route path="/catches" element={<Catches name={anglerName} />} />
-            <Route path="/analysis" element={<Analysis anglerName={anglerName} />} />
-            <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/top-fishes" element={<TopFishes />} />
-            <Route path="/calendar" element={<Calendar />} />
-            <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
-            <Route path="/admin" element={isAdmin ? <AdminOverview /> : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>} />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
+          <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
+            <Routes>
+              <Route path="/" element={<Home weatherData={weatherData} />} />
+              <Route path="/new-catch" element={<NewCatch anglerName={anglerName} weatherData={weatherData} setWeatherData={setWeatherData} />} />
+              <Route path="/catches" element={<Catches name={anglerName} />} />
+              <Route path="/analysis" element={<Analysis anglerName={anglerName} />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/top-fishes" element={<TopFishes />} />
+              <Route path="/calendar" element={<Calendar />} />
+              <Route path="/map" element={<MapView />} />
+              <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
+              <Route path="/admin" element={isAdmin ? <AdminOverview /> : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>} />
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Suspense>
         </>
       ) : (
-        <Routes>
-          <Route path="*" element={<AuthForm />} />
-        </Routes>
+        <Suspense fallback={<div className="p-6 text-center">🔐 Anmeldung wird geladen...</div>}>
+          <Routes>
+            <Route path="*" element={<AuthForm />} />
+          </Routes>
+        </Suspense>
       )}
     </>
   );
 }
-
-
 
 export default function App() {
   return (

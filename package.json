@@ -15,8 +15,12 @@
     "axios": "^1.9.0",
     "date-fns": "^4.1.0",
     "heic2any": "^0.0.4",
+    "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-leaflet": "^5.0.0",
+    "react-leaflet-markercluster": "^5.0.0-rc.0",
     "react-router-dom": "^7.6.0",
     "react-toastify": "^11.0.5"
   },

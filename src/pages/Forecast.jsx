@@ -4,23 +4,95 @@ import { supabase } from '../supabaseClient';
 const PUBLIC_FROM = new Date('2025-05-29');
 const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
 
+function getMoonDescription(phase) {
+  if (phase < 0.03 || phase > 0.97) return '🌑 Neumond';
+  if (phase < 0.22) return '🌒 zunehmend';
+  if (phase < 0.28) return '🌓 erstes Viertel';
+  if (phase < 0.47) return '🌔 zunehmend';
+  if (phase < 0.53) return '🌕 Vollmond';
+  if (phase < 0.72) return '🌖 abnehmend';
+  if (phase < 0.78) return '🌗 letztes Viertel';
+  return '🌘 abnehmend';
+}
+
 function isWeatherSimilar(w, current, timestamp) {
   const fangDatum = new Date(timestamp);
 
   const basicMatch =
-    Math.abs(w.temp - current.temp) <= 10 &&
-    Math.abs(w.pressure - current.pressure) <= 10 &&
-    Math.abs(w.humidity - current.humidity) <= 25 &&
-    Math.abs(w.wind_deg - current.wind_deg) <= 45;
+    Math.abs(w.temp - current.temp) <= 12 &&
+    Math.abs(w.pressure - current.pressure) <= 15 &&
+    Math.abs(w.humidity - current.humidity) <= 35 &&
+    Math.abs(w.wind_deg - current.wind_deg) <= 90;
+
+  const mondOk = w.moon_phase != null && current.moon_phase != null
+    ? Math.abs(w.moon_phase - current.moon_phase) <= 0.4
+    : true;
+
+  const beschreibungOk = w.description && current.description
+    ? w.description.includes(current.description) || current.description.includes(w.description)
+    : true;
+
+  const windSpeedOk = typeof w.wind === 'number' && typeof current.wind === 'number'
+    ? Math.abs(w.wind - current.wind) <= 5
+    : true;
 
   if (fangDatum < PUBLIC_FROM) {
-    return basicMatch; // vor dem Stichtag: wind kann fehlen
+    return basicMatch && mondOk && beschreibungOk;
   } else {
-    return basicMatch &&
-      typeof w.wind === 'number' &&
-      Math.abs(w.wind - current.wind) <= 3;
+    return basicMatch && windSpeedOk && mondOk && beschreibungOk;
   }
 }
+
+
+
+function SimilarCatchStats({ similar }) {
+  if (similar.length === 0) return null;
+
+  const byDescription = {};
+  const byTempRange = {};
+  const byHour = {}; // bleibt optional für spätere Erweiterung
+
+  similar.forEach(f => {
+    const d = f.weather?.description || 'unbekannt';
+    byDescription[d] = (byDescription[d] || 0) + 1;
+
+    const t = f.weather?.temp;
+    if (typeof t === 'number') {
+      const bucket = `${Math.floor(t / 5) * 5}–${Math.floor(t / 5) * 5 + 4}°C`;
+      byTempRange[bucket] = (byTempRange[bucket] || 0) + 1;
+    }
+
+    // optional: Uhrzeit weiterführend nutzbar
+    const h = new Date(f.timestamp).getHours();
+    const hourStr = `${h}:00`;
+    byHour[hourStr] = (byHour[hourStr] || 0) + 1;
+  });
+
+  const renderStat = (title, obj) => (
+    <div className="mb-4">
+      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-2">{title}</h4>
+      <ul className="text-sm text-gray-600 dark:text-gray-300">
+        {Object.entries(obj)
+          .sort((a, b) => b[1] - a[1])
+          .map(([label, count]) => (
+            <li key={label} className="flex justify-between">
+              <span>{label}</span>
+              <span className="font-mono">{count}x</span>
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+
+  return (
+    <div className="mt-6 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow-inner">
+      <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">📊 Details zu ähnlichen Fängen</h3>
+      {renderStat("🌦 Wetterbeschreibung", byDescription)}
+      {renderStat("🌡 Temperaturbereich", byTempRange)}
+    </div>
+  );
+}
+
 
 function FishForecast({ fishes, currentWeather }) {
   if (!currentWeather) {
@@ -55,6 +127,8 @@ function FishForecast({ fishes, currentWeather }) {
           🎯 Prognose: {chance}% Fangwahrscheinlichkeit
         </p>
       )}
+
+      <SimilarCatchStats similar={similar} />
     </div>
   );
 }
@@ -79,6 +153,8 @@ export default function Forecast() {
       }
 
       const current = weatherRow.data?.current;
+      const daily = weatherRow.data?.daily?.[0];
+
       if (!current) return;
 
       const weather = {
@@ -87,7 +163,8 @@ export default function Forecast() {
         wind: current.wind_speed,
         humidity: current.humidity,
         wind_deg: current.wind_deg,
-        description: current.weather?.[0]?.description ?? ''
+        description: current.weather?.[0]?.description ?? '',
+        moon_phase: daily?.moon_phase ?? null
       };
 
       setWeatherData(weather);
@@ -102,19 +179,16 @@ export default function Forecast() {
       }
 
       const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
-const istVertrauter = vertraute.includes(anglerName);
+      const istVertrauter = vertraute.includes(anglerName);
 
-const filteredFishes = catchData.filter(f => {
-  const fangDatum = new Date(f.timestamp);
-
-  if (istVertrauter) {
-    if (filterSetting === 'all') return true;
-    return fangDatum >= PUBLIC_FROM;
-  }
-
-  return fangDatum >= PUBLIC_FROM;
-});
-
+      const filteredFishes = catchData.filter(f => {
+        const fangDatum = new Date(f.timestamp);
+        if (istVertrauter) {
+          if (filterSetting === 'all') return true;
+          return fangDatum >= PUBLIC_FROM;
+        }
+        return fangDatum >= PUBLIC_FROM;
+      });
 
       setFishes(filteredFishes);
     };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { fetchWeather } from '../api/weather';
 import { useNavigate } from 'react-router-dom';
@@ -19,9 +19,29 @@ export default function FishCatchForm({ setWeatherData }) {
   const [showHourDialog, setShowHourDialog] = useState(false);
   const [loadingCatch, setLoadingCatch] = useState(false);
   const [loadingBlank, setLoadingBlank] = useState(false);
+  const [position, setPosition] = useState(null);
   const navigate = useNavigate();
 
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      console.warn("Geolocation wird nicht unterstützt.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setPosition({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude
+        });
+      },
+      (err) => {
+        console.warn("Standort konnte nicht abgerufen werden:", err);
+      }
+    );
+  }, []);
 
   function sanitizeFilename(name) {
     return name.normalize("NFD").replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -102,6 +122,11 @@ export default function FishCatchForm({ setWeatherData }) {
       return;
     }
 
+    if (!position) {
+      alert("Standortdaten fehlen. Bitte Standortfreigabe aktivieren.");
+      return;
+    }
+
     setLoadingCatch(true);
     let currentWeather;
     try {
@@ -152,8 +177,16 @@ export default function FishCatchForm({ setWeatherData }) {
     }
 
     const newEntry = {
-      fish, size: sizeNumber, note, angler: anglerName, timestamp: new Date().toISOString(),
-      weather: currentWeather, photo_url: photoUrl, blank: false
+      fish,
+      size: sizeNumber,
+      note,
+      angler: anglerName,
+      timestamp: new Date().toISOString(),
+      weather: currentWeather,
+      photo_url: photoUrl,
+      blank: false,
+      lat: position.lat,
+      lon: position.lon
     };
 
     const { error } = await supabase.from('fishes').insert([newEntry]);
@@ -169,91 +202,86 @@ export default function FishCatchForm({ setWeatherData }) {
   };
 
   const handleBlankSubmit = async () => {
-  setLoadingBlank(true);
+    setLoadingBlank(true);
 
-  try {
-    // Session und Access Token holen
-    const sessionResult = await supabase.auth.getSession();
-    const accessToken = sessionResult.data?.session?.access_token;
+    try {
+      const sessionResult = await supabase.auth.getSession();
+      const accessToken = sessionResult.data?.session?.access_token;
 
-    if (!accessToken) {
-      alert("Nicht eingeloggt – bitte zuerst anmelden.");
-      setLoadingBlank(false);
-      return;
-    }
+      if (!accessToken) {
+        alert("Nicht eingeloggt – bitte zuerst anmelden.");
+        setLoadingBlank(false);
+        return;
+      }
 
-    // Prüfen: Gibt es heute schon einen Schneidertag?
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isoStart = today.toISOString();
-    const isoEnd = new Date(today.getTime() + 86400000).toISOString();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isoStart = today.toISOString();
+      const isoEnd = new Date(today.getTime() + 86400000).toISOString();
 
-    const { data: existing, error: checkError } = await supabase
-      .from('fishes')
-      .select('id')
-      .eq('angler', anglerName)
-      .eq('blank', true)
-      .gte('timestamp', isoStart)
-      .lt('timestamp', isoEnd);
+      const { data: existing, error: checkError } = await supabase
+        .from('fishes')
+        .select('id')
+        .eq('angler', anglerName)
+        .eq('blank', true)
+        .gte('timestamp', isoStart)
+        .lt('timestamp', isoEnd);
 
-    if (checkError) {
-      console.error("Fehler bei der Tagesprüfung:", checkError);
-      alert("Fehler bei der Tagesprüfung.");
-      setLoadingBlank(false);
-      return;
-    }
+      if (checkError) {
+        console.error("Fehler bei der Tagesprüfung:", checkError);
+        alert("Fehler bei der Tagesprüfung.");
+        setLoadingBlank(false);
+        return;
+      }
 
-    if (existing.length > 0) {
-      alert("Du hast heute bereits einen Schneidertag eingetragen.");
-      setLoadingBlank(false);
-      return;
-    }
+      if (existing.length > 0) {
+        alert("Du hast heute bereits einen Schneidertag eingetragen.");
+        setLoadingBlank(false);
+        return;
+      }
 
-    // Wetterzusammenfassung speichern
-    const response = await fetch('https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/blank_weather_summary', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`
-      },
-      body: JSON.stringify({
+      const response = await fetch('https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/blank_weather_summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          angler: anglerName,
+          hours: hours
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error('Fehler vom Server:', result);
+        throw new Error(result.error || 'Unbekannter Fehler');
+      }
+
+      const insertResult = await supabase.from('fishes').insert([{
         angler: anglerName,
-        hours: hours
-      })
-    });
+        note: 'Schneidertag',
+        blank: true,
+        timestamp: new Date().toISOString(),
+        lat: position?.lat ?? null,
+        lon: position?.lon ?? null
+      }]);
 
-    const result = await response.json();
-
-    if (!response.ok) {
-      console.error('Fehler vom Server:', result);
-      throw new Error(result.error || 'Unbekannter Fehler');
+      if (insertResult.error) {
+        console.error('Fehler beim Speichern in fishes:', insertResult.error);
+        alert('Wetter wurde gespeichert, aber Fehler beim Eintrag in die Fangliste.');
+      } else {
+        alert('Schneidertag gespeichert! 😩');
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Fehler:', error);
+      alert('Fehler beim Speichern.');
     }
 
-    // Schneidertag in 'fishes' speichern
-    const insertResult = await supabase.from('fishes').insert([{
-      angler: anglerName,
-      note: 'Schneidertag',
-      blank: true,
-      timestamp: new Date().toISOString()
-    }]);
-
-    if (insertResult.error) {
-      console.error('Fehler beim Speichern in fishes:', insertResult.error);
-      alert('Wetter wurde gespeichert, aber Fehler beim Eintrag in die Fangliste.');
-    } else {
-      alert('Schneidertag gespeichert! 😩');
-      navigate('/');
-    }
-  } catch (error) {
-    console.error('Fehler:', error);
-    alert('Fehler beim Speichern.');
-  }
-
-  setLoadingBlank(false);
-};
-
-
-
+    setLoadingBlank(false);
+  };
 
   return (
     <div className="p-6 max-w-md mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
@@ -298,10 +326,18 @@ export default function FishCatchForm({ setWeatherData }) {
               onChange={e => setHours(parseInt(e.target.value))}
               className="w-full border rounded px-3 py-2 mb-4 bg-white dark:bg-gray-700 dark:text-white"
             >
-              {Array.from({ length: 24 }, (_, i) => i + 1).map(h => (
-                <option key={h} value={h}>{h} {h === 1 ? 'Stunde' : 'Stunden'}</option>
-              ))}
+              {Array.from({ length: 24 }, (_, i) => i + 1).map(h => {
+                const now = new Date();
+                const start = new Date(now.getTime() - h * 60 * 60 * 1000);
+                const hourString = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <option key={h} value={h}>
+                    {h} {h === 1 ? 'Stunde' : 'Stunden'} ({hourString})
+                  </option>
+                );
+              })}
             </select>
+
             <div className="flex justify-between gap-2">
               <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 text-white py-2 rounded">Speichern</button>
               <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-300 text-black py-2 rounded">Abbrechen</button>
