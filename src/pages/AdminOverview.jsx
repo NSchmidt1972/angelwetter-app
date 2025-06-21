@@ -1,3 +1,6 @@
+// Visuell vereinheitlichte Admin-Übersicht mit Kartenoptik, Schatten, Darkmode-ready
+// Einheitliche Sektionen, klare Listen, Scrollbereiche, konsistente Farben
+
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
@@ -14,27 +17,30 @@ export default function AdminOverview() {
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: weatherData, error: weatherError } = await supabase
-          .from('weather_cache').select('updated_at').eq('id', 'latest').single();
-        if (!weatherError && weatherData?.updated_at) {
+        const { data: weatherData } = await supabase
+          .from('weather_cache')
+          .select('updated_at')
+          .eq('id', 'latest')
+          .single();
+
+        if (weatherData?.updated_at) {
           setWeatherUpdatedAt(new Date(weatherData.updated_at)
             .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
         }
 
-        const { data: users, error: userError } = await supabase
+        const { data: users } = await supabase
           .from('user_activity')
           .select('user_id, last_active')
           .gt('last_active', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
-        if (!userError) {
-          const userIds = users.map(u => u.user_id);
-          const { data: profiles } = await supabase
-            .from('profiles').select('id, name').in('id', userIds);
-          const enriched = users.map(u => {
-            const match = profiles.find(p => p.id === u.user_id);
-            return match ? { ...u, name: match.name } : null;
-          }).filter(Boolean);
-          setActiveUsers(enriched);
-        }
+
+        const userIds = users.map(u => u.user_id);
+        const { data: profiles } = await supabase
+          .from('profiles').select('id, name').in('id', userIds);
+        const enriched = users.map(u => {
+          const match = profiles.find(p => p.id === u.user_id);
+          return match ? { ...u, name: match.name } : null;
+        }).filter(Boolean);
+        setActiveUsers(enriched);
 
         const { data: fishes } = await supabase
           .from('fishes')
@@ -42,7 +48,9 @@ export default function AdminOverview() {
           .order('timestamp', { ascending: false })
           .not('blank', 'is', true)
           .limit(1);
+
         setLatestCatch(fishes?.[0] || null);
+        if (fishes?.[0]?.angler) setNameShort(fishes[0].angler);
 
         const { count } = await supabase
           .from('fishes')
@@ -50,10 +58,6 @@ export default function AdminOverview() {
           .not('fish', 'is', null)
           .neq('fish', '');
         setCatchCount(count);
-
-        if (fishes?.[0]?.angler) {
-          setNameShort(fishes[0].angler);
-        }
 
         const { data: blanks } = await supabase
           .from('fishes')
@@ -64,7 +68,9 @@ export default function AdminOverview() {
         setRecentBlanks(blanks);
 
         const { data: allProfilesData } = await supabase
-          .from('profiles').select('name, created_at').order('created_at', { ascending: false });
+          .from('profiles')
+          .select('name, created_at')
+          .order('created_at', { ascending: false });
         setAllProfiles(allProfilesData);
       } catch (error) {
         console.error('❌ Fehler beim Laden der Admin-Daten:', error.message);
@@ -92,7 +98,6 @@ export default function AdminOverview() {
       <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Admin‑Übersicht</h2>
 
       <Section title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
-
       <Section title="🎣 Gesamtanzahl Fänge" value={catchCount === null ? 'Lade...' : catchCount} />
 
       <Section title="🐟 Letzter Fang (7 Tage)">
@@ -102,10 +107,8 @@ export default function AdminOverview() {
               <li>
                 {nameShort} – {latestCatch.fish} ({latestCatch.size} cm)
                 <span className={metaTextClass}> {' am '}
-                  {(() => {
-                    const time = new Date(new Date(latestCatch.timestamp).getTime() + 2 * 60 * 60 * 1000);
-                    return time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
-                  })()}
+                  {new Date(new Date(latestCatch.timestamp).getTime() + 2 * 60 * 60 * 1000)
+                    .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
                 </span>
               </li>
             </ul>
@@ -123,10 +126,8 @@ export default function AdminOverview() {
                 <li key={i}>
                   {b.angler}
                   <span className={metaTextClass}> {' am '}
-                    {(() => {
-                      const time = new Date(new Date(b.timestamp).getTime() + 2 * 60 * 60 * 1000);
-                      return time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
-                    })()}
+                    {new Date(new Date(b.timestamp).getTime() + 2 * 60 * 60 * 1000)
+                      .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
                   </span>
                 </li>
               ))}
@@ -137,46 +138,36 @@ export default function AdminOverview() {
         )}
       </Section>
 
-      <Section title="👥 Aktive User (7 Tage)">
-  <div className={`${fallbackTextClass} mb-2`}>{activeUsers.length} aktive Nutzer</div>
-  <div className="max-h-60 overflow-y-auto">
-    <ul className={listItemClass}>
-      {activeUsers
-        .slice() // Kopie erstellen, um original nicht zu mutieren
-        .sort((a, b) => new Date(b.last_active) - new Date(a.last_active))
-        .map((u, i) => {
-          const time = new Date(new Date(u.last_active).getTime() + 2 * 60 * 60 * 1000);
-          return (
-            <li key={i}>
-              {u.name} <span className={metaTextClass}>(aktiv am {time.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })})</span>
-            </li>
-          );
-        })}
-    </ul>
-  </div>
-</Section>
+      <Section title="👥 Aktive User (7 Tage)" value={`${activeUsers.length} aktive Nutzer`}>
+        <div className="max-h-60 overflow-y-auto">
+          <ul className={listItemClass}>
+            {activeUsers.slice().sort((a, b) => new Date(b.last_active) - new Date(a.last_active)).map((u, i) => (
+              <li key={i}>
+                {u.name} <span className={metaTextClass}>(aktiv am {
+                  new Date(new Date(u.last_active).getTime() + 2 * 60 * 60 * 1000)
+                    .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+                })</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Section>
 
+      <Section title="🗓 Registrierte User" value={`${allProfiles.length} registrierte Nutzer`}>
+        <div className="max-h-60 overflow-y-auto">
+          <ul className={listItemClass}>
+            {allProfiles.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map((p, i) => (
+              <li key={i}>
+                {p.name} <span className={metaTextClass}>(seit {new Date(p.created_at).toLocaleDateString('de-DE')})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Section>
 
-     <Section title="🗓 Registrierte User">
-  <div className={`${fallbackTextClass} mb-2`}>{allProfiles.length} registrierte Nutzer</div>
-  <div className="max-h-60 overflow-y-auto">
-    <ul className={listItemClass}>
-      {allProfiles
-        .slice()
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .map((p, i) => (
-          <li key={i}>
-            {p.name} <span className={metaTextClass}>(seit {new Date(p.created_at).toLocaleDateString('de-DE')})</span>
-          </li>
-        ))}
-    </ul>
-  </div>
-</Section>
-
-<Section title="🔔 OneSignal Debug">
-  <OneSignalHealthCheck />
-</Section>
-
+      <Section title="🔔 OneSignal Debug">
+        <OneSignalHealthCheck />
+      </Section>
     </div>
   );
 }

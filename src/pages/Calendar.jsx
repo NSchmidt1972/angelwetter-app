@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-function formatDate(date) {
-  return date.toISOString().split('T')[0];
-}
-
 function getKey(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
@@ -45,11 +41,7 @@ export default function FishCalendarMobileView() {
         const monthKey = `${year}-${month}`;
         if (!monthMap[monthKey]) monthMap[monthKey] = { year, month, days: {} };
 
-        if (entry.fish) {
-          monthMap[monthKey].days[key] = '🐠';
-        } else {
-          monthMap[monthKey].days[key] = '❌';
-        }
+        monthMap[monthKey].days[key] = entry.fish ? '🐟' : '❌';
       });
 
       setGroupedData(monthMap);
@@ -78,14 +70,21 @@ export default function FishCalendarMobileView() {
         const dayCells = [];
 
         for (let i = 0; i < startWeekday; i++) {
-          dayCells.push(<div key={`empty-${i}`} />);
+          dayCells.push(<div key={`empty-${i}`} className="text-center py-1 text-lg"> </div>);
         }
 
         for (let d = 1; d <= numDays; d++) {
           const key = getKey(year, month, d);
           const status = days[key] || d;
           dayCells.push(
-            <div key={key} className="text-center py-1 text-lg font-medium text-gray-700 dark:text-gray-200">
+            <div
+              key={key}
+              className={`text-center py-1 text-lg font-medium rounded ${
+                status === '🐟' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+                status === '❌' ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' :
+                'text-gray-700 dark:text-gray-300'
+              }`}
+            >
               {typeof status === 'string' ? status : <span>{status}</span>}
             </div>
           );

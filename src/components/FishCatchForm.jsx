@@ -298,74 +298,73 @@ export default function FishCatchForm({ setWeatherData }) {
     setLoadingBlank(false);
   };
 
-  return (
-    <div className="p-6 max-w-md mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
-      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-300 mb-4 text-center">🎣 Fang eintragen</h2>
+ return (
+  <div className="p-6 max-w-xl mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
+    <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-300 mb-6 text-center">🎣 Fang eintragen</h2>
 
-      <div className="space-y-4">
-        <select value={fish} onChange={e => setFish(e.target.value)} className="w-full border rounded px-3 py-2">
-          <option value="">Fischart auswählen</option>
-          {FISH_TYPES.map((type) => (
-            <option key={type} value={type}>{type}</option>
-          ))}
-        </select>
+    <div className="space-y-4">
+      <select value={fish} onChange={e => setFish(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">Fischart auswählen</option>
+        {FISH_TYPES.map((type) => (
+          <option key={type} value={type}>{type}</option>
+        ))}
+      </select>
 
-        <input type="text" inputMode="decimal" placeholder="Größe (cm)" value={size} onChange={e => setSize(e.target.value)} className="w-full border rounded px-3 py-2" />
+      <input type="text" inputMode="decimal" placeholder="Größe (cm)" value={size} onChange={e => setSize(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
-        <textarea placeholder="Kommentar (optional)" value={note} onChange={e => setNote(e.target.value)} rows={4} className="w-full border rounded px-3 py-2" />
+      <textarea placeholder="Kommentar (optional)" value={note} onChange={e => setNote(e.target.value)} rows={4} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
-        <input type="file" accept="image/*" onChange={handleFileChange} className="w-full border rounded px-3 py-2" />
+      <input type="file" accept="image/*" onChange={handleFileChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none" />
 
-        {previewUrl && (
-          <div className="mt-4 text-center">
-            <img src={previewUrl} alt="Vorschau" className="max-w-full max-h-64 mx-auto rounded shadow-md" />
-            <button onClick={removePhoto} className="mt-2 text-sm text-red-600 hover:underline">Foto entfernen</button>
-          </div>
-        )}
-
-        <button onClick={handleSubmit} disabled={loadingCatch || loadingBlank} className="w-full bg-blue-600 text-white py-2 rounded">
-          {loadingCatch ? 'Speichern...' : 'Fang speichern'}
-        </button>
-
-        <button onClick={() => setShowHourDialog(true)} disabled={loadingCatch || loadingBlank} className="w-full bg-gray-400 text-black py-2 rounded">
-          ❌ Heute nichts gefangen
-        </button>
-      </div>
-
-      {showHourDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
-              ⏱ Wie viele Stunden warst du angeln?
-            </h3>
-            <select
-              value={hours}
-              onChange={e => setHours(parseInt(e.target.value))}
-              className="w-full border rounded px-3 py-2 mb-4 bg-white dark:bg-gray-700 dark:text-white"
-            >
-              {Array.from({ length: 24 }, (_, i) => i + 1).map(h => {
-                const now = new Date();
-                const start = new Date(now.getTime() - h * 60 * 60 * 1000);
-                const hourString = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-                return (
-                  <option key={h} value={h}>
-                    {h} {h === 1 ? 'Stunde' : 'Stunden'} ({hourString})
-                  </option>
-                );
-              })}
-            </select>
-
-            <div className="flex justify-between gap-2">
-              <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 text-white py-2 rounded">
-                Speichern
-              </button>
-              <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-300 text-black py-2 rounded">
-                Abbrechen
-              </button>
-            </div>
-          </div>
+      {previewUrl && (
+        <div className="mt-4 text-center">
+          <img src={previewUrl} alt="Vorschau" className="max-w-full max-h-64 mx-auto rounded shadow-md" />
+          <button onClick={removePhoto} className="mt-2 text-sm text-red-600 hover:underline">Foto entfernen</button>
         </div>
       )}
+
+      <button onClick={handleSubmit} disabled={loadingCatch || loadingBlank} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-2 rounded transition">
+        {loadingCatch ? 'Speichern...' : '✅ Fang speichern'}
+      </button>
+
+      <button onClick={() => setShowHourDialog(true)} disabled={loadingCatch || loadingBlank} className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 rounded transition">
+        ❌ Heute nichts gefangen
+      </button>
     </div>
-  );
+
+    {showHourDialog && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+            ⏱ Wie viele Stunden warst du angeln?
+          </h3>
+          <select
+            value={hours}
+            onChange={e => setHours(parseInt(e.target.value))}
+            className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mb-4 bg-white dark:bg-gray-700 dark:text-white focus:outline-none"
+          >
+            {Array.from({ length: 24 }, (_, i) => i + 1).map(h => {
+              const now = new Date();
+              const start = new Date(now.getTime() - h * 60 * 60 * 1000);
+              const hourString = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+              return (
+                <option key={h} value={h}>{h} {h === 1 ? 'Stunde' : 'Stunden'} ({hourString})</option>
+              );
+            })}
+          </select>
+
+          <div className="flex justify-between gap-2">
+            <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition">
+              Speichern
+            </button>
+            <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-400 hover:bg-gray-500 text-white py-2 rounded transition">
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 }

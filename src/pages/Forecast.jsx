@@ -43,96 +43,6 @@ function isWeatherSimilar(w, current, timestamp) {
   }
 }
 
-
-
-function SimilarCatchStats({ similar }) {
-  if (similar.length === 0) return null;
-
-  const byDescription = {};
-  const byTempRange = {};
-  const byHour = {}; // bleibt optional für spätere Erweiterung
-
-  similar.forEach(f => {
-    const d = f.weather?.description || 'unbekannt';
-    byDescription[d] = (byDescription[d] || 0) + 1;
-
-    const t = f.weather?.temp;
-    if (typeof t === 'number') {
-      const bucket = `${Math.floor(t / 5) * 5}–${Math.floor(t / 5) * 5 + 4}°C`;
-      byTempRange[bucket] = (byTempRange[bucket] || 0) + 1;
-    }
-
-    // optional: Uhrzeit weiterführend nutzbar
-    const h = new Date(f.timestamp).getHours();
-    const hourStr = `${h}:00`;
-    byHour[hourStr] = (byHour[hourStr] || 0) + 1;
-  });
-
-  const renderStat = (title, obj) => (
-    <div className="mb-4">
-      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-2">{title}</h4>
-      <ul className="text-sm text-gray-600 dark:text-gray-300">
-        {Object.entries(obj)
-          .sort((a, b) => b[1] - a[1])
-          .map(([label, count]) => (
-            <li key={label} className="flex justify-between">
-              <span>{label}</span>
-              <span className="font-mono">{count}x</span>
-            </li>
-          ))}
-      </ul>
-    </div>
-  );
-
-  return (
-    <div className="mt-6 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow-inner">
-      <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">📊 Details zu ähnlichen Fängen</h3>
-      {renderStat("🌦 Wetterbeschreibung", byDescription)}
-      {renderStat("🌡 Temperaturbereich", byTempRange)}
-    </div>
-  );
-}
-
-
-function FishForecast({ fishes, currentWeather }) {
-  if (!currentWeather) {
-    return <p className="text-gray-500 dark:text-gray-400">Keine aktuellen Wetterdaten verfügbar.</p>;
-  }
-
-  const fishesWithWeather = fishes.filter(f =>
-    f.weather &&
-    f.fish &&
-    typeof f.fish === 'string' &&
-    f.fish.trim() !== ''
-  );
-
-  const similar = fishesWithWeather.filter(f => isWeatherSimilar(f.weather, currentWeather, f.timestamp));
-
-  const chance =
-    fishesWithWeather.length > 0
-      ? ((similar.length / fishesWithWeather.length) * 100).toFixed(1)
-      : '0.0';
-
-  return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
-      <p className="text-gray-800 dark:text-gray-100 text-lg">
-        Bei vergleichbarem Wetter wurden in der Vergangenheit <span className="font-bold">{similar.length}</span> Fische gefangen.
-      </p>
-      {fishesWithWeather.length === 0 ? (
-        <p className="mt-2 text-gray-500 dark:text-gray-400 italic">
-          Es liegen noch keine Fänge mit Wetterdaten vor.
-        </p>
-      ) : (
-        <p className="mt-2 text-xl text-green-700 dark:text-green-400 font-bold">
-          🎯 Prognose: {chance}% Fangwahrscheinlichkeit
-        </p>
-      )}
-
-      <SimilarCatchStats similar={similar} />
-    </div>
-  );
-}
-
 export default function Forecast() {
   const [fishes, setFishes] = useState([]);
   const [weatherData, setWeatherData] = useState(null);
@@ -196,14 +106,91 @@ export default function Forecast() {
     loadWeatherAndFishes();
   }, []);
 
+  const fishesWithWeather = fishes.filter(f =>
+    f.weather && f.fish && typeof f.fish === 'string' && f.fish.trim() !== ''
+  );
+
+  const similar = fishesWithWeather.filter(f => isWeatherSimilar(f.weather, weatherData, f.timestamp));
+
+  const chance =
+    fishesWithWeather.length > 0
+      ? ((similar.length / fishesWithWeather.length) * 100).toFixed(1)
+      : '0.0';
+
+  const byDescription = {};
+  const byTempRange = {};
+  similar.forEach(f => {
+    const d = f.weather?.description || 'unbekannt';
+    byDescription[d] = (byDescription[d] || 0) + 1;
+
+    const t = f.weather?.temp;
+    if (typeof t === 'number') {
+      const bucket = `${Math.floor(t / 5) * 5}–${Math.floor(t / 5) * 5 + 4}°C`;
+      byTempRange[bucket] = (byTempRange[bucket] || 0) + 1;
+    }
+  });
+
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
       <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">🔮 Fangprognose</h2>
+
       <p className="text-center text-gray-600 dark:text-gray-300 mb-4 max-w-xl mx-auto">
-        Diese Schätzung basiert auf dem aktuellen Wetter und gefangenen Fischen bei ähnlichen Bedingungen. Umso mehr Eintragungen, umso genauer wird die Prognose. 👀
+        Diese Schätzung basiert auf dem aktuellen Wetter und gefangenen Fischen bei ähnlichen Bedingungen.
+        Umso mehr Eintragungen, umso genauer wird die Prognose. 👀
       </p>
+
       <div className="max-w-2xl mx-auto">
-        <FishForecast fishes={fishes} currentWeather={weatherData} />
+        <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6">
+          {weatherData ? (
+            <>
+              <p className="text-gray-800 dark:text-gray-100 text-lg">
+                Bei vergleichbarem Wetter wurden in der Vergangenheit <span className="font-bold">{similar.length}</span> Fische gefangen.
+              </p>
+
+              {fishesWithWeather.length === 0 ? (
+                <p className="mt-2 text-gray-500 dark:text-gray-400 italic">
+                  Es liegen noch keine Fänge mit Wetterdaten vor.
+                </p>
+              ) : (
+                <p className="mt-2 text-xl text-green-700 dark:text-green-400 font-bold">
+                  🎯 Prognose: {chance}% Fangwahrscheinlichkeit
+                </p>
+              )}
+
+              {similar.length > 0 && (
+                <div className="mt-6 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow-inner">
+                  <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">📊 Details zu ähnlichen Fängen</h3>
+
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-2">🌦 Wetterbeschreibung</h4>
+                    <ul className="text-sm text-gray-600 dark:text-gray-300">
+                      {Object.entries(byDescription).sort((a, b) => b[1] - a[1]).map(([label, count]) => (
+                        <li key={label} className="flex justify-between">
+                          <span>{label}</span>
+                          <span className="font-mono">{count}x</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-2">🌡 Temperaturbereich</h4>
+                    <ul className="text-sm text-gray-600 dark:text-gray-300">
+                      {Object.entries(byTempRange).sort((a, b) => b[1] - a[1]).map(([label, count]) => (
+                        <li key={label} className="flex justify-between">
+                          <span>{label}</span>
+                          <span className="font-mono">{count}x</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-gray-500 dark:text-gray-400">Keine aktuellen Wetterdaten verfügbar.</p>
+          )}
+        </div>
       </div>
     </div>
   );

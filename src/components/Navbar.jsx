@@ -1,3 +1,6 @@
+// Visuell abgestimmte, responsive und Darkmode-fähige Navigationsleiste
+// Einheitliches Padding, klare Schriftgrößen, Dropdowns, Button-Feedback
+
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/AuthContext';
@@ -43,7 +46,7 @@ export default function Navbar({ name, isAdmin }) {
 
   const navItems = [
     { label: 'Wetter', path: '/' },
-    { label: '  ➕ 🎣  ', path: '/new-catch' },
+    { label: '➕ 🎣', path: '/new-catch' },
     { label: 'Fangliste', path: '/catches' },
     { label: 'Rangliste', path: '/leaderboard' },
     {
@@ -70,7 +73,6 @@ export default function Navbar({ name, isAdmin }) {
   return (
     <header className="bg-white dark:bg-gray-900 shadow-md sticky top-0 z-50 text-black dark:text-white">
       <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-        {/* Navigation */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => setOpen(!open)}
@@ -90,7 +92,6 @@ export default function Navbar({ name, isAdmin }) {
                   >
                     {item.label} ▾
                   </button>
-
                   {openDropdown && (
                     <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base">
                       {item.children.map((child) => (
@@ -99,8 +100,7 @@ export default function Navbar({ name, isAdmin }) {
                           to={child.path}
                           className={`block px-5 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 rounded ${location.pathname === child.path
                             ? 'font-bold text-blue-700 dark:text-blue-300'
-                            : 'text-gray-800 dark:text-gray-100'
-                            }`}
+                            : 'text-gray-800 dark:text-gray-100'}`}
                           onClick={() => {
                             setOpen(false);
                             setOpenDropdown(false);
@@ -118,8 +118,7 @@ export default function Navbar({ name, isAdmin }) {
                   to={item.path}
                   className={`block px-4 py-3 rounded text-lg hover:bg-blue-100 dark:hover:bg-gray-700 ${location.pathname === item.path
                     ? 'font-bold text-blue-700 dark:text-blue-300'
-                    : ''
-                    }`}
+                    : ''}`}
                   onClick={() => setOpen(false)}
                 >
                   {item.label}
@@ -129,7 +128,6 @@ export default function Navbar({ name, isAdmin }) {
           </nav>
         </div>
 
-        {/* Benutzer, Darkmode und Logout */}
         <div className="flex items-center gap-4 text-base relative" ref={dropdownRef}>
           <button
             onClick={toggleDark}
@@ -169,13 +167,11 @@ export default function Navbar({ name, isAdmin }) {
                     className="block w-full text-left py-2 text-sm text-blue-600 hover:underline dark:text-blue-300"
                   >
                     {localStorage.getItem('dataFilter') === 'recent'
-                      ? ' ❤️ Love On'
-                      : ' 📅 ab 01.06.25'}
+                      ? '❤️ Love On'
+                      : '📅 ab 01.06.25'}
                   </button>
                 </div>
               )}
-
-
             </div>
           )}
         </div>

@@ -96,70 +96,72 @@ export default function Leaderboard() {
   }
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
-      <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">🏆 Rangliste</h2>
+  <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+    <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">🏆 Rangliste</h2>
 
-      {vertraute.includes(anglerName) && (
-        <div className="flex justify-center items-center mb-6">
-          <label className="flex items-center space-x-3 cursor-pointer">
-            <span className="text-sm text-gray-600 dark:text-gray-300">Laura vs. Nicol</span>
-            <input
-              type="checkbox"
-              checked={showIntern}
-              onChange={() => setShowIntern(!showIntern)}
-              className="form-checkbox h-5 w-5 text-green-600"
-            />
-          </label>
-        </div>
-      )}
-
-      <div className="space-y-6 max-w-3xl mx-auto">
-        {ranking.map((a, i) => (
-          <div
-            key={i}
-            className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
-          >
-            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">
-              #{i + 1} {formattedNamesMap[a.name] || a.name}
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)} cm
-            </p>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              🏆 Punkte: <span className="font-mono">{a.totalPoints.toFixed(0)} Punkte</span>
-            </p>
-
-            <table className="w-full text-sm font-mono text-left text-gray-700 dark:text-gray-300 mt-2">
-              <thead>
-                <tr>
-                  <th className="text-left font-sans">Fischart</th>
-                  <th className="text-right">Ø Größe</th>
-                  <th className="text-right pr-2">Punkte</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(a.byFish)
-                  .sort(([, pointsA], [, pointsB]) => pointsB - pointsA)
-                  .map(([f, p]) => {
-                    const sizeData = a.sizesByFish?.[f];
-                    const avg =
-                      sizeData && sizeData.count > 0
-                        ? (sizeData.sum / sizeData.count).toFixed(1)
-                        : '-';
-                    return (
-                      <tr key={f}>
-                        <td className="font-sans">{f}</td>
-                        <td className="text-right">{avg} cm</td>
-                        <td className="text-right pr-2">{p.toFixed(0)} Pkt.</td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        ))}
+    {vertraute.includes(anglerName) && (
+      <div className="flex justify-center items-center mb-6">
+        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 dark:text-gray-300">
+          <span>Laura vs. Nicol</span>
+          <input
+            type="checkbox"
+            checked={showIntern}
+            onChange={() => setShowIntern(!showIntern)}
+            className="accent-green-600 w-5 h-5"
+          />
+        </label>
       </div>
+    )}
+
+    <div className="space-y-6 max-w-3xl mx-auto">
+      {ranking.map((a, i) => (
+        <div
+          key={i}
+          className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
+        >
+          <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">
+            #{i + 1} {formattedNamesMap[a.name] || a.name}
+          </h3>
+
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt: {(a.sizeSum / a.total).toFixed(1)} cm
+          </p>
+
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+            🏆 Punkte: <span className="font-mono font-semibold text-green-700 dark:text-green-300">{a.totalPoints.toFixed(0)} Punkte</span>
+          </p>
+
+          <table className="w-full text-sm text-left font-mono text-gray-700 dark:text-gray-300">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="text-left py-1 font-sans">Fischart</th>
+                <th className="text-right py-1">Ø Größe</th>
+                <th className="text-right pr-2 py-1">Punkte</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(a.byFish)
+                .sort(([, pointsA], [, pointsB]) => pointsB - pointsA)
+                .map(([f, p]) => {
+                  const sizeData = a.sizesByFish?.[f];
+                  const avg =
+                    sizeData && sizeData.count > 0
+                      ? (sizeData.sum / sizeData.count).toFixed(1)
+                      : '-';
+                  return (
+                    <tr key={f} className="border-b border-gray-100 dark:border-gray-700">
+                      <td className="font-sans py-1">{f}</td>
+                      <td className="text-right py-1">{avg} cm</td>
+                      <td className="text-right pr-2 py-1">{p.toFixed(0)} Pkt.</td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
-  );
+  </div>
+);
 }
 

@@ -249,96 +249,97 @@ const filtered = data.filter(f => {
   );
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
-      <h2 className="text-3xl font-bold mb-2 text-center text-blue-700 dark:text-blue-300">📊 Statistik & Analyse</h2>
+  <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+    <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-300">📊 Statistik & Analyse</h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700 dark:text-gray-300 max-w-xl mx-auto mb-8 bg-white dark:bg-gray-800 rounded-xl p-4 shadow">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">🐟</span>
-          <span>Gesamtanzahl Fische:</span>
-          <span className="ml-auto font-bold text-right">{totalFishes}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xl">📅</span>
-          <span>Fangtage:</span>
-          <span className="ml-auto font-bold text-right">{catchDays}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xl">❌</span>
-          <span>Schneidertage:</span>
-          <span className="ml-auto font-bold text-right">{blankDays}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xl">📉</span>
-          <span>Schneidertage-Anteil:</span>
-          <span className="ml-auto font-bold text-right">{blankRatio}%</span>
-        </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700 dark:text-gray-300 max-w-xl mx-auto mb-8 bg-white dark:bg-gray-800 rounded-xl p-4 shadow">
+      <div className="flex items-center gap-2">
+        <span className="text-xl">🐟</span>
+        <span>Gesamtanzahl Fische:</span>
+        <span className="ml-auto font-bold text-right">{totalFishes}</span>
       </div>
-
-      <div className="flex flex-wrap gap-2 mb-6 justify-center">
-        {sortedYears.map(year => (
-          <button
-            key={year}
-            onClick={() => setSelectedYear(year)}
-            className={`px-4 py-1 rounded-full border ${
-              year === selectedYear
-                ? 'bg-blue-600 text-white font-semibold'
-                : 'bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border-blue-400 hover:bg-blue-100 dark:hover:bg-gray-700'
-            }`}
-          >
-            {year}
-          </button>
-        ))}
+      <div className="flex items-center gap-2">
+        <span className="text-xl">📅</span>
+        <span>Fangtage:</span>
+        <span className="ml-auto font-bold text-right">{catchDays}</span>
       </div>
-
-      {selectedYear && (
-        <div className="overflow-x-auto">
-          <div className="flex overflow-x-auto space-x-4 pb-2">
-            {Object.entries(yearMonthStats[selectedYear] || {})
-              .sort(([a], [b]) => a - b)
-              .map(([monthIndex, types]) => {
-                const i = parseInt(monthIndex);
-                return (
-                  <div
-                    key={monthIndex}
-                    ref={(el) => {
-                      if (i === currentMonthIndex) monthRefs.current[i] = el;
-                    }}
-                    className={`min-w-[200px] rounded-lg p-4 text-center flex-shrink-0 shadow ${
-                      i === currentMonthIndex
-                        ? 'border-2 border-blue-500 bg-white dark:bg-gray-800'
-                        : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                    }`}
-                  >
-                    <h3 className="text-base font-bold mb-2 text-gray-800 dark:text-gray-100">{monthNames[i]}</h3>
-                    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {Object.entries(types)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([fish, count]) => (
-                          <li key={fish} className="flex justify-between px-2 py-1 text-sm">
-                            <span>{fish}</span>
-                            <span className="font-mono text-gray-700 dark:text-gray-300">{count}</span>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-10">
-        {renderStatList("🌡 Temperaturbereiche", tempStats, activeKeys.temp)}
-        {renderStatList("🧪 Luftdruck", pressureStats, activeKeys.pressure)}
-        {renderStatList("💨 Windstärken", windStats, activeKeys.wind)}
-        {renderStatList("🧭 Windrichtungen", windDirStats, activeKeys.windDir)}
-        {renderStatList("💦 Luftfeuchtigkeit", humidityStats, activeKeys.humidity)}
-        {renderStatList("🌦 Wetterbeschreibung", descStats, activeKeys.description)}
-        {renderStatList("🌙 Mondphasen", moonStats, activeKeys.moon)}
-        {renderStatList("⏰ Fangzeiten", hourStats, activeKeys.time)}
+      <div className="flex items-center gap-2">
+        <span className="text-xl">❌</span>
+        <span>Schneidertage:</span>
+        <span className="ml-auto font-bold text-right">{blankDays}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xl">📉</span>
+        <span>Schneidertage-Anteil:</span>
+        <span className="ml-auto font-bold text-right">{blankRatio}%</span>
       </div>
     </div>
-  );
+
+    <div className="flex flex-wrap gap-2 mb-6 justify-center">
+      {sortedYears.map(year => (
+        <button
+          key={year}
+          onClick={() => setSelectedYear(year)}
+          className={`px-4 py-1 rounded-full border transition ${
+            year === selectedYear
+              ? 'bg-blue-600 text-white font-semibold'
+              : 'bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border-blue-400 hover:bg-blue-100 dark:hover:bg-gray-700'
+          }`}
+        >
+          {year}
+        </button>
+      ))}
+    </div>
+
+    {selectedYear && (
+      <div className="overflow-x-auto">
+        <div className="flex overflow-x-auto space-x-4 pb-2">
+          {Object.entries(yearMonthStats[selectedYear] || {})
+            .sort(([a], [b]) => a - b)
+            .map(([monthIndex, types]) => {
+              const i = parseInt(monthIndex);
+              return (
+                <div
+                  key={monthIndex}
+                  ref={(el) => {
+                    if (i === currentMonthIndex) monthRefs.current[i] = el;
+                  }}
+                  className={`min-w-[200px] rounded-lg p-4 text-center flex-shrink-0 shadow transition ${
+                    i === currentMonthIndex
+                      ? 'border-2 border-blue-500 bg-white dark:bg-gray-800'
+                      : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                  }`}
+                >
+                  <h3 className="text-base font-bold mb-2 text-gray-800 dark:text-gray-100">{monthNames[i]}</h3>
+                  <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {Object.entries(types)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([fish, count]) => (
+                        <li key={fish} className="flex justify-between px-2 py-1 text-sm">
+                          <span>{fish}</span>
+                          <span className="font-mono text-gray-700 dark:text-gray-300">{count}</span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+    )}
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-10">
+      {renderStatList("🌡 Temperaturbereiche", tempStats, activeKeys.temp)}
+      {renderStatList("🧪 Luftdruck", pressureStats, activeKeys.pressure)}
+      {renderStatList("💨 Windstärken", windStats, activeKeys.wind)}
+      {renderStatList("🧭 Windrichtungen", windDirStats, activeKeys.windDir)}
+      {renderStatList("💦 Luftfeuchtigkeit", humidityStats, activeKeys.humidity)}
+      {renderStatList("🌦 Wetterbeschreibung", descStats, activeKeys.description)}
+      {renderStatList("🌙 Mondphasen", moonStats, activeKeys.moon)}
+      {renderStatList("⏰ Fangzeiten", hourStats, activeKeys.time)}
+    </div>
+  </div>
+);
+
 }
 
