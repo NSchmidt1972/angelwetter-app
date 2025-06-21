@@ -1,13 +1,10 @@
-// Visuell abgestimmte, responsive und Darkmode-fähige Navigationsleiste
-// Einheitliches Padding, klare Schriftgrößen, Dropdowns, Button-Feedback
-
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 
 export default function Navbar({ name, isAdmin }) {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth(); // ✅ setUser hinzugefügt
   const [open, setOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
@@ -41,7 +38,10 @@ export default function Navbar({ name, isAdmin }) {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate('/', { replace: true });
+    localStorage.removeItem('anglerName');
+    localStorage.removeItem('shortAnglerName');
+    setUser(null); // ✅ Reaktiv: App erkennt Logout direkt
+    navigate('/');
   };
 
   const navItems = [

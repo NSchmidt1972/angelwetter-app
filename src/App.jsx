@@ -1,24 +1,10 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState, Suspense, lazy } from 'react';
+import { BrowserRouter as Router } from 'react-router-dom';
+import { useEffect, useState, Suspense } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
 import PushInit from './components/PushInit';
-import Navbar from './components/Navbar';
-import MapView from './pages/MapView';
-
+import AppRoutes from './AppRoutes';
 import './index.css';
-
-// Lazy-loaded Seiten und Komponenten
-const Home = lazy(() => import('./pages/Home'));
-const Catches = lazy(() => import('./pages/Catches'));
-const NewCatch = lazy(() => import('./pages/NewCatch'));
-const Analysis = lazy(() => import('./pages/Analysis'));
-const Leaderboard = lazy(() => import('./pages/Leaderboard'));
-const TopFishes = lazy(() => import('./pages/TopFishes'));
-const Forecast = lazy(() => import('./pages/Forecast'));
-const AdminOverview = lazy(() => import('./pages/AdminOverview'));
-const Calendar = lazy(() => import('./pages/Calendar'));
-const AuthForm = lazy(() => import('./components/AuthForm'));
 
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
@@ -143,45 +129,33 @@ function AppContent() {
     );
   }
 
-  const isLoggedIn = user && anglerName;
+  // ✅ WICHTIG: Recovery-Link erkennen
+  const isRecoveryHash = window.location.hash.includes('type=recovery');
+  const isPasswordResetFlow = window.location.pathname === '/update-password' || isRecoveryHash;
+
+  const isLoggedIn = user && !isPasswordResetFlow;
+
   const isAdmin = userEmail === 'nicol@schmidt-2006.de';
 
   return (
     <>
       <PushInit />
-      {isLoggedIn ? (
-        <>
-          <Navbar name={anglerName} isAdmin={isAdmin} />
-          <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
-            <Routes>
-              <Route path="/" element={<Home weatherData={weatherData} />} />
-              <Route path="/new-catch" element={<NewCatch anglerName={anglerName} weatherData={weatherData} setWeatherData={setWeatherData} />} />
-              <Route path="/catches" element={<Catches name={anglerName} />} />
-              <Route path="/analysis" element={<Analysis anglerName={anglerName} />} />
-              <Route path="/leaderboard" element={<Leaderboard />} />
-              <Route path="/top-fishes" element={<TopFishes />} />
-              <Route path="/calendar" element={<Calendar />} />
-              <Route path="/map" element={<MapView />} />
-              <Route path="/forecast" element={<Forecast weatherData={weatherData} />} />
-              <Route path="/admin" element={isAdmin ? <AdminOverview /> : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>} />
-              <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
-          </Suspense>
-        </>
-      ) : (
-        <Suspense fallback={<div className="p-6 text-center">🔐 Anmeldung wird geladen...</div>}>
-          <Routes>
-            <Route path="*" element={<AuthForm />} />
-          </Routes>
-        </Suspense>
-      )}
+      <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
+        <AppRoutes
+          isLoggedIn={isLoggedIn}
+          isAdmin={isAdmin}
+          anglerName={anglerName}
+          weatherData={weatherData}
+          setWeatherData={setWeatherData}
+        />
+      </Suspense>
     </>
   );
 }
 
 export default function App() {
   return (
-    <Router basename="/">
+    <Router>
       <AppContent />
     </Router>
   );

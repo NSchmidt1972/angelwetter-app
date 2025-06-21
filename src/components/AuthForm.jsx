@@ -130,9 +130,37 @@ export default function AuthForm() {
         placeholder="Passwort"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400  dark:bg-gray-800 dark:text-white dark:placeholder-blue-400"
+        className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-800 dark:text-white dark:placeholder-blue-400"
         required
       />
+
+      {/* NEU: Passwort vergessen */}
+      {mode === 'login' && (
+  <div className="text-right">
+    <button
+      type="button"
+      onClick={async () => {
+        const cleanEmail = email.trim().toLowerCase();
+        if (!cleanEmail) {
+          alert("Bitte zuerst E-Mail-Adresse eingeben.");
+          return;
+        }
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: 'https://app.asv-rotauge.de/update-password'
+        });
+        if (error) {
+          alert("Fehler beim Zurücksetzen: " + error.message);
+        } else {
+          navigate('/reset-done'); // 🆕 leitet weiter zur Info-Seite
+        }
+      }}
+      className="text-sm text-blue-600 hover:underline"
+    >
+      Passwort vergessen?
+    </button>
+  </div>
+)}
+
 
       {mode === 'register' && (
         <input
@@ -142,7 +170,7 @@ export default function AuthForm() {
           placeholder="Vor und Nachname"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400  dark:bg-gray-800 dark:text-white dark:placeholder-blue-400"
+          className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-800 dark:text-white dark:placeholder-blue-400"
           required
         />
       )}
