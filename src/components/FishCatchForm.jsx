@@ -25,21 +25,10 @@ export default function FishCatchForm({ setWeatherData }) {
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      console.warn("Geolocation wird nicht unterstützt.");
-      return;
-    }
-
+    if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setPosition({
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude
-        });
-      },
-      (err) => {
-        console.warn("Standort konnte nicht abgerufen werden:", err);
-      }
+      (pos) => setPosition({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      (err) => console.warn("Standort konnte nicht abgerufen werden:", err)
     );
   }, []);
 
@@ -197,6 +186,19 @@ export default function FishCatchForm({ setWeatherData }) {
       alert('Fehler beim Speichern des Fangs.');
     } else {
       alert("Petri Heil! 🎣 Dein Fang ist gespeichert. ✅");
+
+      // OneSignal Push-Benachrichtigung (per Supabase Edge Function)
+      try {
+        const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
+        await fetch(functionUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ angler: anglerName, fish, size: sizeNumber })
+        });
+      } catch (pushError) {
+        console.error('Fehler bei der Push-Benachrichtigung:', pushError);
+      }
+
       navigate('/catches');
     }
   };
@@ -273,6 +275,19 @@ export default function FishCatchForm({ setWeatherData }) {
         alert('Wetter wurde gespeichert, aber Fehler beim Eintrag in die Fangliste.');
       } else {
         alert('Schneidertag gespeichert! 😩');
+
+        // Push via OneSignal (Browser)
+        if (window.OneSignal) {
+          window.OneSignal.push(() => {
+            window.OneSignal.sendSelfNotification(
+              "❌ Schneidertag eingetragen",
+              `${anglerName} hat heute leider nichts gefangen.`,
+              null,
+              { data: { blank: true } }
+            );
+          });
+        }
+
         navigate('/');
       }
     } catch (error) {
@@ -320,7 +335,9 @@ export default function FishCatchForm({ setWeatherData }) {
       {showHourDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">⏱ Wie viele Stunden warst du angeln?</h3>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+              ⏱ Wie viele Stunden warst du angeln?
+            </h3>
             <select
               value={hours}
               onChange={e => setHours(parseInt(e.target.value))}
@@ -339,8 +356,12 @@ export default function FishCatchForm({ setWeatherData }) {
             </select>
 
             <div className="flex justify-between gap-2">
-              <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 text-white py-2 rounded">Speichern</button>
-              <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-300 text-black py-2 rounded">Abbrechen</button>
+              <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 text-white py-2 rounded">
+                Speichern
+              </button>
+              <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-300 text-black py-2 rounded">
+                Abbrechen
+              </button>
             </div>
           </div>
         </div>

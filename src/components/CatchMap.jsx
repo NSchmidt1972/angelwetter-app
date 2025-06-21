@@ -7,13 +7,30 @@ import L from 'leaflet';
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-// Standard-Marker fixen (Leaflet-Problem in Vite/React)
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: new URL('leaflet/dist/images/marker-icon-2x.png', import.meta.url).href,
-  iconUrl: new URL('leaflet/dist/images/marker-icon.png', import.meta.url).href,
-  shadowUrl: new URL('leaflet/dist/images/marker-shadow.png', import.meta.url).href,
+// 🔵 Blauer Standardmarker (für Fänge)
+const blueIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
 });
+
+// 🔴 Roter Marker für Schneidertage
+const redIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const FERKENSBRUCH_CENTER = [51.3105, 6.2565];
+const FERKENSBRUCH_ZOOM = 16.3;
+
+
 
 function FitBounds({ bounds }) {
   const map = useMap();
@@ -48,10 +65,10 @@ export default function CatchMap() {
   const bounds = entries.map((e) => [e.lat, e.lon]);
 
   return (
-    <div className="h-[80vh] w-full">
+    <div className="h-[80vh] w-full relative z-0">
       <MapContainer
-        center={[52.4, 9.7]} // Fallback-Start
-        zoom={12}
+        center={FERKENSBRUCH_CENTER} // immer auf Ferkensbruch als Initialwert
+        zoom={FERKENSBRUCH_ZOOM}
         scrollWheelZoom={true}
         className="h-full w-full rounded-xl shadow"
       >
@@ -59,11 +76,16 @@ export default function CatchMap() {
           attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <FitBounds bounds={bounds} />
+        {entries.length > 0 && <FitBounds bounds={bounds} />}
+
 
         <MarkerClusterGroup>
           {entries.map((e) => (
-            <Marker key={e.id} position={[e.lat, e.lon]}>
+            <Marker
+              key={e.id}
+              position={[e.lat, e.lon]}
+              icon={e.blank ? redIcon : blueIcon}
+            >
               <Popup>
                 <strong>{e.angler}</strong><br />
                 {e.blank ? '❌ Schneidertag' : `🐟 ${e.fish} (${e.size} cm)`}<br />
