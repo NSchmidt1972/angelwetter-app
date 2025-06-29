@@ -243,6 +243,100 @@ export default function FishCatchForm({ setWeatherData }) {
     setPendingEntry(null);
   };
 
+  const handleBlankSubmit = async () => {
+    setLoadingBlank(true);
+
+    try {
+      const sessionResult = await supabase.auth.getSession();
+      const accessToken = sessionResult.data?.session?.access_token;
+
+      if (!accessToken) {
+        alert("Nicht eingeloggt – bitte zuerst anmelden.");
+        setLoadingBlank(false);
+        return;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isoStart = today.toISOString();
+      const isoEnd = new Date(today.getTime() + 86400000).toISOString();
+
+      const { data: existing, error: checkError } = await supabase
+        .from('fishes')
+        .select('id')
+        .eq('angler', anglerName)
+        .eq('blank', true)
+        .gte('timestamp', isoStart)
+        .lt('timestamp', isoEnd);
+
+      if (checkError) {
+        console.error("Fehler bei der Tagesprüfung:", checkError);
+        alert("Fehler bei der Tagesprüfung.");
+        setLoadingBlank(false);
+        return;
+      }
+
+      if (existing.length > 0) {
+        alert("Du hast heute bereits einen Schneidertag eingetragen.");
+        setLoadingBlank(false);
+        return;
+      }
+
+      const response = await fetch('https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/blank_weather_summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          angler: anglerName,
+          hours: hours
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error('Fehler vom Server:', result);
+        throw new Error(result.error || 'Unbekannter Fehler');
+      }
+
+      const insertResult = await supabase.from('fishes').insert([{
+        angler: anglerName,
+        note: 'Schneidertag',
+        blank: true,
+        timestamp: new Date().toISOString(),
+        lat: position?.lat ?? null,
+        lon: position?.lon ?? null
+      }]);
+
+      if (insertResult.error) {
+        console.error('Fehler beim Speichern in fishes:', insertResult.error);
+        alert('Wetter wurde gespeichert, aber Fehler beim Eintrag in die Fangliste.');
+      } else {
+        alert('Schneidertag gespeichert! 😩');
+
+        if (window.OneSignal) {
+          window.OneSignal.push(() => {
+            window.OneSignal.sendSelfNotification(
+              "❌ Schneidertag eingetragen",
+              `${anglerName} hat heute leider nichts gefangen.`,
+              null,
+              { data: { blank: true } }
+            );
+          });
+        }
+
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Fehler:', error);
+      alert('Fehler beim Speichern.');
+    }
+
+    setLoadingBlank(false);
+  };
+
   return (
     <div className="p-6 max-w-xl mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
       <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-300 mb-6 text-center">🎣 Fang eintragen</h2>
@@ -287,6 +381,39 @@ export default function FishCatchForm({ setWeatherData }) {
           ❌ Heute nichts gefangen
         </button>
       </div>
+
+      {showHourDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+              ⏱ Wie viele Stunden warst du angeln?
+            </h3>
+            <select
+              value={hours}
+              onChange={e => setHours(parseInt(e.target.value))}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mb-4 bg-white dark:bg-gray-700 dark:text-white focus:outline-none"
+            >
+              {Array.from({ length: 24 }, (_, i) => i + 1).map(h => {
+                const now = new Date();
+                const start = new Date(now.getTime() - h * 60 * 60 * 1000);
+                const hourString = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <option key={h} value={h}>{h} {h === 1 ? 'Stunde' : 'Stunden'} ({hourString})</option>
+                );
+              })}
+            </select>
+
+            <div className="flex justify-between gap-2">
+              <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition">
+                Speichern
+              </button>
+              <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-400 hover:bg-gray-500 text-white py-2 rounded transition">
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showTakenDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
