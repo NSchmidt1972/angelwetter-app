@@ -20,9 +20,12 @@ export default function FishCatchForm({ setWeatherData }) {
   const [loadingCatch, setLoadingCatch] = useState(false);
   const [loadingBlank, setLoadingBlank] = useState(false);
   const [position, setPosition] = useState(null);
+  const [showTakenDialog, setShowTakenDialog] = useState(false);
+  const [pendingEntry, setPendingEntry] = useState(null);
   const navigate = useNavigate();
 
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
+  const isMarilou = anglerName?.trim().toLowerCase() === 'marilou';
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -54,7 +57,7 @@ export default function FishCatchForm({ setWeatherData }) {
   async function optimizeImage(file, maxSize = 1600, quality = 0.85) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = async (event) => {
+      reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement("canvas");
@@ -175,11 +178,18 @@ export default function FishCatchForm({ setWeatherData }) {
       photo_url: photoUrl,
       blank: false,
       lat: position.lat,
-      lon: position.lon
+      lon: position.lon,
+      is_marilou: isMarilou
     };
 
-    const { error } = await supabase.from('fishes').insert([newEntry]);
+    setPendingEntry(newEntry);
+    setShowTakenDialog(true);
     setLoadingCatch(false);
+  };
+
+  const finalizeCatch = async (taken) => {
+    const entryToSave = { ...pendingEntry, taken };
+    const { error } = await supabase.from('fishes').insert([entryToSave]);
 
     if (error) {
       console.error('Fehler beim Speichern:', error);
@@ -187,20 +197,35 @@ export default function FishCatchForm({ setWeatherData }) {
     } else {
       alert("Petri Heil! 🎣 Dein Fang ist gespeichert. ✅");
 
-      // OneSignal Push-Benachrichtigung (per Supabase Edge Function)
-      try {
-        const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
-        await fetch(functionUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ angler: anglerName, fish, size: sizeNumber })
-        });
-      } catch (pushError) {
-        console.error('Fehler bei der Push-Benachrichtigung:', pushError);
+      if (!isMarilou) {
+        try {
+          const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
+          await fetch(functionUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ angler: anglerName, fish: pendingEntry.fish, size: pendingEntry.size })
+          });
+        } catch (pushError) {
+          console.error('Fehler bei der Push-Benachrichtigung:', pushError);
+        }
+
+        if (window?.OneSignal) {
+          window.OneSignal.push(() => {
+            window.OneSignal.sendSelfNotification(
+              `🎣 Neuer Fang: ${pendingEntry.fish} (${pendingEntry.size} cm)`,
+              `${anglerName} hat einen neuen Fisch gefangen.`,
+              null,
+              { data: { fish: pendingEntry.fish, size: pendingEntry.size } }
+            );
+          });
+        }
       }
 
       navigate('/catches');
     }
+
+    setShowTakenDialog(false);
+    setPendingEntry(null);
   };
 
   const handleBlankSubmit = async () => {
@@ -276,7 +301,6 @@ export default function FishCatchForm({ setWeatherData }) {
       } else {
         alert('Schneidertag gespeichert! 😩');
 
-        // Push via OneSignal (Browser)
         if (window.OneSignal) {
           window.OneSignal.push(() => {
             window.OneSignal.sendSelfNotification(
@@ -298,73 +322,90 @@ export default function FishCatchForm({ setWeatherData }) {
     setLoadingBlank(false);
   };
 
- return (
-  <div className="p-6 max-w-xl mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
-    <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-300 mb-6 text-center">🎣 Fang eintragen</h2>
+  return (
+    <div className="p-6 max-w-xl mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
+      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-300 mb-6 text-center">🎣 Fang eintragen</h2>
 
-    <div className="space-y-4">
-      <select value={fish} onChange={e => setFish(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="">Fischart auswählen</option>
-        {FISH_TYPES.map((type) => (
-          <option key={type} value={type}>{type}</option>
-        ))}
-      </select>
+      <div className="space-y-4">
+        <select value={fish} onChange={e => setFish(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">Fischart auswählen</option>
+          {FISH_TYPES.map((type) => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
 
-      <input type="text" inputMode="decimal" placeholder="Größe (cm)" value={size} onChange={e => setSize(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <input type="text" inputMode="decimal" placeholder="Größe (cm)" value={size} onChange={e => setSize(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
-      <textarea placeholder="Kommentar (optional)" value={note} onChange={e => setNote(e.target.value)} rows={4} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <textarea placeholder="Kommentar (optional)" value={note} onChange={e => setNote(e.target.value)} rows={4} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
-      <input type="file" accept="image/*" onChange={handleFileChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none" />
+        <input type="file" accept="image/*" onChange={handleFileChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none" />
 
-      {previewUrl && (
-        <div className="mt-4 text-center">
-          <img src={previewUrl} alt="Vorschau" className="max-w-full max-h-64 mx-auto rounded shadow-md" />
-          <button onClick={removePhoto} className="mt-2 text-sm text-red-600 hover:underline">Foto entfernen</button>
+        {previewUrl && (
+          <div className="mt-4 text-center">
+            <img src={previewUrl} alt="Vorschau" className="max-w-full max-h-64 mx-auto rounded shadow-md" />
+            <button onClick={removePhoto} className="mt-2 text-sm text-red-600 hover:underline">Foto entfernen</button>
+          </div>
+        )}
+
+        <button onClick={handleSubmit} disabled={loadingCatch || loadingBlank} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-2 rounded transition">
+          {loadingCatch ? 'Speichern...' : '✅ Fang speichern'}
+        </button>
+
+        <button onClick={() => setShowHourDialog(true)} disabled={loadingCatch || loadingBlank} className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 rounded transition">
+          ❌ Heute nichts gefangen
+        </button>
+      </div>
+
+      {showHourDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+              ⏱ Wie viele Stunden warst du angeln?
+            </h3>
+            <select
+              value={hours}
+              onChange={e => setHours(parseInt(e.target.value))}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mb-4 bg-white dark:bg-gray-700 dark:text-white focus:outline-none"
+            >
+              {Array.from({ length: 24 }, (_, i) => i + 1).map(h => {
+                const now = new Date();
+                const start = new Date(now.getTime() - h * 60 * 60 * 1000);
+                const hourString = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <option key={h} value={h}>{h} {h === 1 ? 'Stunde' : 'Stunden'} ({hourString})</option>
+                );
+              })}
+            </select>
+
+            <div className="flex justify-between gap-2">
+              <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition">
+                Speichern
+              </button>
+              <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-400 hover:bg-gray-500 text-white py-2 rounded transition">
+                Abbrechen
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      <button onClick={handleSubmit} disabled={loadingCatch || loadingBlank} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-2 rounded transition">
-        {loadingCatch ? 'Speichern...' : '✅ Fang speichern'}
-      </button>
-
-      <button onClick={() => setShowHourDialog(true)} disabled={loadingCatch || loadingBlank} className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 rounded transition">
-        ❌ Heute nichts gefangen
-      </button>
-    </div>
-
-    {showHourDialog && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
-            ⏱ Wie viele Stunden warst du angeln?
-          </h3>
-          <select
-            value={hours}
-            onChange={e => setHours(parseInt(e.target.value))}
-            className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mb-4 bg-white dark:bg-gray-700 dark:text-white focus:outline-none"
-          >
-            {Array.from({ length: 24 }, (_, i) => i + 1).map(h => {
-              const now = new Date();
-              const start = new Date(now.getTime() - h * 60 * 60 * 1000);
-              const hourString = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-              return (
-                <option key={h} value={h}>{h} {h === 1 ? 'Stunde' : 'Stunden'} ({hourString})</option>
-              );
-            })}
-          </select>
-
-          <div className="flex justify-between gap-2">
-            <button onClick={() => { setShowHourDialog(false); handleBlankSubmit(); }} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition">
-              Speichern
-            </button>
-            <button onClick={() => setShowHourDialog(false)} className="flex-1 bg-gray-400 hover:bg-gray-500 text-white py-2 rounded transition">
-              Abbrechen
-            </button>
+      {showTakenDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+              🐟 Wurde der Fisch entnommen?
+            </h3>
+            <div className="flex justify-between gap-2">
+              <button onClick={() => finalizeCatch(true)} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded transition">
+                ✅ Ja
+              </button>
+              <button onClick={() => finalizeCatch(false)} className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white py-2 rounded transition">
+                🚫 Nein
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-  </div>
-);
-
+      )}
+    </div>
+  );
 }

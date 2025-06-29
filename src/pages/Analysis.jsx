@@ -45,17 +45,19 @@ const istVertrauter = vertraute.includes(anglerName);
 const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
 
 const filtered = data.filter(f => {
+  // ❌ Marilous geheime Fänge komplett aus Analyse ausschließen
+  if (f.is_marilou) return false;
+
   const fangDatum = new Date(f.timestamp);
 
   if (istVertrauter) {
-    // Vertraute dürfen alles sehen – je nach Einstellung
     if (filterSetting === 'all') return true;
     return fangDatum >= PUBLIC_FROM;
   }
 
-  // Alle anderen sehen nur neue Fänge
   return fangDatum >= PUBLIC_FROM;
 });
+
 
 
       console.log("Angemeldet als:", anglerName);

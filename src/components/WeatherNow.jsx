@@ -68,7 +68,7 @@ export default function WeatherNow({ data, onRefresh }) {
             <span className="text-blue-700 dark:text-blue-300">🌤 Aktuelles Wetter</span>
           )}
         </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Stand: {savedAtString} Uhr</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{savedAtString} Uhr</p>
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6">

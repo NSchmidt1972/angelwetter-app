@@ -6,9 +6,8 @@ import ResetDone from './pages/ResetDone';
 import AuthVerified from './pages/AuthVerified';
 import ForgotPassword from './pages/ForgotPassword';
 
-
-
 import { lazy } from 'react';
+
 const Home = lazy(() => import('./pages/Home'));
 const Catches = lazy(() => import('./pages/Catches'));
 const NewCatch = lazy(() => import('./pages/NewCatch'));
@@ -19,6 +18,8 @@ const Forecast = lazy(() => import('./pages/Forecast'));
 const AdminOverview = lazy(() => import('./pages/AdminOverview'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const AuthForm = lazy(() => import('./components/AuthForm'));
+const SpotAdmin = lazy(() => import('./components/SpotAdmin')); // ✅ NEU
+const SettingsPage = lazy(() => import('./pages/SettingsPage')); // ✅ SETTINGS
 
 export default function AppRoutes({ isLoggedIn, isAdmin, anglerName, weatherData, setWeatherData }) {
   const isRecoveryLink = window.location.hash.includes('type=recovery');
@@ -42,11 +43,23 @@ export default function AppRoutes({ isLoggedIn, isAdmin, anglerName, weatherData
           <Route path="/calendar" element={<><Navbar name={anglerName} isAdmin={isAdmin} /><Calendar /></>} />
           <Route path="/map" element={<><Navbar name={anglerName} isAdmin={isAdmin} /><MapView /></>} />
           <Route path="/forecast" element={<><Navbar name={anglerName} isAdmin={isAdmin} /><Forecast weatherData={weatherData} /></>} />
+
           <Route path="/admin" element={
             isAdmin
               ? <><Navbar name={anglerName} isAdmin={isAdmin} /><AdminOverview /></>
               : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>
           } />
+
+          <Route path="/spots" element={
+            isAdmin
+              ? <><Navbar name={anglerName} isAdmin={isAdmin} /><SpotAdmin /></>
+              : <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Nur für Admins</div>
+          } />
+
+          <Route path="/settings" element={
+            <><Navbar name={anglerName} isAdmin={isAdmin} /><SettingsPage /></>
+          } />
+
           <Route path="*" element={<Navigate to="/" />} />
         </>
       ) : (

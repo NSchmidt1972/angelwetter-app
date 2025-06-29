@@ -4,10 +4,10 @@ import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 
 export default function Navbar({ name, isAdmin }) {
-  const { user, setUser } = useAuth(); // ✅ setUser hinzugefügt
+  const { user, setUser } = useAuth();
   const [open, setOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(false);
-  const [showLogout, setShowLogout] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -22,7 +22,7 @@ export default function Navbar({ name, isAdmin }) {
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowLogout(false);
+        setShowMenu(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -40,7 +40,7 @@ export default function Navbar({ name, isAdmin }) {
     await supabase.auth.signOut();
     localStorage.removeItem('anglerName');
     localStorage.removeItem('shortAnglerName');
-    setUser(null); // ✅ Reaktiv: App erkennt Logout direkt
+    setUser(null);
     navigate('/');
   };
 
@@ -59,7 +59,9 @@ export default function Navbar({ name, isAdmin }) {
         { label: 'Karte', path: '/map' }
       ]
     },
-    ...(isAdmin ? [{ label: '🔧 Admin', path: '/admin' }] : [])
+    ...(isAdmin ? [
+      { label: '🔧 Admin', path: '/admin' },
+    ] : [])
   ];
 
   if (!user) return null;
@@ -137,43 +139,31 @@ export default function Navbar({ name, isAdmin }) {
           </button>
 
           <button
-            onClick={() => setShowLogout(prev => !prev)}
+            onClick={() => setShowMenu(prev => !prev)}
             className="px-3 py-2 rounded hover:underline"
           >
             👤 {displayName}
           </button>
 
-          {showLogout && (
-            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base">
-              <button
-                onClick={handleLogout}
-                className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
-              >
-                Abmelden
-              </button>
+          {showMenu && (
+  <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base">
+    <Link
+      to="/settings"
+      className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
+      onClick={() => setShowMenu(false)}
+    >
+      ⚙️ Einstellungen
+    </Link>
+   
+    <button
+      onClick={handleLogout}
+      className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
+    >
+      Abmelden
+    </button>
+  </div>
+)}
 
-              {['Nicol Schmidt', 'Laura Rittlinger'].includes(name) && (
-                <div className="border-t border-gray-300 dark:border-gray-600 mt-1 pt-1 px-4">
-                  <button
-                    onClick={() => {
-                      const newValue = localStorage.getItem('dataFilter') === 'recent' ? 'all' : 'recent';
-                      localStorage.setItem('dataFilter', newValue);
-                      const message = newValue === 'recent'
-                        ? 'Nur Daten ab 01.06.2025 werden verwendet.'
-                        : 'Alle Daten werden verwendet.';
-                      alert(message);
-                      window.location.reload();
-                    }}
-                    className="block w-full text-left py-2 text-sm text-blue-600 hover:underline dark:text-blue-300"
-                  >
-                    {localStorage.getItem('dataFilter') === 'recent'
-                      ? '❤️ Love On'
-                      : '📅 ab 01.06.25'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </header>
