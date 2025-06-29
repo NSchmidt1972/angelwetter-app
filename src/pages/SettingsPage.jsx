@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { createCatchPDF } from '@/utils/pdfExporter';
 
 export default function SettingsPage() {
   const [dataFilter, setDataFilter] = useState('recent');
@@ -23,7 +23,7 @@ export default function SettingsPage() {
     window.location.reload();
   };
 
-  const isSpecialUser = ['Nicol Schmidt', 'Laura Rittlinger'].includes(anglerName);
+  const isSpecialUser = anglerName === 'Nicol Schmidt';
 
   const exportCatches = async () => {
     const { data, error } = await supabase
@@ -53,12 +53,11 @@ export default function SettingsPage() {
   };
 
   const exportCatchesAsPDF = async () => {
-    const year = new Date().getFullYear();
-
     const { data, error } = await supabase
       .from('fishes')
-      .select('fish')
-      .eq('angler', anglerName);
+      .select('fish, size, weight, timestamp')
+      .eq('angler', anglerName)
+      .eq('taken', true);
 
     if (error) {
       alert('Fehler beim Laden der Fänge');
@@ -66,45 +65,12 @@ export default function SettingsPage() {
       return;
     }
 
-    if (!data || data.length === 0) {
-      alert('Keine Fänge gefunden.');
-      return;
+    try {
+      const pdfBytes = await createCatchPDF(anglerName, data);
+      downloadFile(pdfBytes, `entnahmeliste_${new Date().getFullYear()}.pdf`, 'application/pdf');
+    } catch (err) {
+      alert(err.message);
     }
-
-    const fishCountMap = {};
-    data.forEach(row => {
-      const fish = row.fish || 'Unbekannt';
-      fishCountMap[fish] = (fishCountMap[fish] || 0) + 1;
-    });
-
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]);
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const margin = 50;
-    let y = 842 - margin;
-
-    page.drawText(`Fangübersicht`, { x: margin, y, size: 20, font, color: rgb(0, 0.2, 0.6) });
-    y -= 30;
-    page.drawText(`Angler: ${anglerName}`, { x: margin, y, size: 14, font });
-    y -= 20;
-    page.drawText(`Jahr: ${year}`, { x: margin, y, size: 14, font });
-
-    y -= 40;
-    page.drawText(`Fänge:`, { x: margin, y, size: 16, font });
-    y -= 20;
-
-    Object.entries(fishCountMap).forEach(([fish, count]) => {
-      page.drawText(`- ${count} x ${fish}`, { x: margin + 20, y, size: 12, font });
-      y -= 16;
-    });
-
-    y -= 40;
-    page.drawText(`Datum: __________________________`, { x: margin, y, size: 12, font });
-    y -= 20;
-    page.drawText(`Unterschrift: _____________________`, { x: margin, y, size: 12, font });
-
-    const pdfBytes = await pdfDoc.save();
-    downloadFile(pdfBytes, `fänge_${year}.pdf`, 'application/pdf');
   };
 
   const downloadFile = (content, fileName, mimeType) => {
