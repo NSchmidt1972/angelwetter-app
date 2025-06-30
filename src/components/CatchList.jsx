@@ -173,6 +173,7 @@ export default function CatchList({ anglerName }) {
 
   return (
   <div className="p-6 bg-white dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
+    <div className="space-y-6 max-w-3xl mx-auto">
     <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-400">🎣 Fangliste</h2>
 
     <div className="flex justify-between items-center mb-4 text-sm text-gray-600 dark:text-gray-400">
@@ -289,6 +290,7 @@ export default function CatchList({ anglerName }) {
         <img src={modalPhoto} alt="Fangfoto groß" className="max-w-[90vw] max-h-[80vh] rounded-md shadow-lg cursor-pointer" />
       </div>
     )}
+     </div>
   </div>
 );
 }

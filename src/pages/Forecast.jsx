@@ -46,6 +46,7 @@ function isWeatherSimilar(w, current, timestamp) {
 export default function Forecast() {
   const [fishes, setFishes] = useState([]);
   const [weatherData, setWeatherData] = useState(null);
+  const [aiPrediction, setAiPrediction] = useState(null);
 
   useEffect(() => {
     const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
@@ -79,6 +80,28 @@ export default function Forecast() {
 
       setWeatherData(weather);
 
+      // KI-Server Abfrage
+     try {
+  const aiResponse = await fetch("https://ai.asv-rotauge.de/predict", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      temp: weather.temp,
+      pressure: weather.pressure,
+      humidity: weather.humidity,
+      wind: weather.wind,
+      wind_deg: weather.wind_deg,
+      moon_phase: weather.moon_phase
+    })
+  });
+  const aiResult = await aiResponse.json();
+  console.log("KI-Server Antwort:", aiResult);
+  setAiPrediction(aiResult);
+} catch (err) {
+  console.error("Fehler bei der KI-Server-Anfrage:", err);
+}
+
+      // Regelbasierte Fänge laden
       const { data: catchData, error: catchError } = await supabase
         .from('fishes')
         .select('*');
@@ -92,16 +115,14 @@ export default function Forecast() {
       const istVertrauter = vertraute.includes(anglerName);
 
       const filteredFishes = catchData.filter(f => {
-  if (f.is_marilou) return false; // 🐣 Marilous Fänge aus Prognose ausschließen
-
-  const fangDatum = new Date(f.timestamp);
-  if (istVertrauter) {
-    if (filterSetting === 'all') return true;
-    return fangDatum >= PUBLIC_FROM;
-  }
-  return fangDatum >= PUBLIC_FROM;
-});
-
+        if (f.is_marilou) return false; 
+        const fangDatum = new Date(f.timestamp);
+        if (istVertrauter) {
+          if (filterSetting === 'all') return true;
+          return fangDatum >= PUBLIC_FROM;
+        }
+        return fangDatum >= PUBLIC_FROM;
+      });
 
       setFishes(filteredFishes);
     };
@@ -156,8 +177,20 @@ export default function Forecast() {
                 </p>
               ) : (
                 <p className="mt-2 text-xl text-green-700 dark:text-green-400 font-bold">
-                  🎯 Prognose: {chance}% Fangwahrscheinlichkeit
+                  🎯 Prognose (Regel): {chance}% Fangwahrscheinlichkeit
                 </p>
+              )}
+
+              {aiPrediction && (
+                <div className="mt-4 bg-gray-100 dark:bg-gray-700 p-4 rounded-lg shadow-inner">
+                  <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">🤖 KI-Prognose</h3>
+                  <p className="text-xl text-blue-700 dark:text-blue-300 font-bold">
+                    🎯 Fangwahrscheinlichkeit laut KI: {aiPrediction.probability}%
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    Vorhersage: {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidertag wahrscheinlich"}
+                  </p>
+                </div>
               )}
 
               {similar.length > 0 && (
