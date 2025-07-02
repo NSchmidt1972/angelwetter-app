@@ -172,125 +172,131 @@ export default function CatchList({ anglerName }) {
   };
 
   return (
-  <div className="p-6 bg-white dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
-    <div className="space-y-6 max-w-3xl mx-auto">
-    <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-400">🎣 Fangliste</h2>
+    <div className="p-6 bg-white dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
+      <div className="space-y-6 max-w-3xl mx-auto">
+        <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-400">🎣 Fangliste</h2>
 
-    <div className="flex justify-between items-center mb-4 text-sm text-gray-600 dark:text-gray-400">
-      <div>🎯 {onlyMine ? 'Meine' : 'Gesamt'}: {catches.length} {catches.length === 1 ? 'Fang' : 'Fänge'}</div>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} className="accent-blue-600" />
-        Nur meine
-      </label>
-    </div>
+        <div className="flex justify-between items-center mb-4 text-sm text-gray-600 dark:text-gray-400">
+          <div>🎯 {onlyMine ? 'Meine' : 'Gesamt'}: {catches.length} {catches.length === 1 ? 'Fang' : 'Fänge'}</div>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} className="accent-blue-600" />
+            Nur meine
+          </label>
+        </div>
 
-    {catches.length === 0 ? (
-      <p className="text-center text-gray-500 dark:text-gray-400 mt-6">Keine Fänge gespeichert.</p>
-    ) : (
-      <ul className="space-y-6">
-        {catches.map((entry, index) => {
-          const date = new Date(entry.timestamp);
-          const dateStr = date.toLocaleDateString('de-DE');
-          const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        {catches.length === 0 ? (
+          <p className="text-center text-gray-500 dark:text-gray-400 mt-6">Keine Fänge gespeichert.</p>
+        ) : (
+          <ul className="space-y-6">
+            {catches.map((entry, index) => {
+              const date = new Date(entry.timestamp);
+              const dateStr = date.toLocaleDateString('de-DE');
+              const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
-          return (
-            <li key={entry.id} className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md">
-              <div className="flex justify-between items-center mb-1">
-                <p className="text-sm text-gray-500 dark:text-gray-400">{dateStr} – {timeStr}</p>
-                {entry.angler === anglerName && (
-                  <div className="relative" ref={el => menuRefs.current[entry.id] = el}>
-                    <button onClick={() => setOpenMenuId(openMenuId === entry.id ? null : entry.id)} className="text-xl hover:text-blue-600">⋮</button>
-                    {openMenuId === entry.id && (
-                      <div className="absolute right-0 mt-2 w-36 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded shadow z-10">
-                        <button onClick={() => { setEditingEntry(entry); setEditFish(entry.fish); setEditSize(entry.size); setEditNote(entry.note || ''); }} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Bearbeiten</button>
-                        <button onClick={() => { handleDelete(entry.id); setOpenMenuId(null); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-600">Löschen</button>
+              return (
+                <li key={entry.id} className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md">
+                  <div className="flex justify-between items-center mb-1">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{dateStr} – {timeStr}</p>
+                    {entry.angler === anglerName && (
+                      <div className="relative" ref={el => menuRefs.current[entry.id] = el}>
+                        <button onClick={() => setOpenMenuId(openMenuId === entry.id ? null : entry.id)} className="text-xl hover:text-blue-600">⋮</button>
+                        {openMenuId === entry.id && (
+                          <div className="absolute right-0 mt-2 w-36 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded shadow z-10">
+                            <button onClick={() => { setEditingEntry(entry); setEditFish(entry.fish); setEditSize(entry.size); setEditNote(entry.note || ''); }} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Bearbeiten</button>
+                            <button onClick={() => { handleDelete(entry.id); setOpenMenuId(null); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-600">Löschen</button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-semibold">{formattedNames[index]}</span>
-              </div>
-
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-blue-600 font-medium">{entry.fish}</span>
-                <span>{`${entry.size} cm`}</span>
-                {entry.photo_url && (
-                  <button onClick={() => setModalPhoto(entry.photo_url)} className="ml-auto">
-                    <img src={entry.photo_url} alt="Fangfoto" className="w-16 h-16 rounded-full object-cover shadow" />
-                  </button>
-                )}
-              </div>
-
-              {entry.note && <p className="italic text-sm text-gray-600 dark:text-gray-300 mb-2">{entry.note}</p>}
-
-              {entry.weather && (
-                <div className="text-sm text-gray-700 dark:text-gray-300 mt-2">
-                  <div className="flex items-center gap-2">
-                    <img src={`https://openweathermap.org/img/wn/${entry.weather.icon}@2x.png`} alt={entry.weather.description} className="w-12 h-12" />
-                    <div>
-                      <p>{`${entry.weather.temp} °C, ${entry.weather.description}`}</p>
-                      <p>💨 {`${entry.weather.wind} m/s`} aus {windDirection(entry.weather.wind_deg)} ({entry.weather.wind_deg}°)</p>
-                      <p>💦 {entry.weather.humidity}% • 🧪 {entry.weather.pressure} hPa</p>
-                      <p>{getMoonDescription(entry.weather.moon_phase)}</p>
-                    </div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold">{formattedNames[index]}</span>
                   </div>
+
+                 <div className="flex items-center gap-2 mb-2">
+  <span className="text-blue-600 font-medium">{entry.fish}</span>
+  <span>{`${entry.size} cm`}</span>
+  {entry.fish?.toLowerCase() === 'karpfen' && entry.weight != null && (
+    <span className="text-sm italic">({entry.weight} kg)</span>
+  )}
+  {entry.photo_url && (
+    <button onClick={() => setModalPhoto(entry.photo_url)} className="ml-auto">
+      <img src={entry.photo_url} alt="Fangfoto" className="w-16 h-16 rounded-full object-cover shadow" />
+    </button>
+  )}
+</div>
+
+
+
+
+                  {entry.note && <p className="italic text-sm text-gray-600 dark:text-gray-300 mb-2">{entry.note}</p>}
+
+                  {entry.weather && (
+                    <div className="text-sm text-gray-700 dark:text-gray-300 mt-2">
+                      <div className="flex items-center gap-2">
+                        <img src={`https://openweathermap.org/img/wn/${entry.weather.icon}@2x.png`} alt={entry.weather.description} className="w-12 h-12" />
+                        <div>
+                          <p>{`${entry.weather.temp} °C, ${entry.weather.description}`}</p>
+                          <p>💨 {`${entry.weather.wind} m/s`} aus {windDirection(entry.weather.wind_deg)} ({entry.weather.wind_deg}°)</p>
+                          <p>💦 {entry.weather.humidity}% • 🧪 {entry.weather.pressure} hPa</p>
+                          <p>{getMoonDescription(entry.weather.moon_phase)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {entry.angler === anglerName && (
+                    <div className="flex justify-end mt-3">
+                      <button onClick={() => handleShare(entry)} className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition">📤 Teilen</button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {/* Bearbeitungsdialog */}
+        {editingEntry && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md">
+              <h2 className="text-xl font-bold mb-4 text-blue-700 dark:text-blue-400">🎣 Fang bearbeiten</h2>
+              <div className="space-y-4">
+                <select value={editFish} onChange={e => setEditFish(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                  <option value="">Fischart auswählen</option>
+                  {FISH_TYPES.map((type) => (<option key={type} value={type}>{type}</option>))}
+                </select>
+
+                <input type="number" placeholder="Größe (cm)" value={editSize} onChange={e => setEditSize(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+
+                <textarea placeholder="Kommentar (optional)" value={editNote} onChange={e => setEditNote(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Neues Foto hochladen (optional):</label>
+                  <input type="file" accept="image/*" onChange={handlePhotoChange} className="text-gray-900 dark:text-gray-100" />
+                  {previewUrl && (
+                    <div className="mt-3">
+                      <img src={previewUrl} alt="Vorschau" className="rounded shadow max-h-48 mx-auto" />
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {entry.angler === anglerName && (
-                <div className="flex justify-end mt-3">
-                  <button onClick={() => handleShare(entry)} className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition">📤 Teilen</button>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => { setEditingEntry(null); setPreviewUrl(null); }} className="px-4 py-2 border border-gray-400 dark:border-gray-500 rounded hover:bg-gray-100 dark:hover:bg-gray-700">Abbrechen</button>
+                  <button onClick={handleUpdate} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded">Speichern</button>
                 </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    )}
-
-    {/* Bearbeitungsdialog */}
-    {editingEntry && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md">
-          <h2 className="text-xl font-bold mb-4 text-blue-700 dark:text-blue-400">🎣 Fang bearbeiten</h2>
-          <div className="space-y-4">
-            <select value={editFish} onChange={e => setEditFish(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-              <option value="">Fischart auswählen</option>
-              {FISH_TYPES.map((type) => (<option key={type} value={type}>{type}</option>))}
-            </select>
-
-            <input type="number" placeholder="Größe (cm)" value={editSize} onChange={e => setEditSize(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-
-            <textarea placeholder="Kommentar (optional)" value={editNote} onChange={e => setEditNote(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Neues Foto hochladen (optional):</label>
-              <input type="file" accept="image/*" onChange={handlePhotoChange} className="text-gray-900 dark:text-gray-100" />
-              {previewUrl && (
-                <div className="mt-3">
-                  <img src={previewUrl} alt="Vorschau" className="rounded shadow max-h-48 mx-auto" />
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <button onClick={() => { setEditingEntry(null); setPreviewUrl(null); }} className="px-4 py-2 border border-gray-400 dark:border-gray-500 rounded hover:bg-gray-100 dark:hover:bg-gray-700">Abbrechen</button>
-              <button onClick={handleUpdate} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded">Speichern</button>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-    )}
+        )}
 
-    {modalPhoto && (
-      <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50" onClick={() => setModalPhoto(null)}>
-        <img src={modalPhoto} alt="Fangfoto groß" className="max-w-[90vw] max-h-[80vh] rounded-md shadow-lg cursor-pointer" />
+        {modalPhoto && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50" onClick={() => setModalPhoto(null)}>
+            <img src={modalPhoto} alt="Fangfoto groß" className="max-w-[90vw] max-h-[80vh] rounded-md shadow-lg cursor-pointer" />
+          </div>
+        )}
       </div>
-    )}
-     </div>
-  </div>
-);
+    </div>
+  );
 }
