@@ -92,9 +92,50 @@ export default function Forecast() {
               <p className="text-xl text-blue-700 dark:text-blue-300 font-bold">
                 🎯 Fangwahrscheinlichkeit: {aiPrediction.probability}%
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
                 {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidertag wahrscheinlich"}
               </p>
+
+
+    <div className="text-sm text-gray-700 dark:text-gray-300">
+  <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
+  <div className="space-y-2">
+    <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+      <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
+      <div className="ml-2">
+        {(() => {
+          const val = aiPrediction.trend?.pressure_trend_5d;
+          if (val == null) return 'n/a';
+          const rounded = val.toFixed(2);
+          if (val > 1) return `steigend (+${rounded} hPa)`;
+          if (val < -1) return `fallend (${rounded} hPa)`;
+          return `stabil (${rounded} hPa)`;
+        })()}
+      </div>
+    </div>
+
+    <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+      <div className="font-medium">Temp-Mittel (3 Tage):</div>
+      <div className="ml-2">
+        {aiPrediction.trend?.temp_mean_3d != null 
+          ? `${aiPrediction.trend.temp_mean_3d.toFixed(2)} °C`
+          : 'n/a'}
+      </div>
+    </div>
+
+    <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+      <div className="font-medium">Temp-Volatilität (3 Tage):</div>
+      <div className="ml-2">
+        {aiPrediction.trend?.temp_volatility_3d != null 
+          ? `${aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C`
+          : 'n/a'}
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
             </div>
           </div>
         ) : (
