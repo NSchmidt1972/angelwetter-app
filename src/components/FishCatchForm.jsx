@@ -224,16 +224,34 @@ export default function FishCatchForm({ setWeatherData }) {
           console.error('Fehler bei der Push-Benachrichtigung:', pushError);
         }
 
+        const FISH_ARTICLES = {
+          Aal: 'einen',
+          Barsch: 'einen',
+          Brasse: 'eine',
+          Hecht: 'einen',
+          Karpfen: 'einen',
+          Rotauge: 'ein',
+          Rotfeder: 'eine',
+          Schleie: 'eine',
+          Wels: 'einen',
+          Zander: 'einen'
+        };
+
+        const article = FISH_ARTICLES[pendingEntry.fish] || '';
+        const fishText = article ? `${article} ${pendingEntry.fish}` : pendingEntry.fish;
+
         if (window?.OneSignal) {
           window.OneSignal.push(() => {
             window.OneSignal.sendSelfNotification(
               `🎣 Neuer Fang: ${pendingEntry.fish} (${pendingEntry.size} cm)`,
-              `${anglerName} hat einen neuen Fisch gefangen.`,
+              `${anglerName} hat ${fishText} gefangen.`,
               null,
               { data: { fish: pendingEntry.fish, size: pendingEntry.size } }
             );
           });
         }
+
+
       }
 
       navigate('/catches');
