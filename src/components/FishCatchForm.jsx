@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient';
 import { fetchWeather } from '../api/weather';
 import { useNavigate } from 'react-router-dom';
 import heic2any from "heic2any";
+import { useRef } from 'react';
+
 
 const FISH_TYPES = [
   'Aal', 'Barsch', 'Brasse', 'Güster', 'Hecht', 'Karausche', 'Karpfen',
@@ -24,6 +26,7 @@ export default function FishCatchForm({ setWeatherData }) {
   const [showTakenDialog, setShowTakenDialog] = useState(false);
   const [pendingEntry, setPendingEntry] = useState(null);
   const navigate = useNavigate();
+  const fileInputRef = useRef();
 
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
   const isMarilou = anglerName?.trim().toLowerCase() === 'marilou';
@@ -382,7 +385,25 @@ export default function FishCatchForm({ setWeatherData }) {
 
         <textarea placeholder="Kommentar (optional)" value={note} onChange={e => setNote(e.target.value)} rows={4} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
-        <input type="file" accept="image/*" onChange={handleFileChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none" />
+
+    <div className="space-y-2">
+  <button
+    type="button"
+    onClick={() => fileInputRef.current.click()}
+    className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded transition"
+  >
+    📷 Foto auswählen / aufnehmen
+  </button>
+  <input
+    ref={fileInputRef}
+    type="file"
+    accept="image/*"
+    onChange={handleFileChange}
+    style={{ display: 'none' }}
+  />
+</div>
+
+
 
         {previewUrl && (
           <div className="mt-4 text-center">
