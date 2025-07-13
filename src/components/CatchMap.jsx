@@ -31,7 +31,6 @@ const pinkIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-
 const FERKENSBRUCH_CENTER = [51.3105, 6.2565];
 const FERKENSBRUCH_ZOOM = 16.3;
 
@@ -48,6 +47,7 @@ function FitBounds({ bounds }) {
 export default function CatchMap() {
   const [entries, setEntries] = useState([]);
   const [spots, setSpots] = useState([]);
+  const [onlyMine, setOnlyMine] = useState(false);
   const mapRef = useRef();
 
   const anglerName = (localStorage.getItem('anglerName') || '').trim().toLowerCase();
@@ -120,8 +120,30 @@ export default function CatchMap() {
     }
   };
 
+  const filteredEntries = entries.filter((e) => {
+    if (e.blank || (e.is_marilou && anglerName !== 'marilou')) return false;
+
+    const istEigenerFang = e.angler?.trim().toLowerCase() === anglerName;
+    const ortIstFerkensbruch = !e.location_name || e.location_name.toLowerCase().includes('ferkensbruch');
+
+    return onlyMine ? istEigenerFang : (istEigenerFang || ortIstFerkensbruch);
+  });
+
   return (
     <div className="h-[80vh] w-full relative z-0 rounded-xl overflow-hidden shadow-md">
+      <div className="flex justify-between items-center px-4 pt-4">
+       
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={onlyMine}
+            onChange={(e) => setOnlyMine(e.target.checked)}
+            className="accent-blue-600"
+          />
+          Nur meine
+        </label>
+      </div>
+
       <MapContainer
         center={FERKENSBRUCH_CENTER}
         zoom={FERKENSBRUCH_ZOOM}
@@ -136,7 +158,6 @@ export default function CatchMap() {
 
         {bounds.length > 0 && <FitBounds bounds={bounds} />}
 
-        {/* ⚪️ Angelplätze – grau dargestellt, im Hintergrund */}
         {spots.map((spot) => (
           <Marker
             key={`spot-${spot.id}`}
@@ -158,33 +179,30 @@ export default function CatchMap() {
           </Marker>
         ))}
 
-        {/* 🎣 Nur echte Fänge, keine Schneidertage */}
         <MarkerClusterGroup>
-          {entries.filter((e) => !e.blank && (!e.is_marilou || anglerName === 'marilou'))
+          {filteredEntries.map((e) => {
+            const isOwnCatch = isAdmin || e.angler?.trim().toLowerCase() === anglerName;
 
-            .map((e) => {
-              const isOwnCatch = isAdmin || e.angler?.trim().toLowerCase() === anglerName;
-
-              return (
-                <Marker
-                  key={e.id}
-                  position={[e.lat, e.lon]}
-                  icon={e.is_marilou ? pinkIcon : blueIcon}
-                  draggable={isOwnCatch}
-                  eventHandlers={
-                    isOwnCatch ? { dragend: (evt) => handleFishMove(evt, e) } : {}
-                  }
-                >
-                  <Popup>
-                    <div className="text-sm">
-                      <strong>{e.angler}</strong><br />
-                      🐟 {e.fish} ({e.size} cm)<br />
-                      {new Date(e.timestamp).toLocaleString('de-DE')}
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
+            return (
+              <Marker
+                key={e.id}
+                position={[e.lat, e.lon]}
+                icon={e.is_marilou ? pinkIcon : blueIcon}
+                draggable={isOwnCatch}
+                eventHandlers={
+                  isOwnCatch ? { dragend: (evt) => handleFishMove(evt, e) } : {}
+                }
+              >
+                <Popup>
+                  <div className="text-sm">
+                    <strong>{e.angler}</strong><br />
+                    🐟 {e.fish} ({e.size} cm)<br />
+                    {new Date(e.timestamp).toLocaleString('de-DE')}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MarkerClusterGroup>
       </MapContainer>
     </div>

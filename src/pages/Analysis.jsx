@@ -28,6 +28,7 @@ export default function Analysis({ anglerName }) {
   const [fishes, setFishes] = useState([]);
   const [weatherNow, setWeatherNow] = useState(null);
   const [selectedYear, setSelectedYear] = useState(null);
+  const [onlyMine, setOnlyMine] = useState(false);
   const currentMonthIndex = new Date().getMonth();
   const monthRefs = useRef([]);
 
@@ -40,34 +41,29 @@ export default function Analysis({ anglerName }) {
       }
 
       const PUBLIC_FROM = new Date('2025-06-01');
-const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
-const istVertrauter = vertraute.includes(anglerName);
-const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
+      const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
+      const istVertrauter = vertraute.includes(anglerName);
+      const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
 
-const filtered = data.filter(f => {
-  // ❌ Marilous geheime Fänge komplett aus Analyse ausschließen
-  if (f.is_marilou) return false;
+      const filtered = data.filter(f => {
+        if (f.is_marilou) return false;
 
-  const fangDatum = new Date(f.timestamp);
+        const fangDatum = new Date(f.timestamp);
+        if (!istVertrauter && fangDatum < PUBLIC_FROM) return false;
+        if (istVertrauter && filterSetting !== 'all' && fangDatum < PUBLIC_FROM) return false;
 
-  if (istVertrauter) {
-    if (filterSetting === 'all') return true;
-    return fangDatum >= PUBLIC_FROM;
-  }
+        const istEigenerFang = f.angler === anglerName;
+        const ortIstFerkensbruch = !f.location_name || f.location_name.toLowerCase().includes('ferkensbruch');
 
-  return fangDatum >= PUBLIC_FROM;
-});
-
-
-
-      console.log("Angemeldet als:", anglerName);
-      console.log("Sichtbare Fänge:", filtered.length, "von", data.length);
+        return onlyMine ? istEigenerFang : (istEigenerFang || ortIstFerkensbruch);
+      });
 
       setFishes(filtered);
     }
+
     fetchWeather().then(setWeatherNow);
     loadData();
-  }, [anglerName]);
+  }, [anglerName, onlyMine]);
 
   const totalFishes = fishes.filter(f => f.fish && f.fish.trim() !== '').length;
 
@@ -230,9 +226,8 @@ const filtered = data.filter(f => {
           return (
             <li
               key={label}
-              className={`flex justify-between items-center px-4 py-2 text-sm ${
-                activeKey === label ? 'bg-green-100 dark:bg-green-900 font-bold' : ''
-              }`}
+              className={`flex justify-between items-center px-4 py-2 text-sm ${activeKey === label ? 'bg-green-100 dark:bg-green-900 font-bold' : ''
+                }`}
             >
               <div className="flex items-center gap-2">
                 {iconUrl && (
@@ -251,97 +246,106 @@ const filtered = data.filter(f => {
   );
 
   return (
-  <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
-    <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-300">📊 Statistik & Analyse</h2>
+    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+      <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-300">📊 Statistik & Analyse</h2>
 
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700 dark:text-gray-300 max-w-xl mx-auto mb-8 bg-white dark:bg-gray-800 rounded-xl p-4 shadow">
-      <div className="flex items-center gap-2">
-        <span className="text-xl">🐟</span>
-        <span>Gesamtanzahl Fische:</span>
-        <span className="ml-auto font-bold text-right">{totalFishes}</span>
+      <div className="flex justify-center items-center gap-4 mb-4 text-sm text-gray-600 dark:text-gray-300">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={onlyMine} onChange={() => setOnlyMine(prev => !prev)} className="accent-blue-600" />
+          Nur meine Fänge
+        </label>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xl">📅</span>
-        <span>Fangtage:</span>
-        <span className="ml-auto font-bold text-right">{catchDays}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xl">❌</span>
-        <span>Schneidertage:</span>
-        <span className="ml-auto font-bold text-right">{blankDays}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xl">📉</span>
-        <span>Schneidertage-Anteil:</span>
-        <span className="ml-auto font-bold text-right">{blankRatio}%</span>
-      </div>
-    </div>
 
-    <div className="flex flex-wrap gap-2 mb-6 justify-center">
-      {sortedYears.map(year => (
-        <button
-          key={year}
-          onClick={() => setSelectedYear(year)}
-          className={`px-4 py-1 rounded-full border transition ${
-            year === selectedYear
-              ? 'bg-blue-600 text-white font-semibold'
-              : 'bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border-blue-400 hover:bg-blue-100 dark:hover:bg-gray-700'
-          }`}
-        >
-          {year}
-        </button>
-      ))}
-    </div>
-
-    {selectedYear && (
-      <div className="overflow-x-auto">
-        <div className="flex overflow-x-auto space-x-4 pb-2">
-          {Object.entries(yearMonthStats[selectedYear] || {})
-            .sort(([a], [b]) => a - b)
-            .map(([monthIndex, types]) => {
-              const i = parseInt(monthIndex);
-              return (
-                <div
-                  key={monthIndex}
-                  ref={(el) => {
-                    if (i === currentMonthIndex) monthRefs.current[i] = el;
-                  }}
-                  className={`min-w-[200px] rounded-lg p-4 text-center flex-shrink-0 shadow transition ${
-                    i === currentMonthIndex
-                      ? 'border-2 border-blue-500 bg-white dark:bg-gray-800'
-                      : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                  }`}
-                >
-                  <h3 className="text-base font-bold mb-2 text-gray-800 dark:text-gray-100">{monthNames[i]}</h3>
-                  <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {Object.entries(types)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([fish, count]) => (
-                        <li key={fish} className="flex justify-between px-2 py-1 text-sm">
-                          <span>{fish}</span>
-                          <span className="font-mono text-gray-700 dark:text-gray-300">{count}</span>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              );
-            })}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700 dark:text-gray-300 max-w-xl mx-auto mb-8 bg-white dark:bg-gray-800 rounded-xl p-4 shadow">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🐟</span>
+          <span>Gesamtanzahl Fische:</span>
+          <span className="ml-auto font-bold text-right">{totalFishes}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xl">📅</span>
+          <span>Fangtage:</span>
+          <span className="ml-auto font-bold text-right">{catchDays}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xl">❌</span>
+          <span>Schneidertage:</span>
+          <span className="ml-auto font-bold text-right">{blankDays}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xl">📉</span>
+          <span>Schneidertage-Anteil:</span>
+          <span className="ml-auto font-bold text-right">{blankRatio}%</span>
         </div>
       </div>
-    )}
 
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-10">
-      {renderStatList("🌡 Temperaturbereiche", tempStats, activeKeys.temp)}
-      {renderStatList("🧪 Luftdruck", pressureStats, activeKeys.pressure)}
-      {renderStatList("💨 Windstärken", windStats, activeKeys.wind)}
-      {renderStatList("🧭 Windrichtungen", windDirStats, activeKeys.windDir)}
-      {renderStatList("💦 Luftfeuchtigkeit", humidityStats, activeKeys.humidity)}
-      {renderStatList("🌦 Wetterbeschreibung", descStats, activeKeys.description)}
-      {renderStatList("🌙 Mondphasen", moonStats, activeKeys.moon)}
-      {renderStatList("⏰ Fangzeiten", hourStats, activeKeys.time)}
+      <div className="flex flex-wrap gap-2 mb-6 justify-center">
+        {sortedYears.map(year => (
+          <button
+            key={year}
+            onClick={() => setSelectedYear(year)}
+            className={`px-4 py-1 rounded-full border transition ${year === selectedYear
+                ? 'bg-blue-600 text-white font-semibold'
+                : 'bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border-blue-400 hover:bg-blue-100 dark:hover:bg-gray-700'
+              }`}
+          >
+            {year}
+          </button>
+        ))}
+      </div>
+
+      {selectedYear && (
+        <div className="overflow-x-auto">
+          <div className="flex overflow-x-auto space-x-4 pb-2">
+            {Object.entries(yearMonthStats[selectedYear] || {})
+              .sort(([a], [b]) => a - b)
+              .map(([monthIndex, types]) => {
+                const i = parseInt(monthIndex);
+                return (
+                  <div
+                    key={monthIndex}
+                    ref={(el) => {
+                      if (i === currentMonthIndex) monthRefs.current[i] = el;
+                    }}
+                    className={`min-w-[200px] rounded-lg p-4 text-center flex-shrink-0 shadow transition ${i === currentMonthIndex
+                        ? 'border-2 border-blue-500 bg-white dark:bg-gray-800'
+                        : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                      }`}
+                  >
+                    <h3 className="text-base font-bold mb-2 text-gray-800 dark:text-gray-100">{monthNames[i]}</h3>
+                    <p className="text-xs italic text-gray-500 dark:text-gray-400 mb-2">
+                      (gesamt: {Object.values(types).reduce((sum, c) => sum + c, 0)})
+                    </p>
+
+                    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {Object.entries(types)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([fish, count]) => (
+                          <li key={fish} className="flex justify-between px-2 py-1 text-sm">
+                            <span>{fish}</span>
+                            <span className="font-mono text-gray-700 dark:text-gray-300">{count}</span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-10">
+        {renderStatList("🌡 Temperaturbereiche", tempStats, activeKeys.temp)}
+        {renderStatList("🧪 Luftdruck", pressureStats, activeKeys.pressure)}
+        {renderStatList("💨 Windstärken", windStats, activeKeys.wind)}
+        {renderStatList("🧭 Windrichtungen", windDirStats, activeKeys.windDir)}
+        {renderStatList("💦 Luftfeuchtigkeit", humidityStats, activeKeys.humidity)}
+        {renderStatList("🌦 Wetterbeschreibung", descStats, activeKeys.description)}
+        {renderStatList("🌙 Mondphasen", moonStats, activeKeys.moon)}
+        {renderStatList("⏰ Fangzeiten", hourStats, activeKeys.time)}
+      </div>
     </div>
-  </div>
-);
+  );
 
 }
 

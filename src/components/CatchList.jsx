@@ -35,64 +35,46 @@ export default function CatchList({ anglerName }) {
 
   useEffect(() => {
     async function loadFishes() {
-      let query = supabase.from('fishes').select('*').eq('blank', false).order('timestamp', { ascending: false });
-      if (onlyMine && anglerName) {
-        query = query.eq('angler', anglerName);
-      }
-      const { data: fishData, error: fishError } = await query;
+      const { data: fishData, error: fishError } = await supabase
+        .from('fishes')
+        .select('*')
+        .eq('blank', false)
+        .order('timestamp', { ascending: false });
+
       if (fishError) {
         console.error('Fehler beim Laden der Fänge:', fishError);
         return;
       }
-      const PUBLIC_FROM = new Date('2025-06-01');
-      const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
-      const istVertrauter = vertraute.includes(anglerName);
-      const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
+
+      const nameLower = anglerName?.toLowerCase().trim();
+
       const filteredFishes = fishData.filter(f => {
-        const fangDatum = new Date(f.timestamp);
-        if (istVertrauter) {
-          if (filterSetting === 'all') return true;
-          return fangDatum >= PUBLIC_FROM;
-        }
-        return fangDatum >= PUBLIC_FROM;
+        const isOwn = f.angler?.toLowerCase().trim() === nameLower;
+        const isAtFerkensbruch = f.location_name == null || f.location_name.toLowerCase().includes('ferkensbruch');
+        return onlyMine ? isOwn : (isOwn || isAtFerkensbruch);
       });
+
       const formatted = filteredFishes.map(f => f.angler);
       setCatches(filteredFishes);
       setFormattedNames(formatted);
     }
+
     loadFishes();
   }, [onlyMine, anglerName]);
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (openMenuId) {
-        const menuEl = menuRefs.current[openMenuId];
-        if (menuEl && !menuEl.contains(e.target)) {
-          setOpenMenuId(null);
-        }
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openMenuId]);
+ function getLocationDisplay(entry) {
+  return entry.location_name ? `📍 ${entry.location_name}` : '';
+}
 
-  const handleDelete = async (id) => {
-    const confirmDelete = window.confirm("Diesen Fang wirklich löschen?");
-    if (!confirmDelete) return;
-    const { error } = await supabase.from('fishes').delete().eq('id', id);
-    if (error) {
-      console.error("Fehler beim Löschen:", error);
-      alert("Löschen fehlgeschlagen.");
-    } else {
-      setCatches(prev => prev.filter(c => c.id !== id));
-    }
-  };
 
   const handleUpdate = async () => {
     if (!editFish || !editSize) {
       alert("Bitte Fischart und Größe angeben.");
       return;
     }
+
+   
+
 
     let photoUrl = editingEntry.photo_url;
     if (editPhotoFile) {
@@ -124,6 +106,20 @@ export default function CatchList({ anglerName }) {
       setPreviewUrl(null);
     }
   };
+
+   const handleDelete = async (id) => {
+  if (!confirm("Bist du sicher, dass du diesen Fang löschen möchtest?")) return;
+
+  const { error } = await supabase.from('fishes').delete().eq('id', id);
+
+  if (error) {
+    console.error("Fehler beim Löschen:", error);
+    alert("Fehler beim Löschen.");
+  } else {
+    setCatches(prev => prev.filter(f => f.id !== id));
+    alert("Fang gelöscht.");
+  }
+};
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
@@ -196,7 +192,8 @@ export default function CatchList({ anglerName }) {
               return (
                 <li key={entry.id} className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md">
                   <div className="flex justify-between items-center mb-1">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{dateStr} – {timeStr}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{dateStr} – {timeStr} {getLocationDisplay(entry)}
+</p>
                     {entry.angler === anglerName && (
                       <div className="relative" ref={el => menuRefs.current[entry.id] = el}>
                         <button onClick={() => setOpenMenuId(openMenuId === entry.id ? null : entry.id)} className="text-xl hover:text-blue-600">⋮</button>

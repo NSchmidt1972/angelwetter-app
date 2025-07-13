@@ -28,19 +28,10 @@ export default function Leaderboard() {
         return;
       }
 
-      const vornameHäufigkeit = {};
-      profileData.forEach(p => {
-        const [first] = p.name.trim().split(' ');
-        vornameHäufigkeit[first] = (vornameHäufigkeit[first] || 0) + 1;
-      });
-
       const mapping = {};
       profileData.forEach(p => {
-        mapping[p.name.trim()] = p.name.trim(); // immer vollständiger Name
+        mapping[p.name.trim()] = p.name.trim();
       });
-      setFormattedNamesMap(mapping);
-
-
       setFormattedNamesMap(mapping);
     }
 
@@ -62,7 +53,11 @@ export default function Leaderboard() {
     const size = parseFloat(f.size);
     const istVerwertbar = f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
 
-    return darfSehen && istVerwertbar;
+    const istAmFerkensbruch =
+      f.location_name === null ||
+      (typeof f.location_name === 'string' && f.location_name.toLowerCase().includes('ferkensbruch'));
+
+    return darfSehen && istVerwertbar && istAmFerkensbruch;
   });
 
   const byAngler = {};
@@ -164,4 +159,3 @@ export default function Leaderboard() {
   </div>
 );
 }
-

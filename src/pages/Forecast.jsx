@@ -59,6 +59,19 @@ export default function Forecast() {
     loadWeatherAndPredict();
   }, []);
 
+  const getPressureTrendLabel = () => {
+    const val = aiPrediction?.trend?.pressure_trend_5d;
+    if (val == null) return 'n/a';
+    const rounded = Math.abs(val).toFixed(2);
+    if (val >= 3) return `stark steigend (+${rounded} hPa)`;
+    if (val >= 1) return `steigend (+${rounded} hPa)`;
+    if (val >= 0.5) return `leicht steigend (+${rounded} hPa)`;
+    if (val <= -3) return `stark fallend (-${rounded} hPa)`;
+    if (val <= -1) return `fallend (-${rounded} hPa)`;
+    if (val <= -0.5) return `leicht fallend (-${rounded} hPa)`;
+    return `stabil (${val.toFixed(2)} hPa)`;
+  };
+
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
       <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">🔮 Fangprognose</h2>
@@ -96,46 +109,48 @@ export default function Forecast() {
                 {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidertag wahrscheinlich"}
               </p>
 
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
+                <div className="space-y-2">
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+                    <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
+                    <div className="ml-2">{getPressureTrendLabel()}</div>
+                  </div>
 
-    <div className="text-sm text-gray-700 dark:text-gray-300">
-  <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
-  <div className="space-y-2">
-    <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-      <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
-      <div className="ml-2">
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+                    <div className="font-medium">Temp-Mittel (3 Tage):</div>
+                    <div className="ml-2">
+                      {aiPrediction?.trend?.temp_mean_3d != null 
+                        ? `${aiPrediction.trend.temp_mean_3d.toFixed(2)} °C`
+                        : 'n/a'}
+                    </div>
+                  </div>
+
+                 <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+  <div className="font-medium">Temp-Volatilität (3 Tage):</div>
+  <div className="ml-2 flex items-center gap-2">
+    {aiPrediction?.trend?.temp_volatility_3d != null ? (
+      <>
+        <span>{aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C</span>
         {(() => {
-          const val = aiPrediction.trend?.pressure_trend_5d;
-          if (val == null) return 'n/a';
-          const rounded = val.toFixed(2);
-          if (val > 1) return `steigend (+${rounded} hPa)`;
-          if (val < -1) return `fallend (${rounded} hPa)`;
-          return `stabil (${rounded} hPa)`;
+          const v = aiPrediction.trend.temp_volatility_3d;
+          if (v < 3) {
+            return <span className="text-green-600 dark:text-green-400 font-semibold">✅ günstig</span>;
+          } else if (v < 6) {
+            return <span className="text-yellow-600 dark:text-yellow-300 font-semibold">⚠️ wechselhaft</span>;
+          } else {
+            return <span className="text-red-600 dark:text-red-400 font-semibold">❌ ungünstig</span>;
+          }
         })()}
-      </div>
-    </div>
-
-    <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-      <div className="font-medium">Temp-Mittel (3 Tage):</div>
-      <div className="ml-2">
-        {aiPrediction.trend?.temp_mean_3d != null 
-          ? `${aiPrediction.trend.temp_mean_3d.toFixed(2)} °C`
-          : 'n/a'}
-      </div>
-    </div>
-
-    <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-      <div className="font-medium">Temp-Volatilität (3 Tage):</div>
-      <div className="ml-2">
-        {aiPrediction.trend?.temp_volatility_3d != null 
-          ? `${aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C`
-          : 'n/a'}
-      </div>
-    </div>
+      </>
+    ) : (
+      'n/a'
+    )}
   </div>
 </div>
 
-
-
+                </div>
+              </div>
             </div>
           </div>
         ) : (

@@ -1,10 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { fetchWeather } from '../api/weather';
 import { useNavigate } from 'react-router-dom';
 import heic2any from "heic2any";
-import { useRef } from 'react';
-
 
 const FISH_TYPES = [
   'Aal', 'Barsch', 'Brasse', 'Güster', 'Hecht', 'Karausche', 'Karpfen',
@@ -29,7 +27,19 @@ export default function FishCatchForm({ setWeatherData }) {
   const fileInputRef = useRef();
 
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
-  const isMarilou = anglerName?.trim().toLowerCase() === 'marilou';
+  const FERKENSBRUCH_LAT = 51.3135;
+  const FERKENSBRUCH_LON = 6.256;
+
+  function getDistanceKm(lat1, lon1, lat2, lon2) {
+    const toRad = (v) => v * Math.PI / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+              Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -41,6 +51,23 @@ export default function FishCatchForm({ setWeatherData }) {
 
   function sanitizeFilename(name) {
     return name.normalize("NFD").replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
+
+  async function reverseGeocode(lat, lon) {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+      const data = await res.json();
+      return (
+        data.address?.city ||
+        data.address?.town ||
+        data.address?.village ||
+        data.address?.hamlet ||
+        `${lat.toFixed(5)}, ${lon.toFixed(5)}`
+      );
+    } catch (e) {
+      console.warn('Reverse-Geocoding fehlgeschlagen:', e);
+      return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    }
   }
 
   const handleFileChange = (e) => {
@@ -91,7 +118,15 @@ export default function FishCatchForm({ setWeatherData }) {
   }
 
   async function loadWeather() {
-    const data = await fetchWeather();
+    let useCoords = null;
+    if (position?.lat != null && position?.lon != null) {
+      const distance = getDistanceKm(position.lat, position.lon, FERKENSBRUCH_LAT, FERKENSBRUCH_LON);
+      if (distance > 1.0) {
+        useCoords = position;
+      }
+    }
+
+    const data = await fetchWeather(useCoords);
     const weather = {
       temp: data.current.temp ?? null,
       description: data.current.weather?.[0]?.description ?? '',
@@ -137,6 +172,7 @@ export default function FishCatchForm({ setWeatherData }) {
     }
 
     setLoadingCatch(true);
+
     let currentWeather;
     try {
       currentWeather = await loadWeather();
@@ -185,6 +221,13 @@ export default function FishCatchForm({ setWeatherData }) {
       photoUrl = publicUrl?.publicUrl || '';
     }
 
+    let locationName = '';
+    try {
+      locationName = await reverseGeocode(position.lat, position.lon);
+    } catch {
+      locationName = null;
+    }
+
     const newEntry = {
       fish,
       size: sizeNumber,
@@ -197,7 +240,7 @@ export default function FishCatchForm({ setWeatherData }) {
       blank: false,
       lat: position.lat,
       lon: position.lon,
-      is_marilou: isMarilou
+      location_name: locationName
     };
 
     setPendingEntry(newEntry);
@@ -215,7 +258,12 @@ export default function FishCatchForm({ setWeatherData }) {
     } else {
       alert("Petri Heil! 🎣 Dein Fang ist gespeichert. ✅");
 
-      if (!isMarilou) {
+      const isAtFerkensbruch =
+        position?.lat != null &&
+        position?.lon != null &&
+        getDistanceKm(position.lat, position.lon, FERKENSBRUCH_LAT, FERKENSBRUCH_LON) < 1.0;
+
+      if (isAtFerkensbruch) {
         try {
           const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
           await fetch(functionUrl, {
@@ -228,16 +276,8 @@ export default function FishCatchForm({ setWeatherData }) {
         }
 
         const FISH_ARTICLES = {
-          Aal: 'einen',
-          Barsch: 'einen',
-          Brasse: 'eine',
-          Hecht: 'einen',
-          Karpfen: 'einen',
-          Rotauge: 'ein',
-          Rotfeder: 'eine',
-          Schleie: 'eine',
-          Wels: 'einen',
-          Zander: 'einen'
+          Aal: 'einen', Barsch: 'einen', Brasse: 'eine', Hecht: 'einen', Karpfen: 'einen',
+          Rotauge: 'ein', Rotfeder: 'eine', Schleie: 'eine', Wels: 'einen', Zander: 'einen'
         };
 
         const article = FISH_ARTICLES[pendingEntry.fish] || '';
@@ -253,8 +293,6 @@ export default function FishCatchForm({ setWeatherData }) {
             );
           });
         }
-
-
       }
 
       navigate('/catches');
@@ -386,22 +424,22 @@ export default function FishCatchForm({ setWeatherData }) {
         <textarea placeholder="Kommentar (optional)" value={note} onChange={e => setNote(e.target.value)} rows={4} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
 
-    <div className="space-y-2">
-  <button
-    type="button"
-    onClick={() => fileInputRef.current.click()}
-    className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded transition"
-  >
-    📷 Foto auswählen / aufnehmen
-  </button>
-  <input
-    ref={fileInputRef}
-    type="file"
-    accept="image/*"
-    onChange={handleFileChange}
-    style={{ display: 'none' }}
-  />
-</div>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current.click()}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded transition"
+          >
+            📷 Foto auswählen / aufnehmen
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+        </div>
 
 
 
