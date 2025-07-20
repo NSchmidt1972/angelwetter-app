@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
 function getMoonDescription(phase) {
@@ -22,7 +22,6 @@ const FISH_TYPES = ['Aal', 'Barsch', 'Brasse', 'Hecht', 'Karpfen', 'Rotauge', 'R
 export default function CatchList({ anglerName }) {
   const [catches, setCatches] = useState([]);
   const [onlyMine, setOnlyMine] = useState(false);
-  const [formattedNames, setFormattedNames] = useState([]);
   const [modalPhoto, setModalPhoto] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [editFish, setEditFish] = useState('');
@@ -31,39 +30,54 @@ export default function CatchList({ anglerName }) {
   const [editPhotoFile, setEditPhotoFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
-  const menuRefs = useRef({});
 
-  useEffect(() => {
-    async function loadFishes() {
-      const { data: fishData, error: fishError } = await supabase
-        .from('fishes')
-        .select('*')
-        .eq('blank', false)
-        .order('timestamp', { ascending: false });
 
-      if (fishError) {
-        console.error('Fehler beim Laden der Fänge:', fishError);
-        return;
-      }
+useEffect(() => {
+  async function loadFishes() {
+    const { data: fishData, error: fishError } = await supabase
+      .from('fishes')
+      .select('*')
+      .eq('blank', false)
+      .order('timestamp', { ascending: false });
 
-      const nameLower = anglerName?.toLowerCase().trim();
-
-      const filteredFishes = fishData.filter(f => {
-        const isOwn = f.angler?.toLowerCase().trim() === nameLower;
-        const isAtFerkensbruch = f.location_name == null || f.location_name.toLowerCase().includes('ferkensbruch');
-        return onlyMine ? isOwn : (isOwn || isAtFerkensbruch);
-      });
-
-      const formatted = filteredFishes.map(f => f.angler);
-      setCatches(filteredFishes);
-      setFormattedNames(formatted);
+    if (fishError) {
+      console.error('Fehler beim Laden der Fänge:', fishError);
+      return;
     }
 
-    loadFishes();
-  }, [onlyMine, anglerName]);
+    const PUBLIC_FROM = new Date('2025-06-01');
+    const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
+    const istVertrauter = vertraute.includes(anglerName);
+    const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
 
- function getLocationDisplay(entry) {
-  return entry.location_name ? `📍 ${entry.location_name}` : '';
+    const filtered = fishData.filter(f => {
+      if (f.is_marilou) return false;
+
+      const fangDatum = new Date(f.timestamp);
+      const istEigenerFang = f.angler === anglerName;
+
+      // exakt wie in Analysis:
+      if (!istVertrauter && fangDatum < PUBLIC_FROM) return false;
+      if (istVertrauter && filterSetting !== 'all' && fangDatum < PUBLIC_FROM) return false;
+
+      const ort = f.location_name?.toLowerCase().trim() ?? '';
+      const ortIstLobberich = f.location_name == null || ort.includes('lobberich');
+
+      return onlyMine ? istEigenerFang : ortIstLobberich;
+    });
+
+    setCatches(filtered);
+  }
+
+  loadFishes();
+}, [onlyMine, anglerName]);
+
+
+
+function getLocationDisplay(entry) {
+  const ort = entry.location_name?.toLowerCase().trim() ?? '';
+  if (!ort || ort.includes('lobberich')) return '';
+  return `📍 ${entry.location_name}`;
 }
 
 
@@ -195,7 +209,8 @@ export default function CatchList({ anglerName }) {
                     <p className="text-sm text-gray-500 dark:text-gray-400">{dateStr} – {timeStr} {getLocationDisplay(entry)}
 </p>
                     {entry.angler === anglerName && (
-                      <div className="relative" ref={el => menuRefs.current[entry.id] = el}>
+                      <div className="relative">
+
                         <button onClick={() => setOpenMenuId(openMenuId === entry.id ? null : entry.id)} className="text-xl hover:text-blue-600">⋮</button>
                         {openMenuId === entry.id && (
                           <div className="absolute right-0 mt-2 w-36 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded shadow z-10">
@@ -208,7 +223,8 @@ export default function CatchList({ anglerName }) {
                   </div>
 
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold">{formattedNames[index]}</span>
+                    <span className="font-semibold">{entry.angler}</span>
+
                   </div>
 
                  <div className="flex items-center gap-2 mb-2">

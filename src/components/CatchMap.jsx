@@ -120,14 +120,18 @@ export default function CatchMap() {
     }
   };
 
-  const filteredEntries = entries.filter((e) => {
-    if (e.blank || (e.is_marilou && anglerName !== 'marilou')) return false;
+ const filteredEntries = entries.filter((e) => {
+  const isMarilou = e.is_marilou === true;
+  const isOwnCatch = e.angler?.trim().toLowerCase() === anglerName;
+  const ort = e.location_name?.toLowerCase().trim() ?? '';
+  const ortIstFerkensbruch = e.location_name == null || ort.includes('lobberich');
 
-    const istEigenerFang = e.angler?.trim().toLowerCase() === anglerName;
-    const ortIstFerkensbruch = !e.location_name || e.location_name.toLowerCase().includes('ferkensbruch');
+  if (e.blank || (isMarilou && anglerName !== 'marilou')) return false;
 
-    return onlyMine ? istEigenerFang : (istEigenerFang || ortIstFerkensbruch);
-  });
+  return onlyMine ? isOwnCatch : ortIstFerkensbruch;
+});
+
+
 
   return (
     <div className="h-[80vh] w-full relative z-0 rounded-xl overflow-hidden shadow-md">

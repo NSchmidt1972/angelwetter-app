@@ -46,17 +46,19 @@ export default function Analysis({ anglerName }) {
       const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
 
       const filtered = data.filter(f => {
-        if (f.is_marilou) return false;
+  if (f.is_marilou) return false;
 
-        const fangDatum = new Date(f.timestamp);
-        if (!istVertrauter && fangDatum < PUBLIC_FROM) return false;
-        if (istVertrauter && filterSetting !== 'all' && fangDatum < PUBLIC_FROM) return false;
+  const fangDatum = new Date(f.timestamp);
+  if (!istVertrauter && fangDatum < PUBLIC_FROM) return false;
+  if (istVertrauter && filterSetting !== 'all' && fangDatum < PUBLIC_FROM) return false;
 
-        const istEigenerFang = f.angler === anglerName;
-        const ortIstFerkensbruch = !f.location_name || f.location_name.toLowerCase().includes('ferkensbruch');
+  const istEigenerFang = f.angler === anglerName;
+  const ort = f.location_name?.toLowerCase().trim() ?? '';
+  const ortIstFerkensbruch = f.location_name == null || ort.includes('lobberich');
 
-        return onlyMine ? istEigenerFang : (istEigenerFang || ortIstFerkensbruch);
-      });
+  return onlyMine ? istEigenerFang : ortIstFerkensbruch;
+});
+
 
       setFishes(filtered);
     }

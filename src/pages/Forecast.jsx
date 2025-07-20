@@ -98,64 +98,79 @@ export default function Forecast() {
       </div>
 
       <div className="max-w-2xl mx-auto">
-        {weatherData && aiPrediction ? (
-          <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6">
-            <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg shadow-inner">
-              <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">🤖 KI-Prognose</h3>
-              <p className="text-xl text-blue-700 dark:text-blue-300 font-bold">
-                🎯 Fangwahrscheinlichkeit: {aiPrediction.probability}%
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidertag wahrscheinlich"}
-              </p>
+       {weatherData && aiPrediction ? (
+  <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6">
+    <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg shadow-inner">
+      <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">🤖 KI-Prognose</h3>
+      <p className="text-xl text-blue-700 dark:text-blue-300 font-bold">
+        🎯 Fangwahrscheinlichkeit: {aiPrediction.probability}%
+      </p>
+      <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+        {aiPrediction.prediction === 1
+          ? "Fang wahrscheinlich"
+          : "Schneidertag wahrscheinlich"}
+      </p>
 
-              <div className="text-sm text-gray-700 dark:text-gray-300">
-                <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
-                <div className="space-y-2">
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                    <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
-                    <div className="ml-2">{getPressureTrendLabel()}</div>
-                  </div>
+      {/* 🆕 Trainingsdatenanzeige */}
+      {aiPrediction.stats && (
+        <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+          <h4 className="font-semibold mb-1">🧮 Trainingsdaten</h4>
+          <ul className="ml-2 list-disc list-inside space-y-1">
+            <li>Gesamtanzahl: {aiPrediction.stats.total_samples}</li>
+            <li>🎣 Fänge: {aiPrediction.stats.positive_samples}</li>
+            <li>❌ Schneidertage: {aiPrediction.stats.negative_samples}</li>
+          </ul>
+        </div>
+      )}
 
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                    <div className="font-medium">Temp-Mittel (3 Tage):</div>
-                    <div className="ml-2">
-                      {aiPrediction?.trend?.temp_mean_3d != null 
-                        ? `${aiPrediction.trend.temp_mean_3d.toFixed(2)} °C`
-                        : 'n/a'}
-                    </div>
-                  </div>
+      <div className="text-sm text-gray-700 dark:text-gray-300">
+        <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
+        <div className="space-y-2">
+          <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+            <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
+            <div className="ml-2">{getPressureTrendLabel()}</div>
+          </div>
 
-                 <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-  <div className="font-medium">Temp-Volatilität (3 Tage):</div>
-  <div className="ml-2 flex items-center gap-2">
-    {aiPrediction?.trend?.temp_volatility_3d != null ? (
-      <>
-        <span>{aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C</span>
-        {(() => {
-          const v = aiPrediction.trend.temp_volatility_3d;
-          if (v < 3) {
-            return <span className="text-green-600 dark:text-green-400 font-semibold">✅ günstig</span>;
-          } else if (v < 6) {
-            return <span className="text-yellow-600 dark:text-yellow-300 font-semibold">⚠️ wechselhaft</span>;
-          } else {
-            return <span className="text-red-600 dark:text-red-400 font-semibold">❌ ungünstig</span>;
-          }
-        })()}
-      </>
-    ) : (
-      'n/a'
-    )}
-  </div>
-</div>
-
-                </div>
-              </div>
+          <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+            <div className="font-medium">Temp-Mittel (3 Tage):</div>
+            <div className="ml-2">
+              {aiPrediction?.trend?.temp_mean_3d != null
+                ? `${aiPrediction.trend.temp_mean_3d.toFixed(2)} °C`
+                : 'n/a'}
             </div>
           </div>
-        ) : (
-          <p className="text-center text-gray-500 dark:text-gray-400">Lade KI-Prognose…</p>
-        )}
+
+          <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+            <div className="font-medium">Temp-Volatilität (3 Tage):</div>
+            <div className="ml-2 flex items-center gap-2">
+              {aiPrediction?.trend?.temp_volatility_3d != null ? (
+                <>
+                  <span>{aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C</span>
+                  {(() => {
+                    const v = aiPrediction.trend.temp_volatility_3d;
+                    if (v < 3) {
+                      return <span className="text-green-600 dark:text-green-400 font-semibold">✅ günstig</span>;
+                    } else if (v < 6) {
+                      return <span className="text-yellow-600 dark:text-yellow-300 font-semibold">⚠️ wechselhaft</span>;
+                    } else {
+                      return <span className="text-red-600 dark:text-red-400 font-semibold">❌ ungünstig</span>;
+                    }
+                  })()}
+                </>
+              ) : (
+                'n/a'
+              )}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+) : (
+  <p className="text-center text-gray-500 dark:text-gray-400">Lade KI-Prognose…</p>
+)}
+
       </div>
     </div>
   );

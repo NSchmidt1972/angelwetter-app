@@ -38,27 +38,26 @@ export default function Leaderboard() {
     prepareFormattedNames();
   }, []);
 
-  const filteredFishes = fishes.filter(f => {
-    const fangDatum = new Date(f.timestamp);
-    const istAbNeu = fangDatum >= PUBLIC_FROM;
-    const istVertrauter = vertraute.includes((f.angler || '').trim().toLowerCase());
+ const filteredFishes = fishes.filter(f => {
+  const fangDatum = new Date(f.timestamp);
+  const istAbNeu = fangDatum >= PUBLIC_FROM;
+  const istVertrauter = vertraute.includes((f.angler || '').trim().toLowerCase());
 
-    let darfSehen = false;
-    if (showIntern) {
-      darfSehen = vertraute.includes(anglerName) && istVertrauter;
-    } else {
-      darfSehen = istAbNeu;
-    }
+  let darfSehen = false;
+  if (showIntern) {
+    darfSehen = vertraute.includes(anglerName) && istVertrauter;
+  } else {
+    darfSehen = istAbNeu;
+  }
 
-    const size = parseFloat(f.size);
-    const istVerwertbar = f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
+  const size = parseFloat(f.size);
+  const istVerwertbar = f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
 
-    const istAmFerkensbruch =
-      f.location_name === null ||
-      (typeof f.location_name === 'string' && f.location_name.toLowerCase().includes('ferkensbruch'));
+  const ort = f.location_name?.toLowerCase().trim() ?? '';
+  const istAmFerkensbruch = f.location_name == null || ort.includes('lobberich');
 
-    return darfSehen && istVerwertbar && istAmFerkensbruch;
-  });
+  return darfSehen && istVerwertbar && istAmFerkensbruch;
+});
 
   const byAngler = {};
   filteredFishes.forEach(f => {

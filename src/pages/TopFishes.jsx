@@ -30,7 +30,7 @@ export default function TopFishes() {
           return f.angler === anglerName;
         }
 
-        const isFerkensbruch = !f.location_name || f.location_name.toLowerCase().includes('ferkensbruch');
+        const isFerkensbruch = !f.location_name || f.location_name.toLowerCase().includes('lobberich');
         if (istVertrauter) {
           if (filterSetting === 'all') return f.angler === anglerName || isFerkensbruch;
           return (fangDatum >= PUBLIC_FROM) && (f.angler === anglerName || isFerkensbruch);
