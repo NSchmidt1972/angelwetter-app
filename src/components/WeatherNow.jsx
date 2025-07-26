@@ -17,8 +17,31 @@ function windDirection(deg) {
   return dirs[Math.round(deg / 45) % 8];
 }
 
+function renderFishRating(probability) {
+  const rating = Math.round((parseFloat(probability) / 100) * 5);
+  if (isNaN(rating)) return '❓';
+  if (rating === 0) return '🚫';
+  return '🐟'.repeat(rating);
+}
+
+async function fetchPrediction(weather) {
+  try {
+    const response = await fetch("https://ai.asv-rotauge.de/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(weather)
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("KI-Prognose fehlgeschlagen:", error);
+    return null;
+  }
+}
+
 export default function WeatherNow({ data, onRefresh }) {
   const [autoUpdated, setAutoUpdated] = useState(false);
+  const [dailyWithPrediction, setDailyWithPrediction] = useState([]);
+  const [currentPrediction, setCurrentPrediction] = useState(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -28,6 +51,44 @@ export default function WeatherNow({ data, onRefresh }) {
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [onRefresh]);
+
+  useEffect(() => {
+    const enrichWithPrediction = async () => {
+      if (!data?.data?.daily || !data?.data?.current) return;
+
+      // Vorhersagen für die kommenden Tage
+      const enriched = await Promise.all(
+        data.data.daily.map(async (day) => {
+          const weather = {
+            temp: day.temp.day,
+            pressure: day.pressure,
+            wind: day.wind_speed,
+            humidity: day.humidity,
+            wind_deg: day.wind_deg,
+            moon_phase: day.moon_phase
+          };
+          const prediction = await fetchPrediction(weather);
+          return { ...day, aiPrediction: prediction };
+        })
+      );
+
+      setDailyWithPrediction(enriched);
+
+      // Prognose für aktuelles Wetter
+      const currentWeather = {
+        temp: data.data.current.temp,
+        pressure: data.data.current.pressure,
+        wind: data.data.current.wind_speed,
+        humidity: data.data.current.humidity,
+        wind_deg: data.data.current.wind_deg,
+        moon_phase: data.data.daily?.[0]?.moon_phase ?? null
+      };
+      const prediction = await fetchPrediction(currentWeather);
+      setCurrentPrediction(prediction);
+    };
+
+    enrichWithPrediction();
+  }, [data]);
 
   if (!data?.data) {
     return (
@@ -41,8 +102,6 @@ export default function WeatherNow({ data, onRefresh }) {
 
   const now = data.data.current;
   const hourly = data.data.hourly || [];
-  const daily = data.data.daily || [];
-
   const savedAt = data.savedAt;
   const savedAtString = savedAt
     ? new Date(savedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
@@ -50,7 +109,7 @@ export default function WeatherNow({ data, onRefresh }) {
 
   const desc = now.weather[0].description;
   const iconUrl = `https://openweathermap.org/img/wn/${now.weather[0].icon}@2x.png`;
-  const moonText = getMoonDescription(daily[0]?.moon_phase ?? -1);
+  const moonText = getMoonDescription(data.data.daily?.[0]?.moon_phase ?? -1);
 
   const weekday = (dt) =>
     new Date(dt * 1000).toLocaleDateString('de-DE', { weekday: 'short' });
@@ -80,7 +139,12 @@ export default function WeatherNow({ data, onRefresh }) {
           <p>🧪 Luftdruck: {now.pressure} hPa • 💦 Luftfeuchte: {now.humidity}%</p>
           <p>💨 Wind: {now.wind_speed} m/s aus {windDirection(now.wind_deg)}</p>
           <p>🔆 UV-Index: {now.uvi}</p>
-          {moonText && <p>🌙 Mondphase: {moonText}</p>}
+          <p>🌙 Mondphase: {moonText}</p>
+          {currentPrediction?.probability != null && (
+            <p className="text-sm text-green-700 dark:text-green-300 font-semibold">
+              🎯 {currentPrediction.probability.toFixed(0)} % {renderFishRating(currentPrediction.probability)}
+            </p>
+          )}
         </div>
       </div>
 
@@ -111,7 +175,7 @@ export default function WeatherNow({ data, onRefresh }) {
 
       <h3 className="text-lg font-semibold mt-6 mb-2 text-gray-700 dark:text-gray-200">🗓 7-Tage-Vorhersage</h3>
       <div className="flex overflow-x-auto gap-4 pb-4">
-        {daily.slice(0, 7).map((day, index) => (
+        {dailyWithPrediction.slice(0, 7).map((day, index) => (
           <div
             key={index}
             className="min-w-[200px] bg-gray-100 dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center flex-shrink-0 hover:shadow-md transition"
@@ -131,6 +195,11 @@ export default function WeatherNow({ data, onRefresh }) {
             <p className="text-sm text-gray-600 dark:text-gray-400">🧪 {day.pressure} hPa • 💦 {day.humidity}%</p>
             <p className="text-sm text-gray-600 dark:text-gray-400">🧭 {windDirection(day.wind_deg)} ({day.wind_speed.toFixed(1)} m/s)</p>
             <p className="text-sm text-gray-600 dark:text-gray-400">{getMoonDescription(day.moon_phase)}</p>
+            {day.aiPrediction?.probability != null && (
+              <p className="text-sm text-green-700 dark:text-green-300 font-semibold mt-2">
+                🎯 {day.aiPrediction.probability.toFixed(0)} % {renderFishRating(day.aiPrediction.probability)}
+              </p>
+            )}
           </div>
         ))}
       </div>
