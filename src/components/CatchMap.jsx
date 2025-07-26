@@ -31,7 +31,20 @@ const pinkIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-const FERKENSBRUCH_CENTER = [51.3105, 6.2565];
+const IS_FERKENSBRUCH_RADIUS = 0.01999; // ≈ 250 m
+
+
+function isFerkensbruch(lat, lon) {
+  const dx = lat - FERKENSBRUCH_CENTER[0];
+  const dy = lon - FERKENSBRUCH_CENTER[1];
+  return Math.hypot(dx, dy) < IS_FERKENSBRUCH_RADIUS;
+}
+
+
+const FERKENSBRUCH_CENTER = [51.31075, 6.25585];
+
+
+
 const FERKENSBRUCH_ZOOM = 16.3;
 
 function FitBounds({ bounds }) {
@@ -75,10 +88,14 @@ export default function CatchMap() {
     loadData();
   }, []);
 
-  const bounds = [
-    ...entries.filter(e => !e.blank).map((e) => [e.lat, e.lon]),
-    ...spots.map((s) => [s.lat, s.lon])
-  ];
+ const bounds = onlyMine
+  ? entries
+      .filter(e => !e.blank && e.angler?.trim().toLowerCase() === anglerName)
+      .map(e => [e.lat, e.lon])
+  : entries
+      .filter(e => !e.blank && isFerkensbruch(e.lat, e.lon))
+      .map(() => FERKENSBRUCH_CENTER); // nur 1 Punkt nötig für Vereinszoom
+
 
   const handleDragEnd = async (e, spot) => {
     const newPos = e.target.getLatLng();
@@ -160,53 +177,45 @@ export default function CatchMap() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {bounds.length > 0 && <FitBounds bounds={bounds} />}
+        {onlyMine && bounds.length > 0 && <FitBounds bounds={bounds} />}
 
-        {spots.map((spot) => (
-          <Marker
-            key={`spot-${spot.id}`}
-            position={[spot.lat, spot.lon]}
-            icon={L.divIcon({
-              html: '',
-              className: 'rounded-full bg-gray-400 w-3 h-3',
-              iconSize: [12, 12]
-            })}
-            draggable={isAdmin}
-            zIndexOffset={-1000}
-            eventHandlers={
-              isAdmin ? {
-                dragend: (e) => handleDragEnd(e, spot)
-              } : {}
-            }
-          >
-            <Popup>🎣 {spot.name}</Popup>
-          </Marker>
-        ))}
+
+       
 
         <MarkerClusterGroup>
-          {filteredEntries.map((e) => {
-            const isOwnCatch = isAdmin || e.angler?.trim().toLowerCase() === anglerName;
+         {filteredEntries.map((e) => {
+  const isOwnCatch = isAdmin || e.angler?.trim().toLowerCase() === anglerName;
 
-            return (
-              <Marker
-                key={e.id}
-                position={[e.lat, e.lon]}
-                icon={e.is_marilou ? pinkIcon : blueIcon}
-                draggable={isOwnCatch}
-                eventHandlers={
-                  isOwnCatch ? { dragend: (evt) => handleFishMove(evt, e) } : {}
-                }
-              >
-                <Popup>
-                  <div className="text-sm">
-                    <strong>{e.angler}</strong><br />
-                    🐟 {e.fish} ({e.size} cm)<br />
-                    {new Date(e.timestamp).toLocaleString('de-DE')}
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
+  const markerPosition = isFerkensbruch(e.lat, e.lon)
+    ? FERKENSBRUCH_CENTER
+    : [e.lat, e.lon];
+
+  return (
+    <Marker
+      key={e.id}
+      position={markerPosition}
+      icon={e.is_marilou ? pinkIcon : blueIcon}
+      draggable={isOwnCatch}
+      eventHandlers={
+        isOwnCatch ? { dragend: (evt) => handleFishMove(evt, e) } : {}
+      }
+    >
+      <Popup>
+        <div className="text-sm">
+          <strong>{e.angler}</strong><br />
+          🐟 {e.fish} ({e.size} cm)<br />
+          {new Date(e.timestamp).toLocaleString('de-DE')}
+          {isFerkensbruch(e.lat, e.lon) && (
+            <p className="text-xs text-gray-500 mt-1">
+              📍 Position zentriert auf Ferkensbruch
+            </p>
+          )}
+        </div>
+      </Popup>
+    </Marker>
+  );
+})}
+
         </MarkerClusterGroup>
       </MapContainer>
     </div>

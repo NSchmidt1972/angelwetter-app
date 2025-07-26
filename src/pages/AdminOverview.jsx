@@ -1,6 +1,3 @@
-// Visuell vereinheitlichte Admin-Übersicht mit Kartenoptik, Schatten, Darkmode-ready
-// Einheitliche Sektionen, klare Listen, Scrollbereiche, konsistente Farben
-
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
@@ -13,6 +10,7 @@ export default function AdminOverview() {
   const [nameShort, setNameShort] = useState(null);
   const [recentBlanks, setRecentBlanks] = useState([]);
   const [allProfiles, setAllProfiles] = useState([]);
+  const [externalCatches, setExternalCatches] = useState([]);
 
   useEffect(() => {
     async function loadData() {
@@ -72,6 +70,18 @@ export default function AdminOverview() {
           .select('name, created_at')
           .order('created_at', { ascending: false });
         setAllProfiles(allProfilesData);
+
+        const { data: externals } = await supabase
+          .from('fishes')
+          .select('angler, fish, size, timestamp, lat, lon, location_name')
+          .not('lat', 'is', null)
+          .not('lon', 'is', null)
+          .not('blank', 'is', true)
+          .neq('location_name', 'Lobberich')
+          .order('timestamp', { ascending: false })
+          .limit(20);
+        setExternalCatches(externals);
+
       } catch (error) {
         console.error('❌ Fehler beim Laden der Admin-Daten:', error.message);
       }
@@ -115,6 +125,29 @@ export default function AdminOverview() {
           </div>
         ) : (
           <div className={fallbackTextClass}>Keine Daten</div>
+        )}
+      </Section>
+
+       <Section title="🌍 Externe Fänge (außer Lobberich)">
+        {externalCatches.length > 0 ? (
+          <div className="max-h-60 overflow-y-auto">
+            <ul className={listItemClass}>
+              {externalCatches.map((entry, i) => (
+                <li key={i}>
+                  {entry.angler} – {entry.fish} ({entry.size} cm)
+                  <span className={metaTextClass}>
+                    {' am '}
+                    {new Date(new Date(entry.timestamp).getTime() + 2 * 60 * 60 * 1000)
+                      .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
+                    {' bei '}
+                    {entry.location_name || 'unbekannt'} ({entry.lat.toFixed(4)}, {entry.lon.toFixed(4)})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className={fallbackTextClass}>Keine externen Fänge</div>
         )}
       </Section>
 
@@ -164,6 +197,7 @@ export default function AdminOverview() {
           </ul>
         </div>
       </Section>
+
 
       <Section title="🔔 OneSignal Debug">
         <OneSignalHealthCheck />

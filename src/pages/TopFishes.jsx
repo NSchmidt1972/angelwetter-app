@@ -25,18 +25,22 @@ export default function TopFishes() {
       const filtered = data.filter(f => {
         if (f.is_marilou) return false;
         const fangDatum = new Date(f.timestamp);
+        const isFerkensbruch =
+          f.location_name == null ||
+          f.location_name.toLowerCase().includes('lobberich');
 
         if (onlyMine) {
           return f.angler === anglerName;
         }
 
-        const isFerkensbruch = !f.location_name || f.location_name.toLowerCase().includes('lobberich');
+        if (!isFerkensbruch) return false;
+
         if (istVertrauter) {
-          if (filterSetting === 'all') return f.angler === anglerName || isFerkensbruch;
-          return (fangDatum >= PUBLIC_FROM) && (f.angler === anglerName || isFerkensbruch);
+          if (filterSetting === 'all') return true;
+          return fangDatum >= PUBLIC_FROM;
         }
 
-        return (fangDatum >= PUBLIC_FROM) && (f.angler === anglerName || isFerkensbruch);
+        return fangDatum >= PUBLIC_FROM;
       });
 
       setFishes(filtered);
@@ -102,6 +106,7 @@ export default function TopFishes() {
                   <th className="px-4 py-2">Angler</th>
                   <th className="px-4 py-2 text-right">Größe</th>
                   <th className="px-4 py-2 text-right">Datum</th>
+                  {onlyMine && <th className="px-4 py-2">Ort</th>}
                 </tr>
               </thead>
               <tbody>
@@ -109,6 +114,7 @@ export default function TopFishes() {
                   const dateStr = new Date(f.timestamp).toLocaleDateString('de-DE');
                   const nameKey = (f.angler || '').trim();
                   const shortName = formattedNamesMap[nameKey] || f.angler || 'Unbekannt';
+                  const ort = f.location_name?.trim() || 'Ferkensbruch';
 
                   return (
                     <tr key={f.id || i} className="border-t border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition">
@@ -116,6 +122,7 @@ export default function TopFishes() {
                       <td className="px-4 py-2 font-sans">{shortName}</td>
                       <td className="px-4 py-2 text-right">{parseFloat(f.size).toFixed(1)} cm</td>
                       <td className="px-4 py-2 text-right">{dateStr}</td>
+                      {onlyMine && <td className="px-4 py-2 font-sans">{ort}</td>}
                     </tr>
                   );
                 })}
