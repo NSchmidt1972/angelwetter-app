@@ -12,30 +12,60 @@ export default defineConfig(() => {
     base: '/',
     plugins: [
       react(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'logo.png', 'icon-192.png', 'icon-512.png'],
-        manifest: {
-          name: 'Angelwetter',
-          short_name: 'Angelwetter',
-          start_url: '/',
-          display: 'standalone',
-          background_color: '#ffffff',
-          theme_color: '#007BFF',
-          icons: [
-            {
-              src: 'icon-192.png',
-              sizes: '192x192',
-              type: 'image/png'
-            },
-            {
-              src: 'icon-512.png',
-              sizes: '512x512',
-              type: 'image/png'
-            }
-          ]
+
+
+
+ VitePWA({
+  registerType: 'autoUpdate',
+  includeAssets: ['favicon.svg', 'logo.png', 'icon-192.png', 'icon-512.png'],
+  manifest: {
+    name: 'Angelwetter',
+    short_name: 'Angelwetter',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#ffffff',
+    theme_color: '#007BFF',
+    icons: [
+      {
+        src: 'icon-192.png',
+        sizes: '192x192',
+        type: 'image/png'
+      },
+      {
+        src: 'icon-512.png',
+        sizes: '512x512',
+        type: 'image/png'
+      }
+    ]
+  },
+  workbox: {
+    runtimeCaching: [
+      {
+        urlPattern: ({ request }) => request.destination === 'document' || request.destination === 'script' || request.destination === 'style',
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'app-content',
+          expiration: {
+            maxEntries: 50,
+            maxAgeSeconds: 60 * 60 * 24 // 1 Tag
+          }
         }
-      })
+      },
+      {
+        urlPattern: /^https:\/\/kirevrwmmthqgceprbhl\.supabase\.co\/.*/i,
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'supabase-data',
+          expiration: {
+            maxEntries: 50,
+            maxAgeSeconds: 60 * 60
+          }
+        }
+      }
+    ]
+  }
+})
+
     ],
     resolve: {
       alias: {

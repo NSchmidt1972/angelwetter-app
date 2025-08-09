@@ -152,10 +152,11 @@ function getLocationDisplay(entry) {
       Aal: 'einen', Barsch: 'einen', Brasse: 'eine', Hecht: 'einen', Karpfen: 'einen', Rotauge: 'ein', Rotfeder: 'eine', Schleie: 'eine', Wels: 'einen', Zander: 'einen'
     };
     const date = new Date(entry.timestamp).toLocaleDateString('de-DE');
+    const time = new Date(entry.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     const weather = entry.weather;
     const article = FISH_ARTICLES[entry.fish] || 'einen';
 
-    const shareText = `🎣 Ich habe am ${date} ${article} ${entry.fish} gefangen!\n📏 Größe: ${entry.size} cm\n🌡 Wetter: ${weather?.temp ?? '?'} °C, ${weather?.description ?? 'unbekannt'}\n💨 Wind: ${weather?.wind ?? '?'} m/s${weather?.wind_deg !== undefined ? ` aus ${windDirection(weather.wind_deg)}` : ''}\n🧪 Luftdruck: ${weather?.pressure ?? '?'} hPa • 💦 Feuchte: ${weather?.humidity ?? '?'} %\n🌙 Mond: ${getMoonDescription(weather?.moon_phase)}`;
+    const shareText = `🎣 Ich habe am ${date} um ${time} ${article} ${entry.fish} gefangen!\n📏 Größe: ${entry.size} cm\n🌡 Wetter: ${weather?.temp ?? '?'} °C, ${weather?.description ?? 'unbekannt'}\n💨 Wind: ${weather?.wind ?? '?'} m/s${weather?.wind_deg !== undefined ? ` aus ${windDirection(weather.wind_deg)}` : ''}\n🧪 Luftdruck: ${weather?.pressure ?? '?'} hPa • 💦 Feuchte: ${weather?.humidity ?? '?'} %\n🌙 Mond: ${getMoonDescription(weather?.moon_phase)}`;
 
     try {
       let files = [];

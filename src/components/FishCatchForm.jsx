@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient';
 import { fetchWeather } from '../api/weather';
 import { useNavigate } from 'react-router-dom';
 import heic2any from "heic2any";
+import { convertHeicIfNeeded, optimizeImage } from '../utils/imageProcessing';
+
 
 const FISH_TYPES = [
   'Aal', 'Barsch', 'Brasse', 'Güster', 'Hecht', 'Karausche', 'Karpfen',
@@ -183,43 +185,35 @@ export default function FishCatchForm({ setWeatherData }) {
       return;
     }
 
-    let photoUrl = '';
-    if (photo) {
-      let file = photo;
-      const extension = file.name.split('.').pop().toLowerCase();
-      if (extension === "heic" || extension === "heif") {
-        try {
-          const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
-          file = new File([convertedBlob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: "image/jpeg" });
-        } catch (err) {
-          console.error("HEIC-Konvertierung fehlgeschlagen:", err);
-          alert("HEIC konnte nicht konvertiert werden.");
-          setLoadingCatch(false);
-          return;
-        }
-      }
+  let photoUrl = '';
 
-      try {
-        file = await optimizeImage(file);
-      } catch (err) {
-        console.error("Optimierung fehlgeschlagen:", err);
-        alert("Bild konnte nicht optimiert werden.");
-        setLoadingCatch(false);
-        return;
-      }
+if (photo) {
+  try {
+    let file = await convertHeicIfNeeded(photo);
+    file = await optimizeImage(file);
 
-      const safeName = sanitizeFilename(anglerName);
-      const fileName = `${Date.now()}_${safeName}.jpg`;
-      const { error: uploadError } = await supabase.storage.from('fischfotos').upload(fileName, file);
-      if (uploadError) {
-        console.error('Upload-Fehler:', uploadError);
-        alert('Fehler beim Hochladen des Fotos.');
-        setLoadingCatch(false);
-        return;
-      }
-      const { data: publicUrl } = supabase.storage.from('fischfotos').getPublicUrl(fileName);
-      photoUrl = publicUrl?.publicUrl || '';
+    const safeName = sanitizeFilename(anglerName);
+    const fileName = `${Date.now()}_${safeName}.jpg`;
+    const { error: uploadError } = await supabase.storage.from('fischfotos').upload(fileName, file);
+
+    if (uploadError) {
+      console.error('Upload-Fehler:', uploadError);
+      alert('Fehler beim Hochladen des Fotos.');
+      setLoadingCatch(false);
+      return;
     }
+
+    const { data: publicUrl } = supabase.storage.from('fischfotos').getPublicUrl(fileName);
+    photoUrl = publicUrl?.publicUrl || '';
+  } catch (err) {
+    console.error("Bildverarbeitung fehlgeschlagen:", err);
+    alert(err.message || "Bild konnte nicht verarbeitet werden.");
+    setLoadingCatch(false);
+    return;
+  }
+}
+
+
 
     let locationName = '';
     try {
@@ -264,36 +258,18 @@ export default function FishCatchForm({ setWeatherData }) {
         getDistanceKm(position.lat, position.lon, FERKENSBRUCH_LAT, FERKENSBRUCH_LON) < 1.0;
 
       if (isAtFerkensbruch) {
-        try {
-          const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
-          await fetch(functionUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ angler: anglerName, fish: pendingEntry.fish, size: pendingEntry.size })
-          });
-        } catch (pushError) {
-          console.error('Fehler bei der Push-Benachrichtigung:', pushError);
-        }
+  try {
+    const functionUrl = 'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/send-push-notification';
+    await fetch(functionUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ angler: anglerName, fish: pendingEntry.fish, size: pendingEntry.size })
+    });
+  } catch (pushError) {
+    console.error('Fehler bei der Push-Benachrichtigung:', pushError);
+  }
+}
 
-        const FISH_ARTICLES = {
-          Aal: 'einen', Barsch: 'einen', Brasse: 'eine', Hecht: 'einen', Karpfen: 'einen',
-          Rotauge: 'ein', Rotfeder: 'eine', Schleie: 'eine', Wels: 'einen', Zander: 'einen'
-        };
-
-        const article = FISH_ARTICLES[pendingEntry.fish] || '';
-        const fishText = article ? `${article} ${pendingEntry.fish}` : pendingEntry.fish;
-
-        if (window?.OneSignal) {
-          window.OneSignal.push(() => {
-            window.OneSignal.sendSelfNotification(
-              `🎣 Neuer Fang: ${pendingEntry.fish} (${pendingEntry.size} cm)`,
-              `${anglerName} hat ${fishText} gefangen.`,
-              null,
-              { data: { fish: pendingEntry.fish, size: pendingEntry.size } }
-            );
-          });
-        }
-      }
 
       navigate('/catches');
     }

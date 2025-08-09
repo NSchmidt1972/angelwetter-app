@@ -166,6 +166,9 @@ export default function Forecast() {
                     <div className="ml-2">{getPressureTrendLabel()}</div>
                   </div>
 
+             
+
+
                   <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
                     <div className="font-medium">Temp-Mittel (3 Tage):</div>
                     <div className="ml-2">
@@ -202,9 +205,39 @@ export default function Forecast() {
               </div>
             </div>
           </div>
+
+          
         ) : (
           <p className="text-center text-gray-500 dark:text-gray-400">Lade KI-Prognose…</p>
         )}
+             {/* 🎣 KI: Wahrscheinlichkeiten pro Fischart */}
+{aiPrediction?.per_fish_type && Object.keys(aiPrediction.per_fish_type).length > 0 ? (
+  <div className="mt-6">
+    <h4 className="font-semibold mb-2 text-gray-800 dark:text-gray-100">🐠 Wahrscheinlichkeiten nach Fischart</h4>
+    <div className="space-y-2">
+      {Object.entries(aiPrediction.per_fish_type)
+        .sort(([, a], [, b]) => b - a)
+        .map(([fish, prob]) => (
+          <div
+            key={fish}
+            className="flex items-center justify-between px-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-700 shadow-sm"
+          >
+            <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-blue-700 dark:text-blue-300 text-sm">
+                {prob.toFixed(1)} %
+              </span>
+              <span>{renderFishRating(prob)}</span>
+            </div>
+          </div>
+        ))}
+    </div>
+  </div>
+) : (
+  <p className="text-center text-sm text-gray-500 dark:text-gray-400 italic mt-6">
+    Keine Fischarten-Prognose verfügbar. 🤷‍♂️
+  </p>
+)}
 
      
       </div>

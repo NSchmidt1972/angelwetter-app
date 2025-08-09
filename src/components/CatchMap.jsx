@@ -7,45 +7,21 @@ import {
 } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-markercluster';
 import L from 'leaflet';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
-const blueIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-const pinkIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-pink.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-const IS_FERKENSBRUCH_RADIUS = 0.01999; // ≈ 250 m
-
+const FERKENSBRUCH_CENTER = [51.31075, 6.25585];
+const FERKENSBRUCH_ZOOM = 16.3;
+const IS_FERKENSBRUCH_RADIUS = 0.01999;
 
 function isFerkensbruch(lat, lon) {
   const dx = lat - FERKENSBRUCH_CENTER[0];
   const dy = lon - FERKENSBRUCH_CENTER[1];
   return Math.hypot(dx, dy) < IS_FERKENSBRUCH_RADIUS;
 }
-
-
-const FERKENSBRUCH_CENTER = [51.31075, 6.25585];
-
-
-
-const FERKENSBRUCH_ZOOM = 16.3;
 
 function FitBounds({ bounds }) {
   const map = useMap();
@@ -57,103 +33,141 @@ function FitBounds({ bounds }) {
   return null;
 }
 
+function FlyToFerkensbruch() {
+  const map = useMap();
+  useEffect(() => {
+    map.flyTo(FERKENSBRUCH_CENTER, FERKENSBRUCH_ZOOM, { animate: true });
+  }, [map]);
+  return null;
+}
+
+// 🎨 Farbpalette als Hex-Codes
+const fishColorMap = {
+  hecht: '#009688',      // Teal
+  karpfen: '#1976D2',    // Blau
+  barsch: '#FFD600',     // Gelb
+  zander: '#7B1FA2',     // Violett
+  rotauge: '#E53935',    // Rot
+  rotfeder: '#FB8C00',   // Orange
+  aal: '#3E2723',        // Dunkelbraun
+  wels: '#757575',       // Grau
+  karausche: '#8D6E63',  // Braun
+  hornhecht: '#546E7A',  // Blau-Grau
+  lachs: '#FF7043',      // Lachsfarben
+  schleie: '#388E3C'     // Grün
+};
+
+// 🆕 SVG-Marker verkleinert auf ca. 60% der Originalgröße
+const createSvgIcon = (color) =>
+  L.divIcon({
+    html: `
+      <svg width="15" height="25" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">
+        <path fill="${color}" stroke="black" stroke-width="1"
+          d="M12.5,0 C5.6,0,0,5.6,0,12.5 C0,21.9,12.5,41,12.5,41 S25,21.9,25,12.5 C25,5.6,19.4,0,12.5,0z"/>
+      </svg>
+    `,
+    className: "",
+    iconSize: [15, 25],  // kleiner als Original
+    iconAnchor: [7.5, 25], // Ankerpunkt angepasst (Mitte unten)
+    popupAnchor: [1, -20]  // Popup etwas näher
+  });
+
+
+const iconMap = {};
+function getIconForFish(fish) {
+  if (!fish) return createSvgIcon('#757575'); // Grau als Fallback
+  const key = fish.trim().toLowerCase();
+  if (!iconMap[key]) {
+    const color = fishColorMap[key] || '#757575';
+    iconMap[key] = createSvgIcon(color);
+  }
+  return iconMap[key];
+}
+
+const MONTHS_DE = [
+  'Januar','Februar','März','April','Mai','Juni',
+  'Juli','August','September','Oktober','November','Dezember'
+];
+
 export default function CatchMap() {
   const [entries, setEntries] = useState([]);
-  const [spots, setSpots] = useState([]);
   const [onlyMine, setOnlyMine] = useState(false);
-  const mapRef = useRef();
+
+  const now = useMemo(() => new Date(), []);
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
 
   const anglerName = (localStorage.getItem('anglerName') || '').trim().toLowerCase();
-  const isAdmin = anglerName === 'nicol schmidt';
 
   useEffect(() => {
     async function loadData() {
-      const { data: fishes, error: fishError } = await supabase
+      const { data: fishes, error } = await supabase
         .from('fishes')
         .select('*')
         .not('lat', 'is', null)
         .not('lon', 'is', null);
-
-      const { data: spotsData, error: spotError } = await supabase
-        .from('spots')
-        .select('*');
-
-      if (!fishError) setEntries(fishes);
-      else console.error("❌ Fehler bei fishes:", fishError);
-
-      if (!spotError) setSpots(spotsData);
-      else console.error("❌ Fehler bei spots:", spotError);
+      if (!error) setEntries(fishes || []);
+      else console.error("❌ Fehler bei fishes:", error);
     }
-
     loadData();
   }, []);
 
- const bounds = onlyMine
-  ? entries
-      .filter(e => !e.blank && e.angler?.trim().toLowerCase() === anglerName)
-      .map(e => [e.lat, e.lon])
-  : entries
-      .filter(e => !e.blank && isFerkensbruch(e.lat, e.lon))
-      .map(() => FERKENSBRUCH_CENTER); // nur 1 Punkt nötig für Vereinszoom
+  // Aktuelles Jahr immer in der Liste führen
+  const availableYears = useMemo(() => {
+    const ys = new Set(
+      entries
+        .map(e => new Date(e.timestamp).getFullYear())
+        .filter(y => !isNaN(y))
+    );
+    ys.add(now.getFullYear());
+    return Array.from(ys).sort((a, b) => b - a);
+  }, [entries, now]);
 
+  // Aktuellen Monat immer in der Liste
+  const availableMonths = useMemo(() => {
+    const ms = new Set(
+      entries
+        .filter(e => year === 'all' || new Date(e.timestamp).getFullYear() === year)
+        .map(e => new Date(e.timestamp).getMonth())
+        .filter(m => !isNaN(m))
+    );
 
-  const handleDragEnd = async (e, spot) => {
-    const newPos = e.target.getLatLng();
-    const { error } = await supabase
-      .from('spots')
-      .update({ lat: newPos.lat, lon: newPos.lng })
-      .eq('id', spot.id);
-
-    if (error) {
-      console.error("❌ Fehler beim Speichern:", error.message);
-      alert("Fehler beim Speichern.");
-    } else {
-      setSpots((prev) =>
-        prev.map((s) =>
-          s.id === spot.id ? { ...s, lat: newPos.lat, lon: newPos.lng } : s
-        )
-      );
-      console.log(`✅ ${spot.name} verschoben zu ${newPos.lat.toFixed(5)}, ${newPos.lng.toFixed(5)}`);
+    if (year === 'all' || year === now.getFullYear()) {
+      ms.add(now.getMonth());
     }
-  };
 
-  const handleFishMove = async (e, catchEntry) => {
-    const newPos = e.target.getLatLng();
-    const { error } = await supabase
-      .from('fishes')
-      .update({ lat: newPos.lat, lon: newPos.lng })
-      .eq('id', catchEntry.id);
+    return Array.from(ms).sort((a, b) => a - b);
+  }, [entries, year, now]);
 
-    if (error) {
-      console.error("❌ Fehler beim Speichern des Fangs:", error.message);
-      alert("Fehler beim Speichern des Fangs.");
-    } else {
-      setEntries((prev) =>
-        prev.map((f) =>
-          f.id === catchEntry.id ? { ...f, lat: newPos.lat, lon: newPos.lng } : f
-        )
-      );
-      console.log(`✅ Fang verschoben zu ${newPos.lat.toFixed(5)}, ${newPos.lng.toFixed(5)}`);
-    }
-  };
+  const timeFiltered = useMemo(() => {
+    return entries.filter((e) => {
+      const d = new Date(e.timestamp);
+      if (isNaN(d)) return false;
+      const yearOk = (year === 'all') || (d.getFullYear() === year);
+      const monthOk = (month === 'all') || (d.getMonth() === month);
+      return yearOk && monthOk;
+    });
+  }, [entries, year, month]);
 
- const filteredEntries = entries.filter((e) => {
-  const isMarilou = e.is_marilou === true;
-  const isOwnCatch = e.angler?.trim().toLowerCase() === anglerName;
-  const ort = e.location_name?.toLowerCase().trim() ?? '';
-  const ortIstFerkensbruch = e.location_name == null || ort.includes('lobberich');
+  // Schneidertage rausfiltern = nur Einträge mit Fischname
+  const filteredEntries = useMemo(() => {
+    const valid = timeFiltered.filter(e => e.fish?.trim());
+    if (!onlyMine) return valid;
+    return valid.filter(e => e.angler?.trim().toLowerCase() === anglerName);
+  }, [timeFiltered, onlyMine, anglerName]);
 
-  if (e.blank || (isMarilou && anglerName !== 'marilou')) return false;
+  const bounds = useMemo(() => {
+    if (filteredEntries.length === 0) return [];
+    return filteredEntries.map(e => [e.lat, e.lon]);
+  }, [filteredEntries]);
 
-  return onlyMine ? isOwnCatch : ortIstFerkensbruch;
-});
-
-
+  const legendFishSet = useMemo(() => {
+    return new Set(filteredEntries.map(e => e.fish?.trim().toLowerCase()).filter(Boolean));
+  }, [filteredEntries]);
 
   return (
-    <div className="h-[80vh] w-full relative z-0 rounded-xl overflow-hidden shadow-md">
-      <div className="flex justify-between items-center px-4 pt-4">
-       
+    <div className="w-full relative z-0 rounded-xl overflow-hidden shadow-md">
+      <div className="flex flex-col gap-3 px-4 pt-4 mb-2 z-10 relative bg-white dark:bg-gray-900">
         <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
           <input
             type="checkbox"
@@ -163,61 +177,87 @@ export default function CatchMap() {
           />
           Nur meine
         </label>
+
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600 dark:text-gray-300">Jahr</span>
+            <select
+              value={year}
+              onChange={(e) => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="border rounded-md px-2 py-1 bg-white dark:bg-gray-800 dark:border-gray-700"
+            >
+              <option value="all">Alle Jahre</option>
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600 dark:text-gray-300">Monat</span>
+            <select
+              value={month}
+              onChange={(e) => setMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="border rounded-md px-2 py-1 bg-white dark:bg-gray-800 dark:border-gray-700"
+            >
+              <option value="all">Alle Monate</option>
+              {availableMonths.map(m => <option key={m} value={m}>{MONTHS_DE[m]}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-300 items-center">
+          {[...legendFishSet].map((fish, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <div dangerouslySetInnerHTML={{
+                __html: createSvgIcon(fishColorMap[fish] || '#757575').options.html
+              }} style={{ width: '16px', height: '26px' }} />
+              <span className="capitalize">{fish}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <MapContainer
-        center={FERKENSBRUCH_CENTER}
-        zoom={FERKENSBRUCH_ZOOM}
-        scrollWheelZoom={true}
-        className="h-full w-full"
-        whenCreated={(mapInstance) => (mapRef.current = mapInstance)}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+      <div className="h-[70vh] mt-2">
+        <MapContainer
+          key={`${onlyMine ? 'onlyMine' : 'all'}-${year}-${month}`}
+          center={FERKENSBRUCH_CENTER}
+          zoom={FERKENSBRUCH_ZOOM}
+          scrollWheelZoom={true}
+          className="h-full w-full"
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
 
-        {onlyMine && bounds.length > 0 && <FitBounds bounds={bounds} />}
+          {onlyMine
+            ? (bounds.length > 0 && <FitBounds bounds={bounds} />)
+            : <FlyToFerkensbruch />
+          }
 
-
-       
-
-        <MarkerClusterGroup>
-         {filteredEntries.map((e) => {
-  const isOwnCatch = isAdmin || e.angler?.trim().toLowerCase() === anglerName;
-
-  const markerPosition = isFerkensbruch(e.lat, e.lon)
-    ? FERKENSBRUCH_CENTER
-    : [e.lat, e.lon];
-
-  return (
-    <Marker
-      key={e.id}
-      position={markerPosition}
-      icon={e.is_marilou ? pinkIcon : blueIcon}
-      draggable={isOwnCatch}
-      eventHandlers={
-        isOwnCatch ? { dragend: (evt) => handleFishMove(evt, e) } : {}
-      }
-    >
-      <Popup>
-        <div className="text-sm">
-          <strong>{e.angler}</strong><br />
-          🐟 {e.fish} ({e.size} cm)<br />
-          {new Date(e.timestamp).toLocaleString('de-DE')}
-          {isFerkensbruch(e.lat, e.lon) && (
-            <p className="text-xs text-gray-500 mt-1">
-              📍 Position zentriert auf Ferkensbruch
-            </p>
-          )}
-        </div>
-      </Popup>
-    </Marker>
-  );
-})}
-
-        </MarkerClusterGroup>
-      </MapContainer>
+          <MarkerClusterGroup>
+            {filteredEntries
+              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+              .map(e => (
+                <Marker
+                  key={e.id}
+                  position={isFerkensbruch(e.lat, e.lon) ? FERKENSBRUCH_CENTER : [e.lat, e.lon]}
+                  icon={getIconForFish(e.fish)}
+                >
+                  <Popup>
+                    <div className="text-sm">
+                      <strong>{e.angler}</strong><br />
+                      🐟 {e.fish} ({e.size} cm)<br />
+                      {new Date(e.timestamp).toLocaleString('de-DE')}
+                      {isFerkensbruch(e.lat, e.lon) && (
+                        <p className="text-xs text-gray-500 mt-1">📍 Position zentriert auf Ferkensbruch</p>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+          </MarkerClusterGroup>
+        </MapContainer>
+      </div>
     </div>
   );
 }
