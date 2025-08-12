@@ -165,6 +165,11 @@ export default function CatchMap() {
     return new Set(filteredEntries.map(e => e.fish?.trim().toLowerCase()).filter(Boolean));
   }, [filteredEntries]);
 
+  // 🔧 NEU: Bei "Nur meine" nur zoomen, wenn es mind. einen externen Punkt gibt
+  const hasExternalPoint = useMemo(() =>
+    bounds.some(([lat, lon]) => !isFerkensbruch(lat, lon))
+  , [bounds]);
+
   return (
     <div className="w-full relative z-0 rounded-xl overflow-hidden shadow-md">
       <div className="flex flex-col gap-3 px-4 pt-4 mb-2 z-10 relative bg-white dark:bg-gray-900">
@@ -180,7 +185,7 @@ export default function CatchMap() {
 
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <div className="flex items-center gap-2">
-            <span className="text-gray-600 dark:text-gray-300">Jahr</span>
+           
             <select
               value={year}
               onChange={(e) => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
@@ -192,7 +197,7 @@ export default function CatchMap() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-gray-600 dark:text-gray-300">Monat</span>
+           
             <select
               value={month}
               onChange={(e) => setMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
@@ -230,7 +235,11 @@ export default function CatchMap() {
           />
 
           {onlyMine
-            ? (bounds.length > 0 && <FitBounds bounds={bounds} />)
+            ? (
+                bounds.length > 0 && hasExternalPoint && (
+                  <FitBounds bounds={bounds} />
+                )
+              )
             : <FlyToFerkensbruch />
           }
 

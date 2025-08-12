@@ -1,4 +1,5 @@
 import heic2any from "heic2any";
+import { supabase } from '../supabaseClient';
 
 /**
  * HEIC/HEIF-Konvertierung (nur wenn nötig)
@@ -63,7 +64,6 @@ export async function optimizeImage(file, maxSize = 1600, quality = 0.85) {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Fallback bei toBlob‑Problemen (z. B. Android WebView)
         if (canvas.toBlob) {
           canvas.toBlob((blob) => {
             if (blob) {
@@ -73,7 +73,6 @@ export async function optimizeImage(file, maxSize = 1600, quality = 0.85) {
                 })
               );
             } else {
-              // Fallback
               const fallbackBlob = dataURLToBlob(canvas.toDataURL("image/jpeg", quality));
               resolve(
                 new File([fallbackBlob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
@@ -83,7 +82,6 @@ export async function optimizeImage(file, maxSize = 1600, quality = 0.85) {
             }
           }, "image/jpeg", quality);
         } else {
-          // toBlob nicht unterstützt
           const fallbackBlob = dataURLToBlob(canvas.toDataURL("image/jpeg", quality));
           resolve(
             new File([fallbackBlob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
@@ -98,4 +96,38 @@ export async function optimizeImage(file, maxSize = 1600, quality = 0.85) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Entfernt Sonderzeichen aus Dateinamen
+ */
+export function sanitizeFilename(name) {
+  return name.normalize("NFD").replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/**
+ * Kombiniert Bildverarbeitung und Upload zu Supabase
+ */
+export async function processAndUploadImage(file, anglerName) {
+  let processedFile = await convertHeicIfNeeded(file);
+  processedFile = await optimizeImage(processedFile);
+
+  const safeName = sanitizeFilename(anglerName);
+  const fileName = `${Date.now()}_${safeName}.jpg`;
+
+  const { error: uploadError } = await supabase
+    .storage
+    .from('fischfotos')
+    .upload(fileName, processedFile);
+
+  if (uploadError) {
+    throw new Error('Fehler beim Hochladen des Fotos.');
+  }
+
+  const { data: publicUrl } = supabase
+    .storage
+    .from('fischfotos')
+    .getPublicUrl(fileName);
+
+  return publicUrl?.publicUrl || '';
 }

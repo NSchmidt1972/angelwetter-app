@@ -13,81 +13,100 @@ export default function AdminOverview() {
   const [externalCatches, setExternalCatches] = useState([]);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const { data: weatherData } = await supabase
-          .from('weather_cache')
-          .select('updated_at')
-          .eq('id', 'latest')
-          .single();
+  async function loadData() {
+    try {
+      const { data: weatherData } = await supabase
+        .from('weather_cache')
+        .select('updated_at')
+        .eq('id', 'latest')
+        .single();
 
-        if (weatherData?.updated_at) {
-          setWeatherUpdatedAt(new Date(weatherData.updated_at)
-            .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
-        }
-
-        const { data: users } = await supabase
-          .from('user_activity')
-          .select('user_id, last_active')
-          .gt('last_active', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
-
-        const userIds = users.map(u => u.user_id);
-        const { data: profiles } = await supabase
-          .from('profiles').select('id, name').in('id', userIds);
-        const enriched = users.map(u => {
-          const match = profiles.find(p => p.id === u.user_id);
-          return match ? { ...u, name: match.name } : null;
-        }).filter(Boolean);
-        setActiveUsers(enriched);
-
-        const { data: fishes } = await supabase
-          .from('fishes')
-          .select('*')
-          .order('timestamp', { ascending: false })
-          .not('blank', 'is', true)
-          .limit(1);
-
-        setLatestCatch(fishes?.[0] || null);
-        if (fishes?.[0]?.angler) setNameShort(fishes[0].angler);
-
-        const { count } = await supabase
-          .from('fishes')
-          .select('*', { count: 'exact', head: true })
-          .not('fish', 'is', null)
-          .neq('fish', '');
-        setCatchCount(count);
-
-        const { data: blanks } = await supabase
-          .from('fishes')
-          .select('angler, timestamp')
-          .eq('blank', true)
-          .gt('timestamp', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-          .order('timestamp', { ascending: false });
-        setRecentBlanks(blanks);
-
-        const { data: allProfilesData } = await supabase
-          .from('profiles')
-          .select('name, created_at')
-          .order('created_at', { ascending: false });
-        setAllProfiles(allProfilesData);
-
-        const { data: externals } = await supabase
-          .from('fishes')
-          .select('angler, fish, size, timestamp, lat, lon, location_name')
-          .not('lat', 'is', null)
-          .not('lon', 'is', null)
-          .not('blank', 'is', true)
-          .neq('location_name', 'Lobberich')
-          .order('timestamp', { ascending: false })
-          .limit(20);
-        setExternalCatches(externals);
-
-      } catch (error) {
-        console.error('❌ Fehler beim Laden der Admin-Daten:', error.message);
+      if (weatherData?.updated_at) {
+        setWeatherUpdatedAt(
+          new Date(weatherData.updated_at).toLocaleTimeString('de-DE', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        );
       }
+
+      const { data: users } = await supabase
+        .from('user_activity')
+        .select('user_id, last_active')
+        .gt(
+          'last_active',
+          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        );
+
+      const userIds = users.map((u) => u.user_id);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', userIds);
+      const enriched = users
+        .map((u) => {
+          const match = profiles.find((p) => p.id === u.user_id);
+          return match ? { ...u, name: match.name } : null;
+        })
+        .filter(Boolean);
+      setActiveUsers(enriched);
+
+      const { data: fishes } = await supabase
+        .from('fishes')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .not('blank', 'is', true)
+        .limit(1);
+
+      setLatestCatch(fishes?.[0] || null);
+      if (fishes?.[0]?.angler) setNameShort(fishes[0].angler);
+
+      const { count } = await supabase
+        .from('fishes')
+        .select('*', { count: 'exact', head: true })
+        .not('fish', 'is', null)
+        .neq('fish', '');
+      setCatchCount(count);
+
+      const { data: blanks } = await supabase
+        .from('fishes')
+        .select('angler, timestamp')
+        .eq('blank', true)
+        .gt(
+          'timestamp',
+          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        )
+        .order('timestamp', { ascending: false });
+      setRecentBlanks(blanks);
+
+      const { data: allProfilesData } = await supabase
+        .from('profiles')
+        .select('name, created_at')
+        .order('created_at', { ascending: false });
+      setAllProfiles(allProfilesData);
+
+      // ⬇️ Angepasste externe Fänge-Query
+     const { data: externals } = await supabase
+  .from('fishes')
+  .select('angler, fish, size, timestamp, lat, lon, location_name')
+  .not('lat', 'is', null)
+  .not('lon', 'is', null)
+  .not('blank', 'is', true)
+  .not('location_name', 'ilike', '%lobberich%')
+  .not('location_name', 'ilike', '%ferkensbruch%')
+  .not('location_name', 'is', null)
+  .order('timestamp', { ascending: false })
+  .limit(20);
+
+      setExternalCatches(externals);
+
+    } catch (error) {
+      console.error('❌ Fehler beim Laden der Admin-Daten:', error.message);
     }
-    loadData();
-  }, []);
+  }
+  loadData();
+}, []);
+
 
   const Section = ({ title, value, children }) => (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">

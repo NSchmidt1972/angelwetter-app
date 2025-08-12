@@ -9,16 +9,22 @@ export default function Navbar({ name, isAdmin }) {
   const [openDropdown, setOpenDropdown] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+
+  // Neu: State für Geräteansicht
+  const [showHamburger, setShowHamburger] = useState(false);
+
   const location = useLocation();
   const navigate = useNavigate();
   const dropdownRef = useRef();
 
+  // Dark Mode beim Laden setzen
   useEffect(() => {
     const stored = localStorage.getItem('darkMode') === 'true';
     setDarkMode(stored);
     document.documentElement.classList.toggle('dark', stored);
   }, []);
 
+  // Klick außerhalb schließt Dropdown
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -27,6 +33,29 @@ export default function Navbar({ name, isAdmin }) {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Geräteerkennung
+  useEffect(() => {
+    function checkDevice() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const portrait = height > width;
+
+      const isMobile = width < 768;
+      const isTabletPortrait = !isMobile && width <= 1024 && portrait;
+
+      setShowHamburger(isMobile || isTabletPortrait);
+    }
+
+    checkDevice(); // beim Laden
+    window.addEventListener("resize", checkDevice);
+    window.addEventListener("orientationchange", checkDevice);
+
+    return () => {
+      window.removeEventListener("resize", checkDevice);
+      window.removeEventListener("orientationchange", checkDevice);
+    };
   }, []);
 
   const toggleDark = () => {
@@ -59,9 +88,7 @@ export default function Navbar({ name, isAdmin }) {
         { label: 'Karte', path: '/map' }
       ]
     },
-    ...(isAdmin ? [
-      { label: '🔧 Admin', path: '/admin' },
-    ] : [])
+    ...(isAdmin ? [{ label: '🔧 Admin', path: '/admin' }] : [])
   ];
 
   if (!user) return null;
@@ -75,16 +102,27 @@ export default function Navbar({ name, isAdmin }) {
   return (
     <header className="bg-white dark:bg-gray-900 shadow-md sticky top-0 z-50 text-black dark:text-white">
       <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+        
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setOpen(!open)}
-            className="md:hidden text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-            aria-label="Menü öffnen"
-          >
-            ☰
-          </button>
+          {/* Hamburger-Button nur wenn showHamburger true */}
+          {showHamburger && (
+            <button
+              onClick={() => setOpen(!open)}
+              className="text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+              aria-label="Menü öffnen"
+            >
+              ☰
+            </button>
+          )}
 
-          <nav className={`md:flex md:flex-row md:gap-6 ${open ? 'absolute top-full left-0 w-full bg-white dark:bg-gray-900 shadow-lg flex flex-col p-4 gap-4 z-40' : 'hidden'} md:items-center`}>
+          {/* Menü abhängig von showHamburger */}
+          <nav
+            className={
+              showHamburger
+                ? `${open ? 'absolute top-full left-0 w-full bg-white dark:bg-gray-900 shadow-lg flex flex-col p-4 gap-4 z-40' : 'hidden'}`
+                : 'flex flex-row gap-6 items-center'
+            }
+          >
             {navItems.map((item) =>
               item.children ? (
                 <div key={item.label} className="relative">
@@ -100,9 +138,11 @@ export default function Navbar({ name, isAdmin }) {
                         <Link
                           key={child.path}
                           to={child.path}
-                          className={`block px-5 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 rounded ${location.pathname === child.path
-                            ? 'font-bold text-blue-700 dark:text-blue-300'
-                            : 'text-gray-800 dark:text-gray-100'}`}
+                          className={`block px-5 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 rounded ${
+                            location.pathname === child.path
+                              ? 'font-bold text-blue-700 dark:text-blue-300'
+                              : 'text-gray-800 dark:text-gray-100'
+                          }`}
                           onClick={() => {
                             setOpen(false);
                             setOpenDropdown(false);
@@ -118,9 +158,11 @@ export default function Navbar({ name, isAdmin }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`block px-4 py-3 rounded text-lg hover:bg-blue-100 dark:hover:bg-gray-700 ${location.pathname === item.path
-                    ? 'font-bold text-blue-700 dark:text-blue-300'
-                    : ''}`}
+                  className={`block px-4 py-3 rounded text-lg hover:bg-blue-100 dark:hover:bg-gray-700 ${
+                    location.pathname === item.path
+                      ? 'font-bold text-blue-700 dark:text-blue-300'
+                      : ''
+                  }`}
                   onClick={() => setOpen(false)}
                 >
                   {item.label}
@@ -146,24 +188,23 @@ export default function Navbar({ name, isAdmin }) {
           </button>
 
           {showMenu && (
-  <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base">
-    <Link
-      to="/settings"
-      className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
-      onClick={() => setShowMenu(false)}
-    >
-      ⚙️ Einstellungen
-    </Link>
-   
-    <button
-      onClick={handleLogout}
-      className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
-    >
-      Abmelden
-    </button>
-  </div>
-)}
-
+            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base">
+              <Link
+                to="/settings"
+                className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
+                onClick={() => setShowMenu(false)}
+              >
+                ⚙️ Einstellungen
+              </Link>
+            
+              <button
+                onClick={handleLogout}
+                className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
+              >
+                Abmelden
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
