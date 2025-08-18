@@ -6,29 +6,30 @@ import { supabase } from '@/supabaseClient';
 export default function Navbar({ name, isAdmin }) {
   const { user, setUser } = useAuth();
   const [open, setOpen] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(false); // Statistik
+  const [showMenu, setShowMenu] = useState(false);         // Profil
   const [darkMode, setDarkMode] = useState(false);
-
-  // Neu: State für Geräteansicht
   const [showHamburger, setShowHamburger] = useState(false);
 
   const location = useLocation();
   const navigate = useNavigate();
-  const dropdownRef = useRef();
+  const profileRef = useRef();
+  const statsRef = useRef();
 
-  // Dark Mode beim Laden setzen
   useEffect(() => {
     const stored = localStorage.getItem('darkMode') === 'true';
     setDarkMode(stored);
     document.documentElement.classList.toggle('dark', stored);
   }, []);
 
-  // Klick außerhalb schließt Dropdown
+  // Outside click: schließt Profil- und Statistik-Menüs
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    function handleClickOutside(e) {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
         setShowMenu(false);
+      }
+      if (statsRef.current && !statsRef.current.contains(e.target)) {
+        setOpenDropdown(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -41,17 +42,13 @@ export default function Navbar({ name, isAdmin }) {
       const width = window.innerWidth;
       const height = window.innerHeight;
       const portrait = height > width;
-
       const isMobile = width < 768;
       const isTabletPortrait = !isMobile && width <= 1024 && portrait;
-
       setShowHamburger(isMobile || isTabletPortrait);
     }
-
-    checkDevice(); // beim Laden
+    checkDevice();
     window.addEventListener("resize", checkDevice);
     window.addEventListener("orientationchange", checkDevice);
-
     return () => {
       window.removeEventListener("resize", checkDevice);
       window.removeEventListener("orientationchange", checkDevice);
@@ -83,6 +80,7 @@ export default function Navbar({ name, isAdmin }) {
       children: [
         { label: 'Analyse', path: '/analysis' },
         { label: 'Top 10', path: '/top-fishes' },
+        { label: 'Fun-Facts', path: '/fun' },   // <- hier auf /fun angepasst
         { label: 'Prognose', path: '/forecast' },
         { label: 'Kalender', path: '/calendar' },
         { label: 'Karte', path: '/map' }
@@ -102,9 +100,7 @@ export default function Navbar({ name, isAdmin }) {
   return (
     <header className="bg-white dark:bg-gray-900 shadow-md sticky top-0 z-50 text-black dark:text-white">
       <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-        
         <div className="flex items-center gap-4">
-          {/* Hamburger-Button nur wenn showHamburger true */}
           {showHamburger && (
             <button
               onClick={() => setOpen(!open)}
@@ -115,7 +111,6 @@ export default function Navbar({ name, isAdmin }) {
             </button>
           )}
 
-          {/* Menü abhängig von showHamburger */}
           <nav
             className={
               showHamburger
@@ -125,15 +120,20 @@ export default function Navbar({ name, isAdmin }) {
           >
             {navItems.map((item) =>
               item.children ? (
-                <div key={item.label} className="relative">
+                <div key={item.label} className="relative" ref={statsRef}>
                   <button
                     onClick={() => setOpenDropdown(prev => !prev)}
                     className="block px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
+                    aria-expanded={openDropdown}
+                    aria-haspopup="menu"
                   >
                     {item.label} ▾
                   </button>
                   {openDropdown && (
-                    <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base">
+                    <div
+                      className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base"
+                      role="menu"
+                    >
                       {item.children.map((child) => (
                         <Link
                           key={child.path}
@@ -159,9 +159,7 @@ export default function Navbar({ name, isAdmin }) {
                   key={item.path}
                   to={item.path}
                   className={`block px-4 py-3 rounded text-lg hover:bg-blue-100 dark:hover:bg-gray-700 ${
-                    location.pathname === item.path
-                      ? 'font-bold text-blue-700 dark:text-blue-300'
-                      : ''
+                    location.pathname === item.path ? 'font-bold text-blue-700 dark:text-blue-300' : ''
                   }`}
                   onClick={() => setOpen(false)}
                 >
@@ -172,7 +170,7 @@ export default function Navbar({ name, isAdmin }) {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4 text-base relative" ref={dropdownRef}>
+        <div className="flex items-center gap-4 text-base relative" ref={profileRef}>
           <button
             onClick={toggleDark}
             className="px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300"
@@ -183,20 +181,23 @@ export default function Navbar({ name, isAdmin }) {
           <button
             onClick={() => setShowMenu(prev => !prev)}
             className="px-3 py-2 rounded hover:underline"
+            aria-expanded={showMenu}
+            aria-haspopup="menu"
           >
             👤 {displayName}
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base">
-              <Link
+            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base" role="menu">
+              {/* Optional: /settings nur, wenn Route existiert */}
+              {/* <Link
                 to="/settings"
                 className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
                 onClick={() => setShowMenu(false)}
               >
                 ⚙️ Einstellungen
-              </Link>
-            
+              </Link> */}
+
               <button
                 onClick={handleLogout}
                 className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"

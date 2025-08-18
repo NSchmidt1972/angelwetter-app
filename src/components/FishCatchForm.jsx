@@ -63,51 +63,60 @@ export default function FishCatchForm({ setWeatherData }) {
   };
 
   const handleSubmit = async () => {
-    const errorMessage = validateCatchForm({ fish, size, weight, position });
-    if (errorMessage) {
-      alert(errorMessage);
-      return;
-    }
+  // ➜ nutzt deine (angepasste) validateCatchForm
+  const errorMessage = validateCatchForm({ fish, size, weight, position });
+  if (errorMessage) {
+    alert(errorMessage);
+    return;
+  }
 
-    setLoadingCatch(true);
+  setLoadingCatch(true);
 
-    try {
-      const currentWeather = await loadWeatherForPosition(
-        position,
-        { lat: FERKENSBRUCH_LAT, lon: FERKENSBRUCH_LON },
-        setWeatherData
-      );
+  try {
+    const currentWeather = await loadWeatherForPosition(
+      position,
+      { lat: FERKENSBRUCH_LAT, lon: FERKENSBRUCH_LON },
+      setWeatherData
+    );
 
-      const photoUrl = photo
-        ? await processAndUploadImage(photo, anglerName)
-        : "";
+    const photoUrl = photo
+      ? await processAndUploadImage(photo, anglerName)
+      : "";
 
-      const locationName = await reverseGeocode(position.lat, position.lon).catch(() => null);
+    const locationName = await reverseGeocode(position.lat, position.lon).catch(() => null);
 
-      const newEntry = {
-        fish,
-        size: parseFloat(size.replace(",", ".")),
-        weight: fish === "Karpfen" ? parseFloat(weight.replace(",", ".")) : null,
-        note,
-        angler: anglerName,
-        timestamp: new Date().toISOString(),
-        weather: currentWeather,
-        photo_url: photoUrl,
-        blank: false,
-        lat: position.lat,
-        lon: position.lon,
-        location_name: locationName
-      };
+    // 🔢 Zahlen sauber parsen (Komma/Zahlpunkt)
+    const sizeNumber = parseFloat(String(size).replace(",", "."));
+    const weightNumber =
+      fish === "Karpfen" && weight
+        ? parseFloat(String(weight).replace(",", "."))
+        : null; // ← optional, sonst null
 
-      setPendingEntry(newEntry);
-      setShowTakenDialog(true);
-    } catch (err) {
-      console.error(err);
-      alert(err.message || "Fehler beim Speichern des Fangs.");
-    } finally {
-      setLoadingCatch(false);
-    }
-  };
+    const newEntry = {
+      fish,
+      size: sizeNumber,
+      weight: weightNumber,          // ← wird null, wenn leer
+      note,
+      angler: anglerName,
+      timestamp: new Date().toISOString(),
+      weather: currentWeather,
+      photo_url: photoUrl,
+      blank: false,
+      lat: position.lat,
+      lon: position.lon,
+      location_name: locationName
+    };
+
+    setPendingEntry(newEntry);
+    setShowTakenDialog(true);
+  } catch (err) {
+    console.error(err);
+    alert(err.message || "Fehler beim Speichern des Fangs.");
+  } finally {
+    setLoadingCatch(false);
+  }
+};
+
 
   const finalizeCatch = async (taken) => {
     try {

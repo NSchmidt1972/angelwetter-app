@@ -1,8 +1,6 @@
-// utils/validation.js
-
 export function validateCatchForm({ fish, size, weight, position }) {
   if (!fish || !size) {
-    return "Bitte alles ausfüllen!";
+    return "Bitte Fischart und Größe angeben!";
   }
 
   const sizeNumber = parseFloat(size.replace(',', '.'));
@@ -10,13 +8,11 @@ export function validateCatchForm({ fish, size, weight, position }) {
     return "Bitte eine gültige Zahl größer als 0 für die Größe eingeben.";
   }
 
-  if (fish === 'Karpfen') {
-    if (!weight) {
-      return "Bitte das Gewicht des Karpfens angeben.";
-    }
+  // Gewicht nur prüfen, wenn es überhaupt ausgefüllt wurde
+  if (fish === 'Karpfen' && weight) {
     const weightNumber = parseFloat(weight.replace(',', '.'));
     if (isNaN(weightNumber) || weightNumber <= 0) {
-      return "Bitte eine gültige Zahl größer als 0 für das Gewicht eingeben.";
+      return "Bitte ein gültiges Gewicht eingeben oder Feld leer lassen.";
     }
   }
 

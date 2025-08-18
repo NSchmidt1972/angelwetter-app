@@ -20,6 +20,8 @@ const Calendar = lazy(() => import('./pages/Calendar'));
 const AuthForm = lazy(() => import('./components/AuthForm'));
 const SpotAdmin = lazy(() => import('./components/SpotAdmin')); // ✅ NEU
 const SettingsPage = lazy(() => import('./pages/SettingsPage')); // ✅ SETTINGS
+const FunFacts = lazy(() => import('./pages/FunFacts'));
+
 
 export default function AppRoutes({ isLoggedIn, isAdmin, anglerName, weatherData, setWeatherData }) {
   const isRecoveryLink = window.location.hash.includes('type=recovery');
@@ -43,6 +45,7 @@ export default function AppRoutes({ isLoggedIn, isAdmin, anglerName, weatherData
           <Route path="/calendar" element={<><Navbar name={anglerName} isAdmin={isAdmin} /><Calendar /></>} />
           <Route path="/map" element={<><Navbar name={anglerName} isAdmin={isAdmin} /><MapView /></>} />
           <Route path="/forecast" element={<><Navbar name={anglerName} isAdmin={isAdmin} /><Forecast weatherData={weatherData} /></>} />
+          <Route path="/fun" element={<><Navbar name={anglerName} isAdmin={isAdmin} /><FunFacts /></>} />
 
           <Route path="/admin" element={
             isAdmin
