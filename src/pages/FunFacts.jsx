@@ -5,6 +5,10 @@ import { supabase } from '../supabaseClient';
 const PUBLIC_FROM = new Date('2025-06-01');
 const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
 
+const PREDATOR_SET = new Set(['barsch', 'aal', 'hecht', 'zander', 'wels']);
+const PREDATOR_LABELS = { barsch: 'Barsch', aal: 'Aal', hecht: 'Hecht', zander: 'Zander', wels: 'Wels' };
+
+
 function formatDateTime(d) {
   return new Date(d).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
 }
@@ -51,6 +55,43 @@ export default function FunFacts() {
     }
     load();
   }, [istVertrauter, filterSetting]);
+
+  function withTimeout(promise, ms = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms))
+  ]);
+}
+
+useEffect(() => {
+  async function load() {
+    try {
+      const { data, error } = await withTimeout(
+        supabase.from('fishes').select('*'),
+        8000
+      );
+      if (error) throw error;
+
+      const filtered = (data ?? []).filter((f) => {
+        const fangDatum = new Date(f.timestamp);
+        return vertraute.includes(anglerName)
+          ? (filterSetting === 'all' || fangDatum >= PUBLIC_FROM)
+          : fangDatum >= PUBLIC_FROM;
+      });
+
+      setFishes(filtered);
+    } catch (e) {
+      console.warn('Fänge konnten nicht geladen werden:', e.message);
+      setFishes([]); // graceful fallback
+    } finally {
+      setLoading(false); // <- Tippfehler vermeiden: hier sollte false stehen!
+      // KORREKT:
+      // setLoading(false);
+    }
+  }
+  load();
+}, [istVertrauter, filterSetting]);
+
 
   // Nur verwertbare Fänge: kein blank, Fischname vorhanden, Größe > 0
   const validFishes = useMemo(() => {
@@ -290,6 +331,197 @@ const mostFishesWeekday = useMemo(() => {
 
   return { max, items };
 }, [validFishes]);
+
+// 10) Meiste verschiedene Fischarten innerhalb einer Stunde (pro Angler & Stunden-Bucket)
+const mostSpeciesInOneHour = useMemo(() => {
+  const speciesByKey = {}; // key -> Set(Arten)
+  const listByKey = {};    // key -> alle Fänge in dieser Stunde (für "insgesamt ... Fänge")
+
+  validFishes.forEach((f) => {
+    const dt = new Date(f.timestamp);
+    const hourLabel = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:00`;
+    const who = f.angler || 'Unbekannt';
+    const key = `${who}__${hourLabel}`;
+
+    const fishType = (f.fish || '').trim();
+    if (!fishType) return;
+
+    if (!speciesByKey[key]) speciesByKey[key] = new Set();
+    speciesByKey[key].add(fishType);
+
+    if (!listByKey[key]) listByKey[key] = [];
+    listByKey[key].push(f);
+  });
+
+  let best = 0;
+  let winners = [];
+  Object.entries(speciesByKey).forEach(([key, set]) => {
+    const count = set.size;
+    if (count > best) {
+      best = count;
+      winners = [key];
+    } else if (count === best) {
+      winners.push(key);
+    }
+  });
+
+  const items = winners.map((key) => {
+    const [angler, hourLabel] = key.split('__');
+    const species = Array.from(speciesByKey[key]).sort();
+    const totalThatHour = (listByKey[key] || []).length;
+    return { angler, hourLabel, species, totalThatHour };
+  });
+
+  return { count: best, items };
+}, [validFishes]);
+
+// 11. Nur location_name nutzen; NULL/leer/"null"/"...Lobberich..." => "Ferkensbruch"
+function normalizePlace(f) {
+  const rawVal = f.location_name;
+  const name = (rawVal == null ? '' : String(rawVal)).trim();
+  const lower = name.toLowerCase();
+
+  if (!name || lower === 'null') return 'Ferkensbruch';
+  if (lower.includes('lobberich')) return 'Ferkensbruch';
+  if (lower.includes('ferkensbruch')) return 'Ferkensbruch';
+
+  // kleine Normalisierung (mehrfache Spaces entfernen)
+  return name.replace(/\s+/g, ' ');
+}
+
+// ️⃣ Meiste unterschiedlichen Orte pro Angler
+// ️⃣ Meiste unterschiedlichen Orte pro Angler (nur >1 Ort; "nur Ferkensbruch" wird ausgeblendet)
+const mostPlacesAngler = useMemo(() => {
+  const placesByAngler = {}; // angler -> Set(places)
+
+  validFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who) return;
+    const place = normalizePlace(f); // nutzt deine Funktion, die "Lobberich"/NULL => "Ferkensbruch" mappt
+    if (!place) return;
+    if (!placesByAngler[who]) placesByAngler[who] = new Set();
+    placesByAngler[who].add(place);
+  });
+
+  // Nur Angler behalten, die nicht ausschließlich "Ferkensbruch" haben
+  const entries = Object.entries(placesByAngler)
+    .map(([angler, set]) => {
+      const places = [...set].sort();
+      const onlyFerkensbruch = places.length === 1 && places[0] === 'Ferkensbruch';
+      if (onlyFerkensbruch) return null; // rausfiltern
+      return { angler, places, count: places.length }; // Ferkensbruch wird mitgezählt, wenn andere Orte existieren
+    })
+    .filter(Boolean);
+
+  if (entries.length === 0) return { count: 0, winners: [], ranking: [] };
+
+  const best = Math.max(...entries.map(e => e.count));
+  const winners = entries
+    .filter(e => e.count === best)
+    .map(e => ({ angler: e.angler, count: e.count, places: e.places }));
+
+  const ranking = [...entries].sort(
+    (a, b) => (b.count - a.count) || a.angler.localeCompare(b.angler)
+  );
+
+  return { count: best, winners, ranking };
+}, [validFishes]);
+
+// 12. Raubfisch-König: Summe der Längen (Barsch, Aal, Hecht, Zander, Wels) pro Angler
+const predatorKing = useMemo(() => {
+  const totals = {};        // angler -> sum(cm)
+  const perSpecies = {};    // angler -> { species -> sum(cm) }
+
+  validFishes.forEach((f) => {
+    const type = (f.fish || '').toLowerCase().trim();
+    if (!PREDATOR_SET.has(type)) return;
+
+    const size = parseFloat(f.size);
+    if (Number.isNaN(size) || size <= 0) return;
+
+    const who = (f.angler || 'Unbekannt').trim();
+    totals[who] = (totals[who] || 0) + size;
+    if (!perSpecies[who]) perSpecies[who] = {};
+    perSpecies[who][type] = (perSpecies[who][type] || 0) + size;
+  });
+
+  const entries = Object.entries(totals).map(([angler, sum]) => ({
+    angler,
+    sum,
+    perSpecies: perSpecies[angler] || {}
+  }));
+
+  if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  entries.sort((a, b) => b.sum - a.sum || a.angler.localeCompare(b.angler));
+  const max = entries[0].sum;
+  const winners = entries.filter(e => Math.abs(e.sum - max) < 1e-9);
+
+  return { max, winners, ranking: entries };
+}, [validFishes]);
+
+// 13. Dickstes Ding: schwerster Fisch (max Gewicht in kg)
+const heaviestFish = useMemo(() => {
+  // nur Fänge mit gültigem Gewicht > 0
+  const withWeight = validFishes.filter((f) => {
+    const w = parseFloat(f.weight);
+    return !Number.isNaN(w) && w > 0;
+  });
+  if (withWeight.length === 0) return null;
+
+  let maxW = -Infinity;
+  withWeight.forEach((f) => {
+    const w = parseFloat(f.weight);
+    if (w > maxW) maxW = w;
+  });
+
+  // alle mit Maximalgewicht (Gleichstand)
+  const items = withWeight.filter((f) => parseFloat(f.weight) === maxW);
+
+  return { weight: maxW, items };
+}, [validFishes]);
+
+
+// 14. Effizienz: Fische pro Fangtag (Tage mit Eintrag; Schneidertage zählen mit, wenn erfasst)
+const mostEfficientAngler = useMemo(() => {
+  if (fishes.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  // Tage pro Angler (inkl. blank/Schneidertag)
+  const daysByAngler = {}; // angler -> Set(day)
+  fishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who) return;
+    const day = dayKeyFromDate(new Date(f.timestamp));
+    if (!daysByAngler[who]) daysByAngler[who] = new Set();
+    daysByAngler[who].add(day);
+  });
+
+  // Fische pro Angler (ohne blank)
+  const fishByAngler = {}; // angler -> count
+  validFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    fishByAngler[who] = (fishByAngler[who] || 0) + 1;
+  });
+
+  const entries = Object.keys(daysByAngler).map((who) => {
+    const days = daysByAngler[who].size;
+    const fish = fishByAngler[who] || 0;
+    const ratio = days > 0 ? fish / days : 0;
+    return { angler: who, ratio, fish, days };
+  }).filter(e => e.days > 0);
+
+  if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  // Sortierung: beste Quote ↓, dann mehr Fische, dann weniger Tage, dann Name
+  entries.sort((a, b) =>
+    (b.ratio - a.ratio) || (b.fish - a.fish) || (a.days - b.days) || a.angler.localeCompare(b.angler)
+  );
+
+  const max = entries[0].ratio;
+  const winners = entries.filter(e => Math.abs(e.ratio - max) < 1e-9);
+
+  return { max, winners, ranking: entries };
+}, [fishes, validFishes]);
 
 
 function monthLabel(ym) {
@@ -534,7 +766,153 @@ function monthLabel(ym) {
   )}
 </Card>
 
+{/* 9) Meiste Fischarten in 1 Stunde */}
+<Card title="Wer hat die meisten Fischarten in 1 Stunde gefangen?">
+  {mostSpeciesInOneHour.count > 0 ? (
+    <>
+      <p className="mb-2">
+        <strong>{mostSpeciesInOneHour.count}</strong> verschiedene Arten – Rekordhalter:
+      </p>
+      <ul className="space-y-2">
+        {mostSpeciesInOneHour.items.map((it, idx) => (
+          <li key={idx} className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">{it.hourLabel} Uhr</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                Insgesamt in dieser Stunde: <b>{it.totalThatHour}</b> Fänge
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {it.species.map((s) => (
+                  <Pill key={s}>{s}</Pill>
+                ))}
+              </div>
+            </div>
+            <div className="text-xl font-bold text-green-700 dark:text-green-300">
+              {mostSpeciesInOneHour.count} Arten
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>
 
+{/* 10. Wer hat an den meisten unterschiedlichen Orten geangelt? */}
+<Card title="🧭 Wer hat an den meisten unterschiedlichen Orten geangelt?">
+  {mostPlacesAngler.count > 0 ? (
+    <>
+      <p className="mb-2">
+        <strong className="text-green-700 dark:text-green-300">
+          {mostPlacesAngler.count}
+        </strong>{' '}
+        unterschiedliche Orte – Rekordhalter:
+      </p>
+      <ul className="space-y-2">
+        {mostPlacesAngler.winners.map((it, idx) => (
+          <li key={idx} className="flex items-start justify-between gap-3">
+            <div className="max-w-[70%]">
+              <div className="font-medium text-green-700 dark:text-green-300">
+                {it.angler}
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {it.places.map((p) => (
+                  <Pill key={p}>{p}</Pill>
+                ))}
+              </div>
+            </div>
+            <div className="text-xl font-bold text-green-700 dark:text-green-300">
+              {it.count}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>
+
+{/* 👑 Raubfisch-König */}
+<Card title="👑 Wer ist der Raubfisch-König? (Gesamtlänge: Barsch, Aal, Hecht, Zander, Wels)">
+  {predatorKing.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {predatorKing.winners.map((it, idx) => (
+        <li key={idx} className="flex items-start justify-between gap-3">
+          <div className="max-w-[70%]">
+            <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {Object.entries(it.perSpecies)
+                .sort((a, b) => b[1] - a[1])
+                .map(([sp, cm]) => (
+                  <Pill key={sp}>{PREDATOR_LABELS[sp] ?? sp} {Math.round(cm)} cm</Pill>
+                ))}
+            </div>
+          </div>
+          <div className="text-xl font-bold text-green-700 dark:text-green-300">
+            {Math.round(it.sum)} cm
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>
+
+{/* 🏋️ Wer hat das dickste Ding gefangen? (max Gewicht) */}
+<Card title="🏋️ Wer hat das dickste Ding gefangen? (max Gewicht)">
+  {heaviestFish ? (
+    <>
+      <p className="mb-2">
+        Schwerster Fang: <b className="text-green-700 dark:text-green-300">{heaviestFish.weight.toFixed(1)} kg</b>
+      </p>
+      <ul className="space-y-2">
+        {heaviestFish.items.map((f) => (
+          <li key={f.id} className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                {f.fish}
+                {parseFloat(f.size) > 0 ? ` • ${parseFloat(f.size).toFixed(0)} cm` : ''} • {formatDateTime(f.timestamp)}
+              </div>
+            </div>
+            <div className="text-xl font-bold text-green-700 dark:text-green-300">
+              {parseFloat(f.weight).toFixed(1)} kg
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  ) : (
+    <p>Keine Gewichtsangaben vorhanden.</p>
+  )}
+</Card>
+
+{/* 🏅 Wer angelt am effizientesten? (Fische pro Fangtag) */}
+<Card title="🏅 Wer angelt am effizientesten? (Fische pro Fangtag)">
+  {mostEfficientAngler.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {mostEfficientAngler.winners.map((it, idx) => (
+        <li key={idx} className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              {it.fish} Fische auf {it.days} Fangtage
+            </div>
+          </div>
+          <div className="text-xl font-bold text-green-700 dark:text-green-300">
+            {it.ratio.toLocaleString('de-DE', { maximumFractionDigits: 2 })} / Tag
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>
 
       </div>
     </div>

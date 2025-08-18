@@ -188,24 +188,24 @@ export default function Navbar({ name, isAdmin }) {
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base" role="menu">
-              {/* Optional: /settings nur, wenn Route existiert */}
-              {/* <Link
-                to="/settings"
-                className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
-                onClick={() => setShowMenu(false)}
-              >
-                ⚙️ Einstellungen
-              </Link> */}
+  <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base" role="menu">
+    <Link
+      to="/settings"
+      className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
+      onClick={() => setShowMenu(false)}
+    >
+      ⚙️ Einstellungen
+    </Link>
 
-              <button
-                onClick={handleLogout}
-                className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
-              >
-                Abmelden
-              </button>
-            </div>
-          )}
+    <button
+      onClick={handleLogout}
+      className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
+    >
+      Abmelden
+    </button>
+  </div>
+)}
+
         </div>
       </div>
     </header>
