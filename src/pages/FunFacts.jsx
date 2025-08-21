@@ -32,6 +32,9 @@ export default function FunFacts() {
   const istVertrauter = vertraute.includes(anglerName);
   const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
 
+
+
+
   useEffect(() => {
     async function load() {
       const { data, error } = await supabase.from('fishes').select('*');
@@ -523,6 +526,359 @@ const mostEfficientAngler = useMemo(() => {
   return { max, winners, ranking: entries };
 }, [fishes, validFishes]);
 
+// 15. 🐟 Meiste Rotaugen pro Angler
+const mostRotaugen = useMemo(() => {
+  const isRotauge = (name) => {
+    const s = (name || '').toLowerCase().trim();
+    return (
+      s === 'rotauge' ||
+      s === 'rotaugen' ||
+      s === 'plötze' ||
+      s === 'ploetze' ||
+      s.includes('rotauge') // falls Varianten wie "Rotauge (Groß)"
+    );
+  };
+
+  const counts = {}; // angler -> #rotaugen
+  validFishes.forEach((f) => {
+    if (!isRotauge(f.fish)) return;
+    const who = (f.angler || 'Unbekannt').trim();
+    counts[who] = (counts[who] || 0) + 1;
+  });
+
+  const entries = Object.entries(counts).map(([angler, count]) => ({ angler, count }));
+  if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  entries.sort((a, b) => (b.count - a.count) || a.angler.localeCompare(b.angler));
+  const max = entries[0].count;
+  const winners = entries.filter(e => e.count === max);
+
+  return { max, winners, ranking: entries };
+}, [validFishes]);
+
+// 🌕 Vollmond-Helper
+function extractMoonPhase(f) {
+  const w = f.weather;
+  if (!w) return null;
+
+  // Objekt?
+  if (typeof w === 'object') {
+    if (typeof w.moon_phase === 'number') return w.moon_phase;
+    if (typeof w?.current?.moon_phase === 'number') return w.current.moon_phase;
+    if (Array.isArray(w?.daily) && typeof w.daily[0]?.moon_phase === 'number') return w.daily[0].moon_phase;
+    if (typeof w?.moon?.phase !== 'undefined') {
+      const p = parseFloat(w.moon.phase);
+      return Number.isNaN(p) ? null : p;
+    }
+    return null;
+  }
+
+  // String (fallback: evtl. JSON gespeichert)
+  if (typeof w === 'string') {
+    try {
+      const obj = JSON.parse(w);
+      return extractMoonPhase({ weather: obj });
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+const isFullMoon = (phase, eps = 0.06) =>
+  phase != null && Math.abs(phase - 0.5) <= eps;
+
+// 16. 🌕 Wer fängt am meisten bei Vollmond?
+const mostAtFullMoon = useMemo(() => {
+  const counts = {}; // angler -> #vollmond-fänge
+
+  validFishes.forEach((f) => {
+    const phase = extractMoonPhase(f);
+    if (!isFullMoon(phase)) return;
+    const who = (f.angler || 'Unbekannt').trim();
+    counts[who] = (counts[who] || 0) + 1;
+  });
+
+  const entries = Object.entries(counts).map(([angler, count]) => ({ angler, count }));
+  if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  entries.sort((a, b) => (b.count - a.count) || a.angler.localeCompare(b.angler));
+  const max = entries[0].count;
+  const winners = entries.filter(e => e.count === max);
+
+  return { max, winners, ranking: entries };
+}, [validFishes]);
+
+// 17.🦉 Nachteule: späteste Fangzeit je Angler (+ Nachtfänge 22:00–04:59)
+const nightOwl = useMemo(() => {
+  if (validFishes.length === 0) return { maxMin: null, winners: [], ranking: [] };
+
+  const bestByAngler = {}; // angler -> { minutes, entry }
+  const nightCounts = {};  // angler -> #night
+
+  validFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who) return;
+
+    const dt = new Date(f.timestamp);
+    const minutes = dt.getHours() * 60 + dt.getMinutes(); // 0..1439
+    const isNight = dt.getHours() >= 22 || dt.getHours() < 5;
+
+    if (!bestByAngler[who] || minutes > bestByAngler[who].minutes) {
+      bestByAngler[who] = { minutes, entry: f };
+    }
+    if (isNight) nightCounts[who] = (nightCounts[who] || 0) + 1;
+  });
+
+  const toTimeLabel = (mins) =>
+    new Date(1970, 0, 1, Math.floor(mins / 60), mins % 60)
+      .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+  const entries = Object.entries(bestByAngler).map(([angler, { minutes, entry }]) => ({
+    angler,
+    minutes,
+    timeLabel: toTimeLabel(minutes),
+    night: nightCounts[angler] || 0,
+    sample: entry, // Beispiel-Fang zur Anzeige
+  }));
+
+  if (entries.length === 0) return { maxMin: null, winners: [], ranking: [] };
+
+  entries.sort((a, b) =>
+    (b.minutes - a.minutes) || (b.night - a.night) || a.angler.localeCompare(b.angler)
+  );
+
+  const maxMin = entries[0].minutes;
+  const winners = entries.filter(e => e.minutes === maxMin);
+
+  return { maxMin, winners, ranking: entries };
+}, [validFishes]);
+
+// 🌅 Früher Wurm: NUR Fänge im Fenster 04:30–09:00 zählen
+const earlyBird = useMemo(() => {
+  if (validFishes.length === 0) return { minMin: null, winners: [], ranking: [], window: { start: '04:30', end: '09:00' } };
+
+  const START_MIN = 4 * 60 + 30; // 04:30
+  const END_MIN   = 9 * 60;      // 09:00
+
+  const bestByAngler = {}; // angler -> { minutes, entry } (frühester Fang IM Fenster)
+  const earlyCounts = {};  // angler -> #Fänge im Fenster
+
+  validFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who) return;
+
+    const dt = new Date(f.timestamp);
+    const minutes = dt.getHours() * 60 + dt.getMinutes();
+
+    // nur Fänge IM Fenster berücksichtigen
+    if (minutes < START_MIN || minutes >= END_MIN) return;
+
+    if (!bestByAngler[who] || minutes < bestByAngler[who].minutes) {
+      bestByAngler[who] = { minutes, entry: f };
+    }
+    earlyCounts[who] = (earlyCounts[who] || 0) + 1;
+  });
+
+  const toTimeLabel = (mins) =>
+    new Date(1970, 0, 1, Math.floor(mins / 60), mins % 60)
+      .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+  const entries = Object.entries(bestByAngler).map(([angler, { minutes, entry }]) => ({
+    angler,
+    minutes,
+    timeLabel: toTimeLabel(minutes),
+    early: earlyCounts[angler] || 0,
+    sample: entry,
+  }));
+
+  if (entries.length === 0) return { minMin: null, winners: [], ranking: [], window: { start: '04:30', end: '09:00' } };
+
+  // früheste Zeit zuerst, dann mehr Frühfänge, dann Name
+  entries.sort((a, b) =>
+    (a.minutes - b.minutes) || (b.early - a.early) || a.angler.localeCompare(b.angler)
+  );
+
+  const minMin = entries[0].minutes;
+  const winners = entries.filter(e => e.minutes === minMin);
+
+  return { minMin, winners, ranking: entries, window: { start: '04:30', end: '09:00' } };
+}, [validFishes]);
+
+// 🌧️ Wettertext robust extrahieren (String ODER Objekt)
+function extractWeatherTextLower(f) {
+  // 1) Direkte Textfelder, die du evtl. speicherst
+  const direct =
+    f.weather_description ??
+    f.weather_desc ??
+    f.weatherText ??
+    f.conditions ??
+    null;
+  if (typeof direct === 'string' && direct.trim()) return direct.toLowerCase();
+
+  // 2) weather als String? -> als Text benutzen (kein JSON)
+  if (typeof f.weather === 'string') {
+    try {
+      const obj = JSON.parse(f.weather);
+      return extractWeatherTextLower({ weather: obj }) || '';
+    } catch {
+      return f.weather.toLowerCase();
+    }
+  }
+
+  // 3) weather als Objekt -> bekannte Pfade zusammensetzen
+  const w = (typeof f.weather === 'object' && f.weather) ? f.weather : null;
+  if (!w) return '';
+
+  const parts = [];
+  const take = (v) => { if (v != null && String(v).trim()) parts.push(String(v).toLowerCase()); };
+
+  // OpenWeather-typische Pfade
+  take(w?.weather?.[0]?.description || w?.weather?.[0]?.main);
+  take(w?.current?.weather?.[0]?.description || w?.current?.weather?.[0]?.main);
+  // sonstige Felder mancher Provider
+  take(w.description);
+  take(w.summary);
+  take(w.text);
+
+  return parts.join(' ');
+}
+
+// 🌧️ Zahlliche Niederschlagsfelder (mm) prüfen
+function hasPrecipAmount(w) {
+  const pickNums = (vals) => vals.map((v) => Number(v)).filter((n) => !Number.isNaN(n));
+  const nums = w ? pickNums([
+    w?.rain?.['1h'], w?.rain?.['3h'],
+    w?.current?.rain?.['1h'], w?.current?.rain?.['3h'],
+    w?.precipitation, w?.current?.precipitation,
+    w?.snow?.['1h'], w?.snow?.['3h'],                // falls Schnee zählen soll -> ggf. rausnehmen
+  ]) : [];
+  return nums.some((n) => n > 0);
+}
+
+// 🌧️ Text-Regeln (de/en, inkl. Umlaute)
+const RAIN_REGEX = /(regen|regenschauer|niesel|sprühregen|schauer|rain|drizzle|shower)/i;
+
+function isRainyCatch(f) {
+  // 1) Text prüfen (auch wenn weather ein reiner String ist)
+  const text = extractWeatherTextLower(f);
+  if (text && RAIN_REGEX.test(text)) return true;
+
+  // 2) Falls weather JSON hat: Niederschlag prüfen
+  let wObj = null;
+  if (typeof f.weather === 'object' && f.weather) wObj = f.weather;
+  else if (typeof f.weather === 'string') {
+    try { wObj = JSON.parse(f.weather); } catch { /* ignore */ }
+  }
+  return hasPrecipAmount(wObj);
+}
+
+
+// 🌧️ Wer fängt am meisten bei Regen?
+const mostInRain = useMemo(() => {
+  const counts = {};     // angler -> #regen-fänge
+  const examples = {};   // angler -> beispiele
+
+  validFishes.forEach((f) => {
+    if (!isRainyCatch(f)) return;
+    const who = (f.angler || 'Unbekannt').trim();
+    counts[who] = (counts[who] || 0) + 1;
+    (examples[who] ||= []).push(f);
+  });
+
+  const entries = Object.entries(counts).map(([angler, count]) => ({
+    angler,
+    count,
+    examples: examples[angler]
+      .slice()
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .slice(0, 5),
+  }));
+
+  if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  entries.sort((a, b) => (b.count - a.count) || a.angler.localeCompare(b.angler));
+  const max = entries[0].count;
+  const winners = entries.filter(e => e.count === max);
+
+  return { max, winners, ranking: entries };
+}, [validFishes]);
+
+// ☀️ Wettertext (lowercased) aus f.weather herausziehen – String ODER Objekt
+function getWeatherTextLower(f) {
+  const direct =
+    f.weather_description ??
+    f.weather_desc ??
+    f.weatherText ??
+    f.conditions ??
+    null;
+  if (typeof direct === 'string' && direct.trim()) return direct.toLowerCase();
+
+  if (typeof f.weather === 'string') {
+    try {
+      const obj = JSON.parse(f.weather);
+      return getWeatherTextLower({ weather: obj }) || '';
+    } catch {
+      return f.weather.toLowerCase();
+    }
+  }
+  const w = (typeof f.weather === 'object' && f.weather) ? f.weather : null;
+  if (!w) return '';
+
+  const parts = [];
+  const take = (v) => { if (v != null && String(v).trim()) parts.push(String(v).toLowerCase()); };
+
+  take(w?.weather?.[0]?.description || w?.weather?.[0]?.main);
+  take(w?.current?.weather?.[0]?.description || w?.current?.weather?.[0]?.main);
+  take(w.description);
+  take(w.summary);
+  take(w.text);
+
+  // OpenWeather-Icon „01d“ = klarer Himmel am Tag (Sonnenschein)
+  const icon = w?.weather?.[0]?.icon || w?.current?.weather?.[0]?.icon;
+  if (icon === '01d') parts.push('clear sky'); // explizit als sonnig werten
+
+  return parts.join(' ');
+}
+
+const SUNNY_REGEX = /(klarer himmel|wolkenlos|heiter|clear sky|sunny|sonnig)/i;
+function isSunnyCatch(f) {
+  const text = getWeatherTextLower(f);
+  return !!text && SUNNY_REGEX.test(text);
+}
+
+// ☀️ Wer angelt ausschließlich bei Sonnenschein?
+const sunshineOnly = useMemo(() => {
+  if (validFishes.length === 0) return { winners: [], ranking: [] };
+
+  // Zähle pro Angler: total Fänge (mit Wetterinfo) & davon sonnig
+  const totalBy = {};
+  const sunnyBy = {};
+  validFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who) return;
+
+    const txt = getWeatherTextLower(f);
+    if (!txt) return; // ohne auswertbare Wetterbeschreibung ignorieren
+
+    totalBy[who] = (totalBy[who] || 0) + 1;
+    if (isSunnyCatch(f)) sunnyBy[who] = (sunnyBy[who] || 0) + 1;
+  });
+
+  // Kandidaten: mind. 1 auswertbarer Fang UND alle davon sonnig
+  const entries = Object.keys(totalBy)
+    .map((who) => ({
+      angler: who,
+      total: totalBy[who],
+      sunny: sunnyBy[who] || 0,
+    }))
+    .filter((e) => e.total > 0 && e.sunny === e.total);
+
+  // Ranking nach Anzahl (mehr ausschließlich-unter-Sonne-Fänge zuerst), dann Name
+  entries.sort((a, b) => (b.total - a.total) || a.angler.localeCompare(b.angler));
+
+  return { winners: entries, ranking: entries };
+}, [validFishes]);
+
 
 function monthLabel(ym) {
   const [y,m] = ym.split('-').map(Number);
@@ -912,6 +1268,154 @@ function monthLabel(ym) {
   ) : (
     <p>Keine Daten</p>
   )}
+</Card>
+
+{/* 🐟 Wer fängt beim ASV Rotauge die meisten Rotaugen? */}
+<Card title="🐟 Wer fängt beim ASV Rotauge die meisten Rotaugen?">
+  {mostRotaugen.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {mostRotaugen.winners.map((it, idx) => (
+        <li key={idx} className="flex items-center justify-between">
+          <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+          <div className="text-xl font-bold text-green-700 dark:text-green-300">{it.count}x</div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine Rotaugen gefangen.</p>
+  )}
+</Card>
+
+{/* 🌕 Wer fängt am meisten bei Vollmond? */}
+<Card title="🌕 Wer fängt am meisten bei Vollmond?">
+  {mostAtFullMoon.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {mostAtFullMoon.winners.map((it, idx) => (
+        <li key={idx} className="flex items-center justify-between">
+          <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+          <div className="text-xl font-bold text-green-700 dark:text-green-300">{it.count}x</div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine (auswertbaren) Vollmond-Fänge.</p>
+  )}
+  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+    Hinweis: Es werden nur Fänge gezählt, bei denen in den Wetterdaten eine Mondphase gespeichert ist (Vollmond ≈ 0.5 ± 0.06).
+  </p>
+</Card>
+
+{/* 🦉 Wer ist unsere Nachteule am See? */}
+<Card title="🦉 Wer ist unsere Nachteule am See? (späteste Fangzeit)">
+  {nightOwl.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {nightOwl.winners.map((it, idx) => (
+        <li key={idx} className="flex items-start justify-between gap-3">
+          <div className="max-w-[70%]">
+            <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              Spätester Fang um {it.timeLabel} Uhr
+            </div>
+            {it.sample && (
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Beispiel: {it.sample.fish}
+                {parseFloat(it.sample.size) > 0 ? ` • ${parseFloat(it.sample.size).toFixed(0)} cm` : ''} • {formatDateTime(it.sample.timestamp)}
+              </div>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-bold text-green-700 dark:text-green-300">{it.timeLabel}</div>
+            <div className="mt-1">
+              <Pill>🌙 Nachtfänge: {it.night}</Pill>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>
+
+{/* 🌅 Wer fängt den frühen Wurm? (früheste Fangzeit) */}
+<Card title="🌅 Wer fängt den frühen Wurm? (früheste Fangzeit)">
+  {earlyBird.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {earlyBird.winners.map((it, idx) => (
+        <li key={idx} className="flex items-start justify-between gap-3">
+          <div className="max-w-[70%]">
+            <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              Frühester Fang um {it.timeLabel} Uhr
+            </div>
+            {it.sample && (
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Beispiel: {it.sample.fish}
+                {parseFloat(it.sample.size) > 0 ? ` • ${parseFloat(it.sample.size).toFixed(0)} cm` : ''} • {formatDateTime(it.sample.timestamp)}
+              </div>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-bold text-green-700 dark:text-green-300">{it.timeLabel}</div>
+            <div className="mt-1">
+              <Pill>🌅 Frühfänge: {it.early} (04:30–09:00)</Pill>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>
+
+{/* 🌧️ Wer fängt am meisten bei Regen? */}
+<Card title="🌧️ Wer fängt am meisten bei Regen?">
+  {mostInRain.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {mostInRain.winners.map((it, idx) => (
+        <li key={idx} className="flex items-start justify-between gap-3">
+          <div className="max-w-[70%]">
+            <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {it.examples.map((e) => (
+                <Pill key={e.id}>
+                  {new Date(e.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} • {e.fish}
+                </Pill>
+              ))}
+            </div>
+          </div>
+          <div className="text-xl font-bold text-green-700 dark:text-green-300">
+            {it.count}x
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine auswertbaren Regen-Fänge.</p>
+  )}
+  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+    Zählt nur Fänge mit erkennbarer Regen-Info in den Wetterdaten (Rain/Drizzle/Schauer oder gemeldete Niederschlagsmenge).
+  </p>
+</Card>
+
+   {/* ☀️ Wer angelt ausschließlich bei Sonnenschein? */}
+<Card title="☀️ Wer angelt ausschließlich bei Sonnenschein?">
+  {sunshineOnly.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {sunshineOnly.winners.map((it, idx) => (
+        <li key={idx} className="flex items-center justify-between">
+          <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+          
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Niemand hat ausschließlich bei Sonnenschein gefangen (oder es fehlen Wetterangaben).</p>
+  )}
+  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+    Hinweis: Gewertet werden nur Fänge mit erkennbarer Wetterbeschreibung. „ein paar wolken/leicht bewölkt“ zählt <b>nicht</b> als Sonnenschein.
+  </p>
 </Card>
 
       </div>

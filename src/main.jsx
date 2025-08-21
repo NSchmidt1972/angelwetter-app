@@ -4,6 +4,7 @@ import App from './App';
 import { AuthProvider } from './AuthContext';
 import './index.css';
 
+
 // ✅ KEINE eigene Service Worker Registrierung mehr nötig.
 // OneSignal übernimmt die Registrierung automatisch.
 
