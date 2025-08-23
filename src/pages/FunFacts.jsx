@@ -704,6 +704,88 @@ const earlyBird = useMemo(() => {
   return { minMin, winners, ranking: entries, window: { start: '04:30', end: '09:00' } };
 }, [validFishes]);
 
+
+// 👥 Wer angelt gern zusammen? (gleiches Datum + gleicher Ort + zeitliche Überlappung)
+const fishBuddies = useMemo(() => {
+  if (validFishes.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  // day+place -> { angler -> [fänge] }
+  const byDayPlace = {};
+  validFishes.forEach((f) => {
+    const day = dayKeyFromDate(new Date(f.timestamp));
+    const place = normalizePlace(f); // nutzt deine Mapping-Logik (Lobberich/NULL => Ferkensbruch)
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who || !place) return;
+
+    const key = `${day}__${place}`;
+    if (!byDayPlace[key]) byDayPlace[key] = {};
+    (byDayPlace[key][who] ||= []).push(f);
+  });
+
+  // Hilfen
+  const parse = (x) => new Date(x);
+  const minT = (arr) => new Date(Math.min(...arr.map((e) => parse(e.timestamp))));
+  const maxT = (arr) => new Date(Math.max(...arr.map((e) => parse(e.timestamp))));
+  const fmtHM = (d) => new Date(d).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+  const pairMap = {}; // "A__B" -> { a, b, count, examples[] }
+
+  Object.entries(byDayPlace).forEach(([key, perAngler]) => {
+    const [day, place] = key.split('__');
+    const anglers = Object.keys(perAngler);
+    if (anglers.length < 2) return;
+
+    // alle Paare an diesem Tag/Ort prüfen
+    for (let i = 0; i < anglers.length; i++) {
+      for (let j = i + 1; j < anglers.length; j++) {
+        const A = anglers[i], B = anglers[j];
+        const listA = perAngler[A];
+        const listB = perAngler[B];
+
+        const aStart = minT(listA), aEnd = maxT(listA);
+        const bStart = minT(listB), bEnd = maxT(listB);
+
+        // zeitliche Überlappung?
+        const overlapStart = new Date(Math.max(aStart, bStart));
+        const overlapEnd   = new Date(Math.min(aEnd, bEnd));
+        const overlaps = overlapStart <= overlapEnd; // >=1 min reicht
+
+        if (!overlaps) continue;
+
+        const keyPair = [A, B].sort().join('__');
+        if (!pairMap[keyPair]) {
+          pairMap[keyPair] = { a: [A, B].sort()[0], b: [A, B].sort()[1], count: 0, examples: [] };
+        }
+        pairMap[keyPair].count += 1;
+        pairMap[keyPair].examples.push({
+          day,
+          place,
+          window: `${fmtHM(overlapStart)}–${fmtHM(overlapEnd)}`,
+          totalAB: listA.length + listB.length,
+        });
+      }
+    }
+  });
+
+  const entries = Object.values(pairMap)
+    .map(p => ({
+      ...p,
+      // Beispiele etwas sortieren und begrenzen
+      examples: p.examples
+        .sort((x, y) => x.day.localeCompare(y.day))
+        .slice(0, 5)
+    }))
+    .sort((a, b) => (b.count - a.count) || (a.a + a.b).localeCompare(b.a + b.b));
+
+  const max = entries[0]?.count || 0;
+  const winners = entries.filter(e => e.count === max);
+
+  return { max, winners, ranking: entries };
+}, [validFishes]);
+
+
+
+
 // 🌧️ Wettertext robust extrahieren (String ODER Objekt)
 function extractWeatherTextLower(f) {
   // 1) Direkte Textfelder, die du evtl. speicherst
@@ -880,6 +962,181 @@ const sunshineOnly = useMemo(() => {
 }, [validFishes]);
 
 
+// 🐟 Top 3: Welche drei Fischarten werden am meisten gefangen?
+const topThreeSpecies = useMemo(() => {
+  const counts = {};
+  validFishes.forEach((f) => {
+    const s = (f.fish || '').trim();
+    if (!s) return;
+    counts[s] = (counts[s] || 0) + 1;
+  });
+
+  const list = Object.entries(counts)
+    .map(([species, count]) => ({ species, count }))
+    .sort((a, b) => (b.count - a.count) || a.species.localeCompare(b.species));
+
+  const top3 = list.slice(0, 3);
+  const max = top3[0]?.count || 0;
+
+  return { max, items: top3 };
+}, [validFishes]);
+
+
+
+// ⏳ Längste Pause zwischen zwei Fangtagen (nur Fangtage, keine Blanks)
+const longestBreakBetweenCatchDays = useMemo(() => {
+  if (validFishes.length === 0) return { gap: 0, winners: [], ranking: [] };
+
+  // pro Angler: Set der Fangtage (YYYY-MM-DD)
+  const daysByAngler = {};
+  validFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who) return;
+    const day = dayKeyFromDate(new Date(f.timestamp));
+    (daysByAngler[who] ||= new Set()).add(day);
+  });
+
+  // Hilfen: stabil gegen DST (parse als UTC)
+  const parseDayUTC = (k) => new Date(`${k}T00:00:00Z`);
+  const diffDays = (a, b) => Math.round((parseDayUTC(b) - parseDayUTC(a)) / 86400000);
+
+  const entries = [];
+  Object.entries(daysByAngler).forEach(([angler, set]) => {
+    const days = [...set].sort();              // YYYY-MM-DD sortiert lexikalisch korrekt
+    if (days.length < 2) return;               // braucht mindestens 2 Fangtage
+    let maxGap = 0;
+    let from = days[0], to = days[0];
+
+    for (let i = 0; i < days.length - 1; i++) {
+      const gap = diffDays(days[i], days[i + 1]);
+      if (gap > maxGap) {
+        maxGap = gap;
+        from = days[i];
+        to = days[i + 1];
+      }
+    }
+
+    entries.push({ angler, gap: maxGap, from, to, totalCatchDays: days.length });
+  });
+
+  if (entries.length === 0) return { gap: 0, winners: [], ranking: [] };
+
+  entries.sort((a, b) => (b.gap - a.gap) || a.angler.localeCompare(b.angler));
+  const best = entries[0].gap;
+  const winners = entries.filter(e => e.gap === best);
+
+  return { gap: best, winners, ranking: entries };
+}, [validFishes]);
+
+const formatDay = (k) =>
+  new Date(`${k}T00:00:00Z`).toLocaleDateString('de-DE', { year: '2-digit', month: '2-digit', day: '2-digit' });
+
+
+// 🔥 Längste Serie aufeinanderfolgender Fangtage (nur validFishes)
+const longestCatchStreak = useMemo(() => {
+  if (validFishes.length === 0) return { len: 0, winners: [], ranking: [] };
+
+  // pro Angler: Set der Fangtage (YYYY-MM-DD)
+  const daysByAngler = {};
+  validFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who) return;
+    const day = dayKeyFromDate(new Date(f.timestamp));
+    (daysByAngler[who] ||= new Set()).add(day);
+  });
+
+  // stabil gegen DST: Tage als UTC vergleichen
+  const parseDayUTC = (k) => new Date(`${k}T00:00:00Z`);
+  const diffDays = (a, b) => Math.round((parseDayUTC(b) - parseDayUTC(a)) / 86400000);
+
+  const entries = [];
+  Object.entries(daysByAngler).forEach(([angler, set]) => {
+    const days = [...set].sort(); // YYYY-MM-DD lexikalisch sortierbar
+    if (days.length === 0) return;
+
+    let maxLen = 1, bestStart = days[0], bestEnd = days[0];
+    let curLen = 1, curStart = days[0], curEnd = days[0];
+
+    for (let i = 1; i < days.length; i++) {
+      if (diffDays(days[i - 1], days[i]) === 1) {
+        // direkt am nächsten Tag
+        curLen += 1;
+        curEnd = days[i];
+      } else {
+        // Serie beendet
+        if (curLen > maxLen) { maxLen = curLen; bestStart = curStart; bestEnd = curEnd; }
+        curLen = 1; curStart = days[i]; curEnd = days[i];
+      }
+    }
+    // letzte Serie prüfen
+    if (curLen > maxLen) { maxLen = curLen; bestStart = curStart; bestEnd = curEnd; }
+
+    entries.push({ angler, length: maxLen, from: bestStart, to: bestEnd, totalCatchDays: days.length });
+  });
+
+  if (entries.length === 0) return { len: 0, winners: [], ranking: [] };
+
+  entries.sort((a, b) => (b.length - a.length) || a.angler.localeCompare(b.angler));
+  const best = entries[0].length;
+  const winners = entries.filter(e => e.length === best);
+
+  return { len: best, winners, ranking: entries };
+}, [validFishes]);
+
+// 👥 Wer fängt gern zusammen? (Paare mit den meisten Fischen)
+const fishPairs = useMemo(() => {
+  if (validFishes.length === 0) return { winners: [], top3: [], lauraNicol: null };
+
+  const dayKey = (ts) => new Date(ts).toISOString().split("T")[0];
+  const sessions = {};
+  validFishes.forEach(f => {
+    const key = `${dayKey(f.timestamp)}__${f.lat?.toFixed(3)}_${f.lon?.toFixed(3)}`;
+    (sessions[key] ||= []).push(f);
+  });
+
+  const pairCounts = {};
+  Object.values(sessions).forEach(fishesOfSession => {
+    const anglers = [...new Set(fishesOfSession.map(f => f.angler).filter(Boolean))];
+    if (anglers.length < 2) return;
+    for (let i = 0; i < anglers.length; i++) {
+      for (let j = i + 1; j < anglers.length; j++) {
+        const a = anglers[i], b = anglers[j];
+        const key = [a, b].sort().join(" & ");
+        pairCounts[key] = (pairCounts[key] || 0) + fishesOfSession.length;
+      }
+    }
+  });
+
+  const sorted = Object.entries(pairCounts)
+    .map(([pair, count]) => {
+      const [a, b] = pair.split(" & ");
+      return { a, b, count };
+    })
+    .sort((x, y) => y.count - x.count);
+
+  // Top-3 ermitteln
+  let top3 = sorted.slice(0, 3);
+
+  // Laura & Nicol explizit suchen
+  const lauraNicolKey = ["Laura Rittlinger", "Nicol Schmidt"].sort().join(" & ");
+  const lauraNicol = sorted.find(p => [p.a, p.b].sort().join(" & ") === lauraNicolKey);
+
+  // Falls gefunden und nicht schon in Top-3 → hinzufügen
+  if (lauraNicol && !top3.some(p => [p.a, p.b].sort().join(" & ") === lauraNicolKey)) {
+    top3 = [...top3, lauraNicol];
+  }
+
+  return {
+    winners: sorted.length > 0 ? [sorted[0]] : [],
+    top3,
+    lauraNicol
+  };
+}, [validFishes]);
+
+
+
+
+
 function monthLabel(ym) {
   const [y,m] = ym.split('-').map(Number);
   return new Date(y, m-1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
@@ -905,6 +1162,7 @@ function monthLabel(ym) {
       {children}
     </span>
   );
+  
 
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
@@ -1417,6 +1675,125 @@ function monthLabel(ym) {
     Hinweis: Gewertet werden nur Fänge mit erkennbarer Wetterbeschreibung. „ein paar wolken/leicht bewölkt“ zählt <b>nicht</b> als Sonnenschein.
   </p>
 </Card>
+
+{/* 🐟 Welche drei Fischarten werden am meisten gefangen? */}
+<Card title="🐟 Welche drei Fischarten werden am meisten gefangen?">
+  {topThreeSpecies.items.length > 0 ? (
+    <ol className="space-y-2">
+      {topThreeSpecies.items.map((it, idx) => (
+        <li key={it.species} className="flex items-center gap-3">
+          <span className="w-6 text-right font-semibold">{idx + 1}.</span>
+          <div className="flex-1">
+            <div className="flex justify-between text-sm font-medium">
+              <span>{it.species}</span>
+              <span className="text-green-700 dark:text-green-300">{it.count}x</span>
+            </div>
+            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded">
+              <div
+                className="h-2 rounded bg-green-600 dark:bg-green-400"
+                style={{ width: `${(it.count / (topThreeSpecies.max || 1)) * 100}%` }}
+              />
+            </div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>
+
+{/* ⏳ Wer muss sich am längsten zwischen den Angeltagen ausruhen? */}
+<Card title="⏳ Wer muss sich am längsten zwischen den Fangtagen ausruhen?">
+  {longestBreakBetweenCatchDays.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {longestBreakBetweenCatchDays.winners.map((it, idx) => (
+        <li key={idx} className="flex items-start justify-between gap-3">
+          <div className="max-w-[70%]">
+            <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              Pause von {formatDay(it.from)} bis {formatDay(it.to)}
+            </div>
+            
+          </div>
+          <div className="text-xl font-bold text-green-700 dark:text-green-300">
+            {it.gap} Tage
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine auswertbaren Pausen (zu wenige Fangtage je Angler).</p>
+  )}
+</Card>
+
+{/* 🔥 Wer hat die längste Fangserie hingelegt? */}
+<Card title="🔥 Wer hat die längste Fangserie hingelegt? (aufeinanderfolgende Fangtage)">
+  {longestCatchStreak.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {longestCatchStreak.winners.map((it, idx) => (
+        <li key={idx} className="flex items-start justify-between gap-3">
+          <div className="max-w-[70%]">
+            <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              Serie von {it.length} Tag{it.length === 1 ? '' : 'en'}: {formatDay(it.from)} – {formatDay(it.to)}
+            </div>
+            
+          </div>
+          <div className="text-xl font-bold text-green-700 dark:text-green-300">
+            {it.length} Tage
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine auswertbaren Serien.</p>
+  )}
+</Card>
+
+
+<Card title="👥 Wer fängt gern zusammen? (Top 3 Paare)">
+  {/* Referenz: Laura & Nicol */}
+  {fishPairs.lauraNicol ? (
+    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 italic">
+      😉 Referenz: Laura & Nicol – {fishPairs.lauraNicol.count} Fische
+    </p>
+  ) : (
+    <p className="text-xs text-gray-400 mb-3 italic">
+      😉 Referenz: Laura & Nicol – noch keine gemeinsamen Fänge
+    </p>
+  )}
+
+  {fishPairs.top3.length > 0 ? (
+    <ul className="space-y-3">
+      {fishPairs.top3
+        // Laura & Nicol rausfiltern, damit sie nicht doppelt erscheinen
+        .filter(
+          (p) =>
+            !["Laura Rittlinger", "Nicol Schmidt"]
+              .sort()
+              .join(" & ")
+              .includes([p.a, p.b].sort().join(" & "))
+        )
+        .map((p, idx) => (
+          <li key={idx} className="flex items-start justify-between gap-3">
+            <div className="max-w-[70%]">
+              <div className="text-green-700 dark:text-green-300 font-medium">
+                {p.a} &amp; {p.b}
+              </div>
+            </div>
+            <div className="text-xl font-bold text-green-700 dark:text-green-300">
+              {p.count} Fische
+            </div>
+          </li>
+        ))}
+    </ul>
+  ) : (
+    <p>Keine gemeinsamen Fänge gefunden.</p>
+  )}
+</Card>
+
+
 
       </div>
     </div>
