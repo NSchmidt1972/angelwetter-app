@@ -1,14 +1,38 @@
+// src/components/Navbar.jsx
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 
+/* ===== Build-Info robust ermitteln (unterstützt mehrere Varianten) ===== */
+const BUILD_INFO =
+  (typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__) || null;
+
+const FALLBACKS = {
+  version:
+    (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) ||
+    import.meta.env?.VITE_APP_VERSION ||
+    'dev',
+  date:
+    (typeof __BUILD_DATE__ !== 'undefined' && __BUILD_DATE__) ||
+    import.meta.env?.VITE_BUILD_DATE ||
+    '',
+  commit:
+    (typeof __GIT_COMMIT__ !== 'undefined' && __GIT_COMMIT__) ||
+    import.meta.env?.VITE_GIT_COMMIT ||
+    '',
+};
+
+const APP_VERSION = BUILD_INFO?.version || FALLBACKS.version;
+const BUILD_DATE  = BUILD_INFO?.date    || FALLBACKS.date;
+const GIT_COMMIT  = BUILD_INFO?.commit  || FALLBACKS.commit;
+
 /* 🔔 Kleiner v16-kompatibler Push-Button (CTA) */
 function PushToggleButton() {
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const [supported, setSupported] = useState(null);
-  const [permission, setPermission] = useState(null); // boolean
-  const [optedIn, setOptedIn] = useState(null);       // boolean
+  const [permission, setPermission] = useState(null);
+  const [optedIn, setOptedIn] = useState(null);
   const [subId, setSubId] = useState(null);
   const [busy, setBusy] = useState(false);
   const enabled = !!(permission && optedIn && subId);
@@ -26,8 +50,8 @@ function PushToggleButton() {
       const onPerm = (perm) => setPermission(!!perm);
       const onSubChange = (ev) => {
         const cur = ev?.current || {};
-        if (cur.hasOwnProperty('optedIn')) setOptedIn(!!cur.optedIn);
-        if (cur.hasOwnProperty('id')) setSubId(cur.id ?? null);
+        if (Object.prototype.hasOwnProperty.call(cur, 'optedIn')) setOptedIn(!!cur.optedIn);
+        if (Object.prototype.hasOwnProperty.call(cur, 'id')) setSubId(cur.id ?? null);
       };
 
       OS.Notifications.addEventListener('permissionChange', onPerm);
@@ -62,7 +86,6 @@ function PushToggleButton() {
         if (typeof OS.Notifications.subscribe === 'function') {
           await OS.Notifications.subscribe();
         }
-        // kleine Wartezeit, bis die ID gesetzt ist
         for (let i = 0; i < 10; i++) {
           if (OS.User?.PushSubscription?.id) break;
           await new Promise(r => setTimeout(r, 200));
@@ -96,7 +119,7 @@ function PushToggleButton() {
       <button
         onClick={unsubscribe}
         disabled={busy}
-        className="px-3 py-2 rounded-2xl bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-60"
+        className="px-3 py-2 rounded-2xl bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-60 w-full text-left"
         title="Benachrichtigungen deaktivieren"
       >
         🔔 Push-Aktiv
@@ -108,7 +131,7 @@ function PushToggleButton() {
     <button
       onClick={subscribe}
       disabled={busy || permission === false}
-      className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60"
+      className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60 w-full text-left"
       title={permission === false ? 'Benachrichtigungen im Browser blockiert' : 'Benachrichtigungen aktivieren'}
     >
       🔔 Push-Aktivieren
@@ -302,7 +325,7 @@ export default function Navbar({ name, isAdmin }) {
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base" role="menu">
+            <div className="absolute right-0 top-12 w-56 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base" role="menu">
               <Link
                 to="/settings"
                 className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
@@ -311,8 +334,10 @@ export default function Navbar({ name, isAdmin }) {
                 ⚙️ Einstellungen
               </Link>
 
-              {/* 🔔 Push CTA direkt in der Navbar */}
-              <PushToggleButton />
+              {/* 🔔 Push CTA */}
+              <div className="px-4 py-2">
+                <PushToggleButton />
+              </div>
 
               <button
                 onClick={handleLogout}
@@ -320,6 +345,15 @@ export default function Navbar({ name, isAdmin }) {
               >
                 Abmelden
               </button>
+
+              {/* ⭐ Versionsangabe (kommt vom Build, nicht vom Dev-Server) */}
+              <div className="border-t border-gray-200 dark:border-gray-700 mt-1 px-4 py-2">
+                <div className="text-[11px] leading-tight text-gray-500 dark:text-gray-400">
+                  <span className="font-semibold">Version:</span>{' '}
+                  <span className="font-mono">{APP_VERSION}</span>
+                  
+                </div>
+              </div>
             </div>
           )}
         </div>
