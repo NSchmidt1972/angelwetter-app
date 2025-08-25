@@ -2,29 +2,36 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
-  <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
+  <meta name="application-name" content="Angelwetter" />
+  <meta name="theme-color" content="#0077cc" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Angelwetter" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="theme-color" content="#0077cc" />
-  <link rel="icon" href="icon-192.png" type="image/png" />
+
+  <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+  <link rel="icon" href="/icon-192.png" type="image/png" />
+
+  <!-- PWA Manifest (nur einmal!) -->
   <link rel="manifest" href="/manifest.webmanifest" />
+
+  <!-- Performance -->
+  <link rel="preconnect" href="https://cdn.onesignal.com" crossorigin>
+  <link rel="preconnect" href="https://kirevrwmmthqgceprbhl.supabase.co" crossorigin>
   <link rel="preconnect" href="https://ai.asv-rotauge.de" crossorigin>
   <link rel="preconnect" href="https://openweathermap.org" crossorigin>
-
 
   <!-- OneSignal v15 Loader -->
   <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async></script>
 
   <title>Angelwetter</title>
 </head>
-
 <body>
   <div id="root"></div>
+  <!-- In Dev zeigt Vite auf /src/main.jsx; im Build wird das automatisch auf /assets/... umgeschrieben -->
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

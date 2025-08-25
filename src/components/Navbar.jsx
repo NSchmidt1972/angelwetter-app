@@ -6,8 +6,8 @@ import { supabase } from '@/supabaseClient';
 export default function Navbar({ name, isAdmin }) {
   const { user, setUser } = useAuth();
   const [open, setOpen] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState(false); // Statistik
-  const [showMenu, setShowMenu] = useState(false);         // Profil
+  const [openDropdown, setOpenDropdown] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [showHamburger, setShowHamburger] = useState(false);
 
@@ -22,7 +22,7 @@ export default function Navbar({ name, isAdmin }) {
     document.documentElement.classList.toggle('dark', stored);
   }, []);
 
-  // Outside click: schließt Profil- und Statistik-Menüs
+  // Outside click
   useEffect(() => {
     function handleClickOutside(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) {
@@ -80,7 +80,7 @@ export default function Navbar({ name, isAdmin }) {
       children: [
         { label: 'Analyse', path: '/analysis' },
         { label: 'Top 10', path: '/top-fishes' },
-        { label: 'Fun-Facts', path: '/fun' },   // <- hier auf /fun angepasst
+        { label: 'Fun-Facts', path: '/fun' },
         { label: 'Prognose', path: '/forecast' },
         { label: 'Kalender', path: '/calendar' },
         { label: 'Karte', path: '/map' }
@@ -114,26 +114,34 @@ export default function Navbar({ name, isAdmin }) {
           <nav
             className={
               showHamburger
-                ? `${open ? 'absolute top-full left-0 w-full bg-white dark:bg-gray-900 shadow-lg flex flex-col p-4 gap-4 z-40' : 'hidden'}`
+                ? open
+                  ? 'fixed inset-0 bg-white/95 dark:bg-gray-900/95 flex flex-col items-center justify-center gap-6 z-50'
+                  : 'hidden'
                 : 'flex flex-row gap-6 items-center'
             }
           >
+            {/* Close-Button */}
+            {showHamburger && open && (
+              <button
+                onClick={() => setOpen(false)}
+                className="absolute top-4 right-4 text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                aria-label="Menü schließen"
+              >
+                ✖️
+              </button>
+            )}
+
             {navItems.map((item) =>
               item.children ? (
                 <div key={item.label} className="relative" ref={statsRef}>
                   <button
                     onClick={() => setOpenDropdown(prev => !prev)}
                     className="block px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
-                    aria-expanded={openDropdown}
-                    aria-haspopup="menu"
                   >
                     {item.label} ▾
                   </button>
                   {openDropdown && (
-                    <div
-                      className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base"
-                      role="menu"
-                    >
+                    <div className="mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base">
                       {item.children.map((child) => (
                         <Link
                           key={child.path}
@@ -188,24 +196,23 @@ export default function Navbar({ name, isAdmin }) {
           </button>
 
           {showMenu && (
-  <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base" role="menu">
-    <Link
-      to="/settings"
-      className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
-      onClick={() => setShowMenu(false)}
-    >
-      ⚙️ Einstellungen
-    </Link>
+            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base" role="menu">
+              <Link
+                to="/settings"
+                className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
+                onClick={() => setShowMenu(false)}
+              >
+                ⚙️ Einstellungen
+              </Link>
 
-    <button
-      onClick={handleLogout}
-      className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
-    >
-      Abmelden
-    </button>
-  </div>
-)}
-
+              <button
+                onClick={handleLogout}
+                className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
+              >
+                Abmelden
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

@@ -1,24 +1,28 @@
+// src/onesignal/OneSignalSync.js
 import { supabase } from '../supabaseClient';
 
-export async function runOneSignalHealthCheck() {
+export const runOneSignalHealthCheck = async () => {
   const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
 
   try {
-    const isEnabled = await window.OneSignal.isPushNotificationsEnabled();
-    const userId = await window.OneSignal.getUserId();
+    const enabled = await window.OneSignal.isPushNotificationsEnabled();
+    const userId  = await window.OneSignal.getUserId();
 
-    if (!isEnabled || !userId) {
-      console.warn("Push nicht aktiviert oder keine UserID vorhanden.");
+    if (!enabled || !userId) {
+      console.warn('Push nicht aktiviert oder keine UserID vorhanden.');
       return;
     }
 
     await supabase.rpc('sync_player', {
       p_angler_name: anglerName,
-      p_player_id: userId
+      p_player_id: userId,
     });
 
-    console.log("✅ PlayerID erfolgreich in Supabase synchronisiert:", userId);
+    console.log('✅ PlayerID erfolgreich in Supabase synchronisiert:', userId);
   } catch (err) {
-    console.error("❌ Fehler beim HealthCheck:", err);
+    console.error('❌ Fehler beim HealthCheck:', err);
   }
-}
+};
+
+// 👉 Default-Export hinzufügen, damit der Import ohne geschweifte Klammern funktioniert
+export default runOneSignalHealthCheck;

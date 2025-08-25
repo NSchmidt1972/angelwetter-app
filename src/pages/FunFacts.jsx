@@ -1783,7 +1783,7 @@ function monthLabel(ym) {
               </div>
             </div>
             <div className="text-xl font-bold text-green-700 dark:text-green-300">
-              {p.count} Fische
+              {p.count}
             </div>
           </li>
         ))}
