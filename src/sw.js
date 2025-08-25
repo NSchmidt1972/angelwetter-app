@@ -1,8 +1,11 @@
-/// <reference lib="webworker" />
+// <reference lib="webworker" />
 /* eslint-env serviceworker */
 /* global importScripts */
 
-/* src/sw.js */
+/* 👇 1) OneSignal SDK MUSS als erstes geladen werden */
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+
+/* 2) Dein Workbox-Code */
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { clientsClaim } from 'workbox-core';
 import { registerRoute } from 'workbox-routing';
@@ -62,12 +65,3 @@ registerRoute(
     plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 365 })]
   })
 );
-
-// 👉 OneSignal im gleichen SW laden
-try {
-  importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');
-} catch (e) {
-  console.warn('OneSignal Worker konnte nicht geladen werden:', e);
-}
-
-

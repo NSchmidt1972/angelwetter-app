@@ -16,7 +16,7 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.js',
-      injectRegister: null,   // registriert SW automatisch
+      injectRegister: 'auto',   
       registerType: 'autoUpdate',
       devOptions: { enabled: false },
       includeAssets: ['favicon.svg','logo.png','icon-192.png','icon-512.png'],

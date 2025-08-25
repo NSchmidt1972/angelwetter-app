@@ -3,6 +3,122 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 
+/* 🔔 Kleiner v16-kompatibler Push-Button (CTA) */
+function PushToggleButton() {
+  const [sdkLoaded, setSdkLoaded] = useState(false);
+  const [supported, setSupported] = useState(null);
+  const [permission, setPermission] = useState(null); // boolean
+  const [optedIn, setOptedIn] = useState(null);       // boolean
+  const [subId, setSubId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const enabled = !!(permission && optedIn && subId);
+
+  useEffect(() => {
+    let cleanup;
+
+    const init = async (OS) => {
+      setSdkLoaded(true);
+      setSupported(OS.Notifications.isPushSupported());
+      setPermission(!!OS.Notifications.permission);
+      setOptedIn(!!OS.User?.PushSubscription?.optedIn);
+      setSubId(OS.User?.PushSubscription?.id ?? null);
+
+      const onPerm = (perm) => setPermission(!!perm);
+      const onSubChange = (ev) => {
+        const cur = ev?.current || {};
+        if (cur.hasOwnProperty('optedIn')) setOptedIn(!!cur.optedIn);
+        if (cur.hasOwnProperty('id')) setSubId(cur.id ?? null);
+      };
+
+      OS.Notifications.addEventListener('permissionChange', onPerm);
+      OS.User.PushSubscription.addEventListener('change', onSubChange);
+
+      cleanup = () => {
+        OS.Notifications.removeEventListener('permissionChange', onPerm);
+        OS.User.PushSubscription.removeEventListener('change', onSubChange);
+      };
+    };
+
+    if (window.OneSignal && window.OneSignal.Notifications) {
+      init(window.OneSignal);
+    } else {
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(init);
+    }
+    return () => { if (cleanup) cleanup(); };
+  }, []);
+
+  const subscribe = () => {
+    if (busy) return;
+    setBusy(true);
+    window.OneSignalDeferred.push(async (OS) => {
+      try {
+        if (!OS.Notifications.permission) {
+          const ok = await OS.Notifications.requestPermission();
+          if (!ok) { setBusy(false); return; }
+        }
+        await navigator.serviceWorker.ready;
+        await OS.User.PushSubscription.optIn();
+        if (typeof OS.Notifications.subscribe === 'function') {
+          await OS.Notifications.subscribe();
+        }
+        // kleine Wartezeit, bis die ID gesetzt ist
+        for (let i = 0; i < 10; i++) {
+          if (OS.User?.PushSubscription?.id) break;
+          await new Promise(r => setTimeout(r, 200));
+        }
+        setOptedIn(!!OS.User?.PushSubscription?.optedIn);
+        setSubId(OS.User?.PushSubscription?.id ?? null);
+      } finally {
+        setBusy(false);
+      }
+    });
+  };
+
+  const unsubscribe = () => {
+    if (busy) return;
+    setBusy(true);
+    window.OneSignalDeferred.push(async (OS) => {
+      try {
+        await OS.User.PushSubscription.optOut();
+        setOptedIn(false);
+        setSubId(null);
+      } finally {
+        setBusy(false);
+      }
+    });
+  };
+
+  // nichts anzeigen, wenn SDK noch nicht da oder Browser kein Push kann
+  if (!sdkLoaded || supported === false) return null;
+
+  // Wenn bereits aktiv: kleines grünes Badge + Möglichkeit zum Deaktivieren per Klick
+  if (enabled) {
+    return (
+      <button
+        onClick={unsubscribe}
+        disabled={busy}
+        className="px-3 py-2 rounded-2xl bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-60"
+        title="Benachrichtigungen deaktivieren"
+      >
+        🔔 Push-Aktiv
+      </button>
+    );
+  }
+
+  // Sonst: CTA zum Aktivieren
+  return (
+    <button
+      onClick={subscribe}
+      disabled={busy || permission === false}
+      className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60"
+      title={permission === false ? 'Benachrichtigungen im Browser blockiert' : 'Benachrichtigungen aktivieren'}
+    >
+      🔔 Push-Aktivieren
+    </button>
+  );
+}
+
 export default function Navbar({ name, isAdmin }) {
   const { user, setUser } = useAuth();
   const [open, setOpen] = useState(false);
@@ -25,12 +141,8 @@ export default function Navbar({ name, isAdmin }) {
   // Outside click
   useEffect(() => {
     function handleClickOutside(e) {
-      if (profileRef.current && !profileRef.current.contains(e.target)) {
-        setShowMenu(false);
-      }
-      if (statsRef.current && !statsRef.current.contains(e.target)) {
-        setOpenDropdown(false);
-      }
+      if (profileRef.current && !profileRef.current.contains(e.target)) setShowMenu(false);
+      if (statsRef.current && !statsRef.current.contains(e.target)) setOpenDropdown(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -178,7 +290,9 @@ export default function Navbar({ name, isAdmin }) {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4 text-base relative" ref={profileRef}>
+        <div className="flex items-center gap-3 text-base relative" ref={profileRef}>
+          
+
           <button
             onClick={toggleDark}
             className="px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300"
@@ -204,6 +318,9 @@ export default function Navbar({ name, isAdmin }) {
               >
                 ⚙️ Einstellungen
               </Link>
+
+              {/* 🔔 Push CTA direkt in der Navbar */}
+          <PushToggleButton />
 
               <button
                 onClick={handleLogout}

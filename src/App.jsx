@@ -1,8 +1,9 @@
+// src/App.jsx
 import { BrowserRouter as Router } from 'react-router-dom';
 import { useEffect, useState, Suspense } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
-import PushInit from './components/PushInit';
+import PushInit from './components/PushInit';            // ✅ NEU: OneSignal Initialisierung
 import AppRoutes from './AppRoutes';
 import './index.css';
 
@@ -15,11 +16,13 @@ function AppContent() {
   const [imageLoaded, setImageLoaded] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
 
+  // ⏳ Splash (optional: 1000ms statt 3000ms)
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1000);
     return () => clearTimeout(timer);
   }, []);
 
+  // 👤 Profilname laden + Kurzname in localStorage
   useEffect(() => {
     if (user === undefined) return;
 
@@ -47,14 +50,11 @@ function AppContent() {
           localStorage.setItem('anglerName', fullName);
 
           const [first, last] = fullName.split(' ');
-          supabase
-            .from('profiles')
-            .select('name')
-            .then(({ data: allProfiles }) => {
-              const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
-              const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
-              localStorage.setItem('shortAnglerName', shortName);
-            });
+          supabase.from('profiles').select('name').then(({ data: allProfiles }) => {
+            const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
+            const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
+            localStorage.setItem('shortAnglerName', shortName);
+          });
         } else {
           console.warn('⚠️ Kein Name im Profil gefunden oder Fehler:', error);
           setAnglerName(null);
@@ -65,9 +65,9 @@ function AppContent() {
       });
   }, [user]);
 
+  // 🟢 Aktivität pingen
   useEffect(() => {
     if (!user) return;
-
     const updateActivity = async () => {
       try {
         await supabase.from('user_activity').upsert({
@@ -79,12 +79,12 @@ function AppContent() {
         console.warn('⚠️ user_activity konnte nicht aktualisiert werden:', err.message);
       }
     };
-
     updateActivity();
     const interval = setInterval(updateActivity, 3 * 60 * 1000);
     return () => clearInterval(interval);
   }, [user]);
 
+  // ☁️ Wetter aus Supabase Cache
   useEffect(() => {
     const fetchWeatherFromSupabase = async () => {
       const { data, error } = await supabase
@@ -94,7 +94,7 @@ function AppContent() {
         .single();
 
       if (error) {
-        console.warn("⚠️ Wetter konnte nicht aus Supabase geladen werden:", error.message);
+        console.warn('⚠️ Wetter konnte nicht aus Supabase geladen werden:', error.message);
         return;
       }
 
@@ -109,10 +109,11 @@ function AppContent() {
     return () => clearInterval(interval);
   }, []);
 
+  // Ladezustände + Splash
   if (authLoading || nameLoading || user === undefined || showSplash) {
     return (
       <>
-        <PushInit />
+        <PushInit /> {/* ✅ OneSignal früh hochziehen, auch während Splash */}
         <div className="flex flex-col justify-center items-center h-screen bg-white relative">
           <img
             src="logo.png"
@@ -129,17 +130,16 @@ function AppContent() {
     );
   }
 
-  // ✅ WICHTIG: Recovery-Link erkennen
+  // Recovery-Flow
   const isRecoveryHash = window.location.hash.includes('type=recovery');
   const isPasswordResetFlow = window.location.pathname === '/update-password' || isRecoveryHash;
 
   const isLoggedIn = user && !isPasswordResetFlow;
-
   const isAdmin = userEmail === 'nicol@schmidt-2006.de';
 
   return (
     <>
-      <PushInit />
+      <PushInit /> {/* ✅ auch im „normalen“ Zustand */}
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
         <AppRoutes
           isLoggedIn={isLoggedIn}
