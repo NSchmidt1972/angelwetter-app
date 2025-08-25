@@ -12,7 +12,7 @@ import { saveBlankDay } from "../services/blankService";
 import { saveCatchEntry } from "../services/catchService";
 
 const FISH_TYPES = [
-  "Aal", "Barsch", "Brasse", "Güster", "Hecht", "Karausche", "Karpfen",
+  "Aal", "Barsch", "Brasse", "Güster", "Grundel", "Hecht", "Karausche", "Karpfen",
   "Rotauge", "Rotfeder", "Schleie", "Wels", "Zander"
 ];
 

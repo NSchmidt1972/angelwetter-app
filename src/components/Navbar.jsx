@@ -89,10 +89,8 @@ function PushToggleButton() {
     });
   };
 
-  // nichts anzeigen, wenn SDK noch nicht da oder Browser kein Push kann
   if (!sdkLoaded || supported === false) return null;
 
-  // Wenn bereits aktiv: kleines grünes Badge + Möglichkeit zum Deaktivieren per Klick
   if (enabled) {
     return (
       <button
@@ -106,7 +104,6 @@ function PushToggleButton() {
     );
   }
 
-  // Sonst: CTA zum Aktivieren
   return (
     <button
       onClick={subscribe}
@@ -138,7 +135,6 @@ export default function Navbar({ name, isAdmin }) {
     document.documentElement.classList.toggle('dark', stored);
   }, []);
 
-  // Outside click
   useEffect(() => {
     function handleClickOutside(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) setShowMenu(false);
@@ -148,7 +144,6 @@ export default function Navbar({ name, isAdmin }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Geräteerkennung
   useEffect(() => {
     function checkDevice() {
       const width = window.innerWidth;
@@ -232,7 +227,6 @@ export default function Navbar({ name, isAdmin }) {
                 : 'flex flex-row gap-6 items-center'
             }
           >
-            {/* Close-Button */}
             {showHamburger && open && (
               <button
                 onClick={() => setOpen(false)}
@@ -291,8 +285,6 @@ export default function Navbar({ name, isAdmin }) {
         </div>
 
         <div className="flex items-center gap-3 text-base relative" ref={profileRef}>
-          
-
           <button
             onClick={toggleDark}
             className="px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300"
@@ -320,7 +312,7 @@ export default function Navbar({ name, isAdmin }) {
               </Link>
 
               {/* 🔔 Push CTA direkt in der Navbar */}
-          <PushToggleButton />
+              <PushToggleButton />
 
               <button
                 onClick={handleLogout}

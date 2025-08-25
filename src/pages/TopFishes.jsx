@@ -8,6 +8,13 @@ export default function TopFishes() {
   const [onlyMine, setOnlyMine] = useState(false);
 
   const anglerName = (localStorage.getItem('anglerName') || 'Unbekannt').trim();
+  const anglerNameNorm = anglerName.toLowerCase();
+
+  // ✅ Aliase & Login‑Check wie in der Rangliste
+  const MARILOU_ALIASES = ['marilou boes', 'marilou'];
+  const isMarilouLoggedIn = MARILOU_ALIASES.includes(anglerNameNorm);
+  const isMarilouAngler = (name) =>
+    MARILOU_ALIASES.includes((name || '').trim().toLowerCase());
 
   useEffect(() => {
     async function loadData() {
@@ -22,51 +29,71 @@ export default function TopFishes() {
       const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
       const istVertrauter = vertraute.includes(anglerName);
 
-      const filtered = data.filter(f => {
-        if (f.is_marilou) return false;
-        const fangDatum = new Date(f.timestamp);
-        const isFerkensbruch =
-          f.location_name == null ||
-          f.location_name.toLowerCase().includes('lobberich');
+      const filtered = data.filter((f) => {
+        // ❌ Marilou-Fänge generell verstecken …
+        // ✅ … außer wenn Marilou selbst eingeloggt ist (dann zeigen)
+        const istMarilou = isMarilouAngler(f.angler) || f.is_marilou === true;
+        if (istMarilou && !isMarilouLoggedIn) return false;
 
+        // "Nur meine": immer nur MEINE Fänge (inkl. Marilou, falls sie selbst eingeloggt ist)
         if (onlyMine) {
-          return f.angler === anglerName;
+          return (f.angler || '').trim() === anglerName;
         }
 
-        if (!isFerkensbruch) return false;
+        // Standardfilter wie in der Rangliste (ohne Ortsfilter)
+        const fangDatum = new Date(f.timestamp);
+        const size = parseFloat(f.size);
+        const istVerwertbar =
+          f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0 && !f.blank;
+
+        if (!istVerwertbar) return false;
 
         if (istVertrauter) {
           if (filterSetting === 'all') return true;
           return fangDatum >= PUBLIC_FROM;
         }
-
         return fangDatum >= PUBLIC_FROM;
       });
 
       setFishes(filtered);
 
-      const { data: profiles, error: profileError } = await supabase.from('profiles').select('name');
+      // Namen wie in der Rangliste: immer voller Name aus profiles
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('name');
+
       if (profileError) {
         console.error('Fehler beim Laden der Profile:', profileError);
         return;
       }
 
       const mapping = {};
-      profiles.forEach(p => {
-        mapping[p.name.trim()] = p.name.trim();
+      (profiles || []).forEach((p) => {
+        const n = (p.name || '').trim();
+        if (n) mapping[n] = n;
       });
       setFormattedNamesMap(mapping);
     }
 
     loadData();
-  }, [onlyMine, anglerName]);
+  }, [onlyMine, anglerName, anglerNameNorm, isMarilouLoggedIn]);
 
+  // Fischarten-Auswahl (aus bereits gefilterten Daten)
   const allTypes = [...new Set(
-    fishes.map(f => f.fish?.trim()).filter(fish => fish && fish !== 'Unbekannt')
+    fishes
+      .map((f) => f.fish?.trim())
+      .filter((fish) => fish && fish !== 'Unbekannt')
   )].sort();
 
+  // Top 10 nach Größe für die ausgewählte Art
   const top10 = fishes
-    .filter(f => f.fish === selectedFish && f.size && f.angler && f.fish !== 'Unbekannt')
+    .filter((f) =>
+      f.fish === selectedFish &&
+      f.size &&
+      f.angler &&
+      f.fish !== 'Unbekannt' &&
+      !f.blank
+    )
     .sort((a, b) => parseFloat(b.size) - parseFloat(a.size))
     .slice(0, 10);
 
@@ -76,7 +103,12 @@ export default function TopFishes() {
 
       <div className="max-w-md mx-auto mb-4 flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
         <label className="flex items-center gap-2">
-          <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} className="accent-blue-600" />
+          <input
+            type="checkbox"
+            checked={onlyMine}
+            onChange={(e) => setOnlyMine(e.target.checked)}
+            className="accent-blue-600"
+          />
           Nur meine
         </label>
       </div>
@@ -96,7 +128,9 @@ export default function TopFishes() {
 
       {selectedFish && (
         <div className="max-w-3xl mx-auto">
-          <h3 className="text-xl font-semibold text-green-700 dark:text-green-300 mb-4 text-center">{selectedFish}</h3>
+          <h3 className="text-xl font-semibold text-green-700 dark:text-green-300 mb-4 text-center">
+            {selectedFish}
+          </h3>
 
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm text-left font-mono bg-white dark:bg-gray-800 shadow-md rounded-xl overflow-hidden">
@@ -113,19 +147,32 @@ export default function TopFishes() {
                 {top10.map((f, i) => {
                   const dateStr = new Date(f.timestamp).toLocaleDateString('de-DE');
                   const nameKey = (f.angler || '').trim();
-                  const shortName = formattedNamesMap[nameKey] || f.angler || 'Unbekannt';
-                  const ort = f.location_name?.trim() || 'Ferkensbruch';
+                  const displayName = formattedNamesMap[nameKey] || f.angler || 'Unbekannt';
+                  const ort = f.location_name?.trim() || '–';
+
+                  const sizeNum = parseFloat(f.size);
+                  const sizeFormatted = Number.isFinite(sizeNum) ? `${sizeNum.toFixed(1)} cm` : '–';
 
                   return (
-                    <tr key={f.id || i} className="border-t border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition">
+                    <tr
+                      key={f.id || `${f.angler}-${f.timestamp}-${i}`}
+                      className="border-t border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition"
+                    >
                       <td className="px-4 py-2">{i + 1}</td>
-                      <td className="px-4 py-2 font-sans">{shortName}</td>
-                      <td className="px-4 py-2 text-right">{parseFloat(f.size).toFixed(1)} cm</td>
+                      <td className="px-4 py-2 font-sans">{displayName}</td>
+                      <td className="px-4 py-2 text-right">{sizeFormatted}</td>
                       <td className="px-4 py-2 text-right">{dateStr}</td>
                       {onlyMine && <td className="px-4 py-2 font-sans">{ort}</td>}
                     </tr>
                   );
                 })}
+                {top10.length === 0 && (
+                  <tr>
+                    <td colSpan={onlyMine ? 5 : 4} className="px-4 py-6 text-center text-gray-500">
+                      Keine Einträge für diese Fischart.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

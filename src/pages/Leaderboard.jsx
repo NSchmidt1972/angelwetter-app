@@ -6,16 +6,17 @@ export default function Leaderboard() {
   const [formattedNamesMap, setFormattedNamesMap] = useState({});
   const [showIntern, setShowIntern] = useState(false);
 
-  const rawName = localStorage.getItem('anglerName') || 'Unbekannt';
-  const anglerName = rawName.trim().toLowerCase();
+  const rawName = (localStorage.getItem('anglerName') || 'Unbekannt').trim();
+  const anglerNameLC = rawName.toLowerCase();
 
   const vertraute = ['nicol schmidt', 'laura rittlinger'];
   const PUBLIC_FROM = new Date('2025-05-29');
 
-  // ✅ alias-Menge für Marilou
-  const MARILOU_ALIASES = ['marilou boes', 'marilou'];
-  const isMarilouAngler = (name) =>
+  // ✅ Marilou-Erkennung (mehrere Schreibweisen möglich)
+  const MARILOU_ALIASES = ['marilou', 'marilou boes'];
+  const isMarilouName = (name) =>
     MARILOU_ALIASES.includes((name || '').trim().toLowerCase());
+  const isCurrentUserMarilou = isMarilouName(rawName);
 
   useEffect(() => {
     async function loadData() {
@@ -30,13 +31,16 @@ export default function Leaderboard() {
       const { data: profileData, error } = await supabase
         .from('profiles')
         .select('name');
+
       if (error) {
         console.error('Fehler beim Laden der Profile:', error);
         return;
       }
+
       const mapping = {};
       (profileData || []).forEach((p) => {
-        mapping[p.name.trim()] = p.name.trim();
+        const full = (p.name || '').trim();
+        if (full) mapping[full] = full; // immer vollständiger Name
       });
       setFormattedNamesMap(mapping);
     }
@@ -46,35 +50,34 @@ export default function Leaderboard() {
   const filteredFishes = fishes.filter((f) => {
     const fangDatum = new Date(f.timestamp);
     const istAbNeu = fangDatum >= PUBLIC_FROM;
-    const istVertrauter = vertraute.includes((f.angler || '').trim().toLowerCase());
 
-    let darfSehen = false;
-    if (showIntern) {
-      darfSehen = vertraute.includes(anglerName) && istVertrauter;
-    } else {
-      darfSehen = istAbNeu;
-    }
+    const fangVonVertrautem = vertraute.includes(
+      (f.angler || '').trim().toLowerCase()
+    );
+    const eingeloggtVertraut = vertraute.includes(anglerNameLC);
+
+    // Basis-Sichtbarkeit (wie gehabt)
+    const darfSehenBasis = showIntern
+      ? (eingeloggtVertraut && fangVonVertrautem)
+      : istAbNeu;
 
     const size = parseFloat(f.size);
     const istVerwertbar =
       f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
 
-    const ort = f.location_name?.toLowerCase().trim() ?? '';
-    const istAmFerkensbruch =
-      f.location_name == null || ort.includes('lobberich');
-
-    const istMarilou = isMarilouAngler(f.angler);
-
-    // ✅ Marilou-Ausnahme:
-    // Ihre verwertbaren Fänge zählen immer – unabhängig von Datum/Ort/Intern.
-    if (istMarilou) {
-      return istVerwertbar;
+    // 🔒 Marilou-Regel:
+    // - Wenn der Fang von Marilou ist, nur anzeigen, wenn *Marilou selbst eingeloggt* ist.
+    // - Für alle anderen Nutzer sind Marilou-Fänge unsichtbar.
+    const istFangVonMarilou = isMarilouName(f.angler);
+    if (istFangVonMarilou) {
+      return isCurrentUserMarilou && istVerwertbar;
     }
 
-    // Standardfilter für alle anderen
-    return darfSehen && istVerwertbar && istAmFerkensbruch;
+    // Standard für alle anderen
+    return darfSehenBasis && istVerwertbar;
   });
 
+  // Punkte/Zusammenfassung
   const byAngler = {};
   filteredFishes.forEach((f) => {
     const name = f.angler || 'Unbekannt';
@@ -116,7 +119,7 @@ export default function Leaderboard() {
         🏆 Rangliste
       </h2>
 
-      {vertraute.includes(anglerName) && (
+      {vertraute.includes(anglerNameLC) && (
         <div className="flex justify-center items-center mb-6">
           <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 dark:text-gray-300">
             <span>Laura vs. Nicol</span>
@@ -162,7 +165,7 @@ export default function Leaderboard() {
               </thead>
               <tbody>
                 {Object.entries(a.byFish)
-                  .sort(([, pointsA], [, pointsB]) => pointsB - pointsA)
+                  .sort(([, pA], [, pB]) => pB - pA)
                   .map(([f, p]) => {
                     const sizeData = a.sizesByFish?.[f];
                     const avg =
@@ -170,7 +173,10 @@ export default function Leaderboard() {
                         ? (sizeData.sum / sizeData.count).toFixed(1)
                         : '-';
                     return (
-                      <tr key={f} className="border-b border-gray-100 dark:border-gray-700">
+                      <tr
+                        key={f}
+                        className="border-b border-gray-100 dark:border-gray-700"
+                      >
                         <td className="font-sans py-1">{f}</td>
                         <td className="text-right py-1">{avg} cm</td>
                         <td className="text-right pr-2 py-1">{p.toFixed(0)} Pkt.</td>
