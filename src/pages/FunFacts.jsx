@@ -1134,6 +1134,46 @@ const fishPairs = useMemo(() => {
 }, [validFishes]);
 
 
+// 🧙‍♂️ Aal-Magier: Wer fängt die meisten Aale?
+const eelWizard = useMemo(() => {
+  const onlyEels = validFishes.filter(
+    (f) => f.fish?.trim().toLowerCase() === "aal"
+  );
+  if (onlyEels.length === 0) return null;
+
+  const byAngler = {};
+  onlyEels.forEach((f) => {
+    const who = (f.angler || "Unbekannt").trim();
+    byAngler[who] = (byAngler[who] || 0) + 1;
+  });
+
+  const sorted = Object.entries(byAngler)
+    .map(([angler, count]) => ({ angler, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return sorted[0]; // Top-Aalangler
+}, [validFishes]);
+
+
+// 🏆 Grundel-Champion: Wer fängt die meisten Grundeln?
+const grundelChampion = useMemo(() => {
+  const onlyGrundeln = validFishes.filter(
+    (f) => f.fish?.trim().toLowerCase() === "grundel"
+  );
+  if (onlyGrundeln.length === 0) return null;
+
+  const byAngler = {};
+  onlyGrundeln.forEach((f) => {
+    const who = (f.angler || "Unbekannt").trim();
+    byAngler[who] = (byAngler[who] || 0) + 1;
+  });
+
+  const sorted = Object.entries(byAngler)
+    .map(([angler, count]) => ({ angler, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return sorted[0]; // Der Grundel-Champion
+}, [validFishes]);
 
 
 
@@ -1793,7 +1833,39 @@ function monthLabel(ym) {
   )}
 </Card>
 
+<Card title="🧙‍♂️ Aal-Magier">
+  {eelWizard ? (
+    <div className="flex items-center justify-between">
+      <span className="text-green-700 dark:text-green-300 font-medium">
+        {eelWizard.angler}
+      </span>
+      <span className="font-bold text-xl text-green-700 dark:text-green-300">
+        {eelWizard.count} Aale
+      </span>
+    </div>
+  ) : (
+    <p className="text-gray-600 dark:text-gray-400">
+      Noch kein Aal gefangen.
+    </p>
+  )}
+</Card>
 
+<Card title="🏆 Grundel-Champion">
+  {grundelChampion ? (
+    <div className="flex items-center justify-between">
+      <span className="text-green-700 dark:text-green-300 font-medium">
+        {grundelChampion.angler}
+      </span>
+      <span className="font-bold text-xl text-green-700 dark:text-green-300">
+        {grundelChampion.count} Grundeln
+      </span>
+    </div>
+  ) : (
+    <p className="text-gray-600 dark:text-gray-400">
+      Noch keine Grundeln gefangen.
+    </p>
+  )}
+</Card>
 
       </div>
     </div>
