@@ -215,7 +215,7 @@ export default function Navbar({ name, isAdmin }) {
 
   const navItems = [
     { label: 'Wetter', path: '/' },
-    { label: '➕ 🎣', path: '/new-catch' },
+    { label: '+   🐠', path: '/new-catch' },
     { label: 'Fangliste', path: '/catches' },
     { label: 'Rangliste', path: '/leaderboard' },
     {
@@ -244,26 +244,7 @@ export default function Navbar({ name, isAdmin }) {
   const NavLink = ({ item }) => {
     const isActive = location.pathname === item.path;
 
-    // Spezialbehandlung nur für /new-catch
-    if (item.path === '/new-catch') {
-      return (
-        <Link
-          to={item.path}
-          className={`block rounded text-lg px-4 py-3
-            font-bold
-            hover:bg-blue-100 dark:hover:bg-gray-700
-            ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-green-700 dark:text-green-200'}
-          `}
-          onClick={() => setOpen(false)}
-        >
-          <span className="inline-flex items-center gap-2">
-            {/* Plus im Darkmode weiß */}
-            <span className="text-green-700 dark:text-white">➕</span>
-            <span>🎣</span>
-          </span>
-        </Link>
-      );
-    }
+    
 
     // Standardlinks
     return (
