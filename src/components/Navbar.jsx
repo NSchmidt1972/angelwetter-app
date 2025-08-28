@@ -27,8 +27,6 @@ const APP_VERSION = BUILD_INFO?.version || FALLBACKS.version;
 const BUILD_DATE  = BUILD_INFO?.date    || FALLBACKS.date;
 const GIT_COMMIT  = BUILD_INFO?.commit  || FALLBACKS.commit;
 
-
-
 /* 🔔 Kleiner v16-kompatibler Push-Button (CTA) */
 function PushToggleButton() {
   const [sdkLoaded, setSdkLoaded] = useState(false);
@@ -77,6 +75,7 @@ function PushToggleButton() {
   const subscribe = () => {
     if (busy) return;
     setBusy(true);
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
     window.OneSignalDeferred.push(async (OS) => {
       try {
         if (!OS.Notifications.permission) {
@@ -103,6 +102,7 @@ function PushToggleButton() {
   const unsubscribe = () => {
     if (busy) return;
     setBusy(true);
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
     window.OneSignalDeferred.push(async (OS) => {
       try {
         await OS.User.PushSubscription.optOut();
@@ -141,6 +141,25 @@ function PushToggleButton() {
   );
 }
 
+/* ⏳ Hilfs-Promise: auf controllerchange warten (mit Timeout) */
+function waitForControllerChange(timeoutMs = 3000) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const onChange = () => {
+      if (done) return;
+      done = true;
+      navigator.serviceWorker.removeEventListener('controllerchange', onChange);
+      resolve();
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', onChange);
+    setTimeout(() => {
+      if (done) return;
+      navigator.serviceWorker.removeEventListener('controllerchange', onChange);
+      reject(new Error('controllerchange timeout'));
+    }, timeoutMs);
+  });
+}
+
 export default function Navbar({ name, isAdmin }) {
   const { user, setUser } = useAuth();
   const [open, setOpen] = useState(false);
@@ -148,6 +167,11 @@ export default function Navbar({ name, isAdmin }) {
   const [showMenu, setShowMenu] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [showHamburger, setShowHamburger] = useState(false);
+
+  // 🔄 Update-Handling
+  const [updateReady, setUpdateReady] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const swRegRef = useRef(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -213,6 +237,106 @@ export default function Navbar({ name, isAdmin }) {
     navigate('/');
   };
 
+  /* 🔎 Service-Worker-Update-Flow */
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    let offControllerChange;
+
+    const wireUp = async () => {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) return;
+        swRegRef.current = reg;
+
+        // Falls schon ein neuer SW wartet:
+        if (reg.waiting) setUpdateReady(true);
+
+        // Wenn ein neuer SW gefunden wurde (downloading/installed -> waiting)
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed' && reg.waiting) {
+              setUpdateReady(true);
+            }
+          });
+        });
+
+        // Wenn der Controller wechselt (neuer SW übernimmt), Seite 1x neu laden
+        const onControllerChange = () => {
+          window.location.reload();
+        };
+        navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+        offControllerChange = () =>
+          navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+
+        // Bei Tab-Fokus nach Updates suchen (hilft auf iOS/Android)
+        const onVis = async () => {
+          if (document.visibilityState === 'visible') await reg.update();
+        };
+        document.addEventListener('visibilitychange', onVis);
+        return () => document.removeEventListener('visibilitychange', onVis);
+      } catch {
+        /* noop */
+      }
+    };
+    wireUp();
+    return () => { if (offControllerChange) offControllerChange(); };
+  }, []);
+
+  // 🚀 Sofort aktualisieren – robuster Dreistufenplan
+  const applyUpdateNow = async () => {
+    if (updating) return;
+    setUpdating(true);
+    try {
+      const reg = swRegRef.current || (await navigator.serviceWorker.getRegistration());
+      if (!reg) {
+        window.location.reload();
+        return;
+      }
+
+      // 1) Bevorzugt: wartenden SW aktivieren
+      if (reg.waiting) {
+        try {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } catch (_) {}
+        try {
+          await waitForControllerChange(3000);
+          return; // controllerchange -> reload
+        } catch (_) {
+          // weiter zu Fallback
+        }
+      }
+
+      // 2) Sanft: Update anstoßen und erneut versuchen
+      try {
+        await reg.update();
+        if (reg.waiting) {
+          try { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (_) {}
+          try {
+            await waitForControllerChange(3000);
+            return;
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      // 3) Harte Keule: alle SW deregistrieren + Caches leeren, dann Reload
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.allSettled(regs.map(r => r.unregister()));
+      } catch (_) {}
+      try {
+        const keys = await caches.keys();
+        await Promise.allSettled(keys.map(k => caches.delete(k)));
+      } catch (_) {}
+
+      window.location.reload();
+    } finally {
+      // Falls davor schon reloaded wurde, wird das hier nie erreicht – passt.
+      setUpdating(false);
+    }
+  };
+
   const navItems = [
     { label: 'Wetter', path: '/' },
     { label: '+   🐠', path: '/new-catch' },
@@ -240,13 +364,9 @@ export default function Navbar({ name, isAdmin }) {
     return shortName || first;
   })();
 
-  // Hilfs-Komponente für einen einzelnen Link (mit Spezialfall „➕ 🎣“)
+  // Hilfs-Komponente für einen einzelnen Link
   const NavLink = ({ item }) => {
     const isActive = location.pathname === item.path;
-
-    
-
-    // Standardlinks
     return (
       <Link
         to={item.path}
@@ -276,68 +396,68 @@ export default function Navbar({ name, isAdmin }) {
 
           {/* NAV */}
           {showHamburger ? (
-  open ? (
-    // Mobile Overlay mit Scroll + Safe-Area-Padding
-    <div
-      className="fixed inset-0 z-50 bg-white/95 dark:bg-gray-900/95 pt-20 overflow-hidden"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      <button
-        onClick={() => setOpen(false)}
-        className="absolute top-4 right-4 text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-        aria-label="Menü schließen"
-      >
-        ✖️
-      </button>
-
-      <nav
-        className="h-full overflow-y-auto overscroll-contain flex flex-col items-center justify-center text-center gap-4 px-2 pb-6 pb-[env(safe-area-inset-bottom)]"
-        role="navigation"
-      >
-        {navItems.map((item) =>
-          item.children ? (
-            <div key={item.label} className="w-full max-w-sm relative" ref={statsRef}>
-              <button
-                onClick={() => setOpenDropdown(prev => !prev)}
-                className="w-full px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
+            open ? (
+              // Mobile Overlay mit Scroll + Safe-Area-Padding
+              <div
+                className="fixed inset-0 z-50 bg-white/95 dark:bg-gray-900/95 pt-20 overflow-hidden"
+                style={{ WebkitOverflowScrolling: 'touch' }}
               >
-                {item.label} ▾
-              </button>
-
-              {openDropdown && (
-                <div
-                  className="mt-2 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base max-h-[60vh] overflow-y-auto overscroll-contain"
+                <button
+                  onClick={() => setOpen(false)}
+                  className="absolute top-4 right-4 text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                  aria-label="Menü schließen"
                 >
-                  {item.children.map((child) => (
-                    <Link
-                      key={child.path}
-                      to={child.path}
-                      className={`block px-5 py-3 text-center hover:bg-blue-100 dark:hover:bg-gray-900 rounded ${
-                        location.pathname === child.path
-                          ? 'font-bold text-blue-700 dark:text-blue-300'
-                          : 'text-gray-800 dark:text-gray-100'
-                      }`}
-                      onClick={() => {
-                        setOpen(false);
-                        setOpenDropdown(false);
-                      }}
-                    >
-                      {child.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
+                  ✖️
+                </button>
+
+                <nav
+                  className="h-full overflow-y-auto overscroll-contain flex flex-col items-center justify-center text-center gap-4 px-2 pb-6 pb-[env(safe-area-inset-bottom)]"
+                  role="navigation"
+                >
+                  {navItems.map((item) =>
+                    item.children ? (
+                      <div key={item.label} className="w-full max-w-sm relative" ref={statsRef}>
+                        <button
+                          onClick={() => setOpenDropdown(prev => !prev)}
+                          className="w-full px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
+                        >
+                          {item.label} ▾
+                        </button>
+
+                        {openDropdown && (
+                          <div
+                            className="mt-2 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base max-h-[60vh] overflow-y-auto overscroll-contain"
+                          >
+                            {item.children.map((child) => (
+                              <Link
+                                key={child.path}
+                                to={child.path}
+                                className={`block px-5 py-3 text-center hover:bg-blue-100 dark:hover:bg-gray-900 rounded ${
+                                  location.pathname === child.path
+                                    ? 'font-bold text-blue-700 dark:text-blue-300'
+                                    : 'text-gray-800 dark:text-gray-100'
+                                }`}
+                                onClick={() => {
+                                  setOpen(false);
+                                  setOpenDropdown(false);
+                                }}
+                              >
+                                {child.label}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div key={item.path} className="w-full max-w-sm">
+                        <NavLink item={item} />
+                      </div>
+                    )
+                  )}
+                </nav>
+              </div>
+            ) : null
           ) : (
-            <div key={item.path} className="w-full max-w-sm">
-              <NavLink item={item} />
-            </div>
-          )
-        )}
-      </nav>  
-    </div>
-  ) : null
-) : (
             // Desktop-Navigation
             <nav className="flex flex-row gap-2 items-center" role="navigation">
               {navItems.map((item) =>
@@ -400,7 +520,10 @@ export default function Navbar({ name, isAdmin }) {
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-12 w-56 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base" role="menu">
+            <div
+              className="absolute right-0 top-12 w-56 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base"
+              role="menu"
+            >
               <Link
                 to="/settings"
                 className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
@@ -421,10 +544,9 @@ export default function Navbar({ name, isAdmin }) {
                 Abmelden
               </button>
 
-              {/* ⭐ Versionsangabe */}
+              {/* ⭐ Versionsangabe + Update-Button */}
               <div className="border-t border-gray-200 dark:border-gray-700 mt-1 px-4 py-2">
                 <div className="text-[11px] leading-tight text-gray-500 dark:text-gray-400">
-                  
                   {BUILD_DATE && (
                     <div>
                       <span className="font-semibold">Build:</span>{' '}
@@ -438,14 +560,37 @@ export default function Navbar({ name, isAdmin }) {
                     </div>
                   )}
                 </div>
-                {/* 🔄 Update-Button */}
-  {/* 🔄 Einfacher Reload-Button */}
-  <button
-    onClick={() => window.location.reload()}
-    className="mt-2 w-full text-xs text-blue-600 dark:text-blue-400"
-  >
-    🔄 App neu starten
-  </button>
+
+                {/* 🔄 Intelligenter Update-Button */}
+                {updateReady ? (
+                  <button
+                    onClick={applyUpdateNow}
+                    disabled={updating}
+                    className="mt-2 w-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 px-3 py-2 rounded disabled:opacity-60"
+                    title="Neue Version verfügbar – jetzt anwenden"
+                  >
+                    {updating ? '⏳ Aktualisiere…' : '⤴️ App aktualisieren'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      try {
+                        setUpdating(true);
+                        const reg = swRegRef.current || (await navigator.serviceWorker.getRegistration());
+                        await reg?.update();
+                        if (reg?.waiting) setUpdateReady(true);
+                        else window.location.reload(); // Fallback: klassischer Reload
+                      } catch {
+                        window.location.reload();
+                      } finally {
+                        setUpdating(false);
+                      }
+                    }}
+                    className="mt-2 w-full text-xs text-blue-600 dark:text-blue-400"
+                  >
+                    🔄 App neu starten
+                  </button>
+                )}
               </div>
             </div>
           )}
