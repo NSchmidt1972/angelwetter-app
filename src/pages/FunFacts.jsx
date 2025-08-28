@@ -1175,6 +1175,39 @@ const grundelChampion = useMemo(() => {
   return sorted[0]; // Der Grundel-Champion
 }, [validFishes]);
 
+// 🌍 Wer angelt gern fremd? (per location_name)
+const foreignAnglers = useMemo(() => {
+  if (validFishes.length === 0) return { top3: [] };
+
+  const byAngler = {};
+
+  for (const f of validFishes) {
+    const loc = (f.location_name || "").trim();
+    if (!loc || ["Ferkensbruch", "Lobberich"].includes(loc)) continue;
+
+    const who = (f.angler || "Unbekannt").trim();
+    if (!byAngler[who]) {
+      byAngler[who] = { total: 0, byFish: {}, byLocation: {} };
+    }
+
+    byAngler[who].total += 1;
+
+    // Fische zählen
+    const species = f.fish || "Unbekannt";
+    byAngler[who].byFish[species] = (byAngler[who].byFish[species] || 0) + 1;
+
+    // Orte zählen
+    byAngler[who].byLocation[loc] = (byAngler[who].byLocation[loc] || 0) + 1;
+  }
+
+  const ranking = Object.entries(byAngler)
+    .map(([angler, stats]) => ({ angler, ...stats }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 3);
+
+  return { top3: ranking };
+}, [validFishes]);
+
 
 
 function monthLabel(ym) {
@@ -1857,7 +1890,7 @@ function monthLabel(ym) {
         {grundelChampion.angler}
       </span>
       <span className="font-bold text-xl text-green-700 dark:text-green-300">
-        {grundelChampion.count} Grundeln
+        {grundelChampion.count} {grundelChampion.count === 1 ? 'Grundel' : 'Grundeln'}
       </span>
     </div>
   ) : (
@@ -1866,6 +1899,49 @@ function monthLabel(ym) {
     </p>
   )}
 </Card>
+
+<Card title="🌍 Wer angelt gern fremd?">
+  {foreignAnglers.top3.length > 0 ? (
+    <ul className="space-y-4">
+      {foreignAnglers.top3.map((p, idx) => (
+        <li key={idx} className="p-3 bg-white dark:bg-gray-800 rounded-lg shadow">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-blue-700 dark:text-blue-300">
+              #{idx + 1} {p.angler}
+            </span>
+            <span className="text-green-700 dark:text-green-300 font-bold">
+              {p.total} Fische
+            </span>
+          </div>
+
+          {/* Orte */}
+          <div className="mb-2 text-xs text-gray-600 dark:text-gray-400">
+            📍 {Object.entries(p.byLocation)
+              .map(([loc, cnt]) => `${loc} (${cnt})`)
+              .join(", ")}
+          </div>
+
+          {/* Fischarten */}
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(p.byFish)
+              .sort((a, b) => b[1] - a[1])
+              .map(([fish, count]) => (
+                <span
+                  key={fish}
+                  className="px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                >
+                  {fish} {count}×
+                </span>
+              ))}
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Alle bleiben brav am Ferkensbruch 😉</p>
+  )}
+</Card>
+
 
       </div>
     </div>

@@ -11,10 +11,70 @@ import { loadWeatherForPosition } from "../services/weather";
 import { saveBlankDay } from "../services/blankService";
 import { saveCatchEntry } from "../services/catchService";
 
-const FISH_TYPES = [
-  "Aal", "Barsch", "Brasse", "Güster", "Grundel", "Hecht", "Karausche", "Karpfen",
+/* =========================
+   Regionale Fischlisten (manuelle Auswahl, KEINE Auto-Erkennung)
+   ========================= */
+
+// Ferkensbruch (ASV-Rotauge)
+const FERKENSBRUCH_FISH = [
+  "Aal", "Barsch", "Brasse", "Güster", "Hecht", "Karausche", "Karpfen",
   "Rotauge", "Rotfeder", "Schleie", "Wels", "Zander"
 ];
+
+// Binnengewässer (z. B. Deutschland)
+const INLAND_FISH = [
+  "Aal", "Barsch", "Brasse", "Forelle", "Güster", "Grundel", "Hecht", "Karausche", "Karpfen",
+  "Rotauge", "Rotfeder", "Schleie", "Wels", "Zander"
+];
+
+// Mittelmeer (grob)
+const MEDITERRANEAN_FISH = [
+  "Dorade (Goldbrasse)", "Wolfsbarsch (Seebarsch)", "Makrele", "Sardine", "Barrakuda",
+  "Amberjack (Bernsteinfisch)", "Bonito", "Tintenfisch", "Thunfisch", "Oktopus", "Rotbarbe",
+  "Zackenbarsch", "Meeräsche"
+];
+
+// Norwegen/Salzwasser (grob)
+const NORWAY_FISH = [
+  "Dorsch (Kabeljau)", "Seelachs (Köhler)", "Leng", "Lumb", "Rotbarsch",
+  "Heilbutt", "Seeteufel", "Makrele", "Scholle", "Steinbeißer", "Seehecht"
+];
+
+// Deutschland Nordsee
+const NORTH_SEA_DE_FISH = [
+  "Dorsch (Kabeljau)", "Wittling", "Seelachs (Köhler)", "Makrele",
+  "Scholle", "Kliesche", "Flunder", "Steinbutt", "Seezunge",
+  "Hering", "Meeräsche", "Seehecht", "Seeteufel"
+];
+
+// Deutschland Ostsee
+const BALTIC_SEA_DE_FISH = [
+  "Dorsch (Kabeljau)", "Hering", "Hornhecht", "Meerforelle",
+  "Lachs", "Scholle", "Flunder", "Kliesche", "Steinbutt",
+  "Aal", "Plattfisch (allg.)"
+];
+
+// Regions-IDs und Labels (nur manuelle Auswahl)
+const REGION_LABELS = {
+  ferkensbruch: "Ferkensbruch (ASV-Rotauge)",
+  inland: "Binnen (Deutschland)",
+  northsea_de: "Nordsee (DE)",
+  baltic_de: "Ostsee (DE)",
+  med: "Mittelmeer",
+  norway: "Norwegen (Salzwasser)",
+};
+
+function fishListForRegion(region) {
+  switch (region) {
+    case "ferkensbruch": return FERKENSBRUCH_FISH;
+    case "inland": return INLAND_FISH;
+    case "northsea_de": return NORTH_SEA_DE_FISH;
+    case "baltic_de": return BALTIC_SEA_DE_FISH;
+    case "med": return MEDITERRANEAN_FISH;
+    case "norway": return NORWAY_FISH;
+    default: return FERKENSBRUCH_FISH;
+  }
+}
 
 export default function FishCatchForm({ setWeatherData }) {
   const [fish, setFish] = useState("");
@@ -24,13 +84,22 @@ export default function FishCatchForm({ setWeatherData }) {
   const [photo, setPhoto] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [hours, setHours] = useState(4);
-  const [fishingType, setFishingType] = useState("Allround"); // ✅ neu
+  const [fishingType, setFishingType] = useState("Allround");
   const [showHourDialog, setShowHourDialog] = useState(false);
   const [loadingCatch, setLoadingCatch] = useState(false);
   const [loadingBlank, setLoadingBlank] = useState(false);
   const [position, setPosition] = useState(null);
   const [showTakenDialog, setShowTakenDialog] = useState(false);
   const [pendingEntry, setPendingEntry] = useState(null);
+
+  // ✅ Region nur manuell wählbar (persistiert in localStorage)
+  const allowedRegions = Object.keys(REGION_LABELS);
+  const [region, setRegion] = useState(() => {
+    const stored = localStorage.getItem("fishRegion");
+    return allowedRegions.includes(stored) ? stored : "ferkensbruch";
+  });
+  const fishList = fishListForRegion(region);
+
   const fileInputRef = useRef();
   const navigate = useNavigate();
 
@@ -38,7 +107,7 @@ export default function FishCatchForm({ setWeatherData }) {
   const FERKENSBRUCH_LAT = 51.3135;
   const FERKENSBRUCH_LON = 6.256;
 
-  // Standort abrufen
+  // Standort abrufen (nur für Wetter/Logging, NICHT für Region)
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -46,6 +115,14 @@ export default function FishCatchForm({ setWeatherData }) {
       (err) => console.warn("Standort konnte nicht abgerufen werden:", err)
     );
   }, []);
+
+  // Wenn aktuelle Auswahl nicht in Liste vorkommt (z. B. nach Regionswechsel) → zurücksetzen
+  useEffect(() => {
+    if (fish && !fishList.includes(fish)) {
+      setFish("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [region]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -63,7 +140,6 @@ export default function FishCatchForm({ setWeatherData }) {
   };
 
   const handleSubmit = async () => {
-    // ➜ nutzt deine (angepasste) validateCatchForm
     const errorMessage = validateCatchForm({ fish, size, weight, position });
     if (errorMessage) {
       alert(errorMessage);
@@ -79,32 +155,29 @@ export default function FishCatchForm({ setWeatherData }) {
         setWeatherData
       );
 
-      const photoUrl = photo
-        ? await processAndUploadImage(photo, anglerName)
-        : "";
+      const photoUrl = photo ? await processAndUploadImage(photo, anglerName) : "";
 
-      const locationName = await reverseGeocode(position.lat, position.lon).catch(() => null);
+      const locationName = await reverseGeocode(position?.lat, position?.lon).catch(() => null);
 
       // 🔢 Zahlen sauber parsen (Komma/Zahlpunkt)
       const sizeNumber = parseFloat(String(size).replace(",", "."));
       const weightNumber =
-        fish === "Karpfen" && weight
-          ? parseFloat(String(weight).replace(",", "."))
-          : null; // ← optional, sonst null
+        fish === "Karpfen" && weight ? parseFloat(String(weight).replace(",", ".")) : null;
 
       const newEntry = {
         fish,
         size: sizeNumber,
-        weight: weightNumber,          // ← wird null, wenn leer
+        weight: weightNumber,
         note,
         angler: anglerName,
         timestamp: new Date().toISOString(),
         weather: currentWeather,
         photo_url: photoUrl,
         blank: false,
-        lat: position.lat,
-        lon: position.lon,
-        location_name: locationName
+        lat: position?.lat ?? null,
+        lon: position?.lon ?? null,
+        location_name: locationName,
+        fish_region: region, // ← manuell gewählte Region mitschreiben
       };
 
       setPendingEntry(newEntry);
@@ -116,7 +189,6 @@ export default function FishCatchForm({ setWeatherData }) {
       setLoadingCatch(false);
     }
   };
-
 
   const finalizeCatch = async (taken) => {
     try {
@@ -141,7 +213,7 @@ export default function FishCatchForm({ setWeatherData }) {
   const handleBlankSubmit = async () => {
     setLoadingBlank(true);
     try {
-      await saveBlankDay(anglerName, hours, fishingType, position); // ✅ fishingType mitgeben
+      await saveBlankDay(anglerName, hours, fishingType, position);
       navigate("/");
     } catch (err) {
       console.error(err);
@@ -158,6 +230,24 @@ export default function FishCatchForm({ setWeatherData }) {
       </h2>
 
       <div className="space-y-4">
+        {/* Fischregion – manuelle Auswahl */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600 dark:text-gray-300">Region:</label>
+          <select
+            value={region}
+            onChange={(e) => {
+              const val = e.target.value;
+              setRegion(val);
+              localStorage.setItem("fishRegion", val);
+            }}
+            className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-sm"
+          >
+            {Object.entries(REGION_LABELS).map(([id, label]) => (
+              <option key={id} value={id}>{label}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Fischart */}
         <select
           value={fish}
@@ -165,7 +255,7 @@ export default function FishCatchForm({ setWeatherData }) {
           className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800"
         >
           <option value="">Fischart auswählen</option>
-          {FISH_TYPES.map((type) => (
+          {fishList.map((type) => (
             <option key={type} value={type}>
               {type}
             </option>
@@ -282,7 +372,6 @@ export default function FishCatchForm({ setWeatherData }) {
                 );
               })}
             </select>
-
 
             {/* Angelart */}
             <h3 className="text-lg font-semibold mb-2 text-gray-800 dark:text-gray-100">
