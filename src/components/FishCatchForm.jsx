@@ -177,7 +177,7 @@ export default function FishCatchForm({ setWeatherData }) {
         lat: position?.lat ?? null,
         lon: position?.lon ?? null,
         location_name: locationName,
-        fish_region: region, // ← manuell gewählte Region mitschreiben
+        
       };
 
       setPendingEntry(newEntry);
