@@ -175,8 +175,56 @@ export default function Navbar({ name, isAdmin }) {
 
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Profile/Stats Refs
   const profileRef = useRef();
   const statsRef = useRef();
+
+  // 🔧 Fix „Navbar verschwindet beim Scrollen“: Header ist FIXED + Spacer
+  const headerRef = useRef(null);
+  const [headerH, setHeaderH] = useState(64);
+
+  // ❗ Desktop-„Statistik“-Dropdown als FIXED element, an Button ausgerichtet
+  const statsBtnRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const [menuPos, setMenuPos] = useState({ left: 0, top: 0 });
+
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      setHeaderH(el.offsetHeight || 64);
+    });
+    ro.observe(el);
+    const onResize = () => setHeaderH(el.offsetHeight || 64);
+    const onOrient = () => setHeaderH(el.offsetHeight || 64);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onOrient);
+    setHeaderH(el.offsetHeight || 64);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onOrient);
+    };
+  }, []);
+
+  // Position des Statistik-Dropdowns aktualisieren, wenn geöffnet / bei Scroll/Resize
+  useEffect(() => {
+    if (!openDropdown) return;
+    const update = () => {
+      const btn = statsBtnRef.current;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      setMenuPos({ left: r.left, top: r.bottom + 8 });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [openDropdown]);
 
   useEffect(() => {
     const stored = localStorage.getItem('darkMode') === 'true';
@@ -184,11 +232,13 @@ export default function Navbar({ name, isAdmin }) {
     document.documentElement.classList.toggle('dark', stored);
   }, []);
 
-  // Outside click
+  // Outside click (Profil + Statistik inkl. Dropdown)
   useEffect(() => {
     function handleClickOutside(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) setShowMenu(false);
-      if (statsRef.current && !statsRef.current.contains(e.target)) setOpenDropdown(false);
+      const clickedStatsArea = statsRef.current && statsRef.current.contains(e.target);
+      const clickedDropdown = dropdownRef.current && dropdownRef.current.contains(e.target);
+      if (!clickedStatsArea && !clickedDropdown) setOpenDropdown(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -213,7 +263,7 @@ export default function Navbar({ name, isAdmin }) {
     };
   }, []);
 
-  // Body-Scroll sperren, wenn Overlay offen
+  // Body-Scroll sperren, wenn Mobile-Overlay offen
   useEffect(() => {
     if (open) {
       const prev = document.body.style.overflow;
@@ -248,10 +298,8 @@ export default function Navbar({ name, isAdmin }) {
         if (!reg) return;
         swRegRef.current = reg;
 
-        // Falls schon ein neuer SW wartet:
         if (reg.waiting) setUpdateReady(true);
 
-        // Wenn ein neuer SW gefunden wurde (downloading/installed -> waiting)
         reg.addEventListener('updatefound', () => {
           const installing = reg.installing;
           if (!installing) return;
@@ -262,7 +310,6 @@ export default function Navbar({ name, isAdmin }) {
           });
         });
 
-        // Wenn der Controller wechselt (neuer SW übernimmt), Seite 1x neu laden
         const onControllerChange = () => {
           window.location.reload();
         };
@@ -270,7 +317,6 @@ export default function Navbar({ name, isAdmin }) {
         offControllerChange = () =>
           navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
 
-        // Bei Tab-Fokus nach Updates suchen (hilft auf iOS/Android)
         const onVis = async () => {
           if (document.visibilityState === 'visible') await reg.update();
         };
@@ -295,20 +341,16 @@ export default function Navbar({ name, isAdmin }) {
         return;
       }
 
-      // 1) Bevorzugt: wartenden SW aktivieren
       if (reg.waiting) {
         try {
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         } catch (_) {}
         try {
           await waitForControllerChange(3000);
-          return; // controllerchange -> reload
-        } catch (_) {
-          // weiter zu Fallback
-        }
+          return;
+        } catch (_) {}
       }
 
-      // 2) Sanft: Update anstoßen und erneut versuchen
       try {
         await reg.update();
         if (reg.waiting) {
@@ -320,7 +362,6 @@ export default function Navbar({ name, isAdmin }) {
         }
       } catch (_) {}
 
-      // 3) Harte Keule: alle SW deregistrieren + Caches leeren, dann Reload
       try {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.allSettled(regs.map(r => r.unregister()));
@@ -332,7 +373,6 @@ export default function Navbar({ name, isAdmin }) {
 
       window.location.reload();
     } finally {
-      // Falls davor schon reloaded wurde, wird das hier nie erreicht – passt.
       setUpdating(false);
     }
   };
@@ -364,7 +404,6 @@ export default function Navbar({ name, isAdmin }) {
     return shortName || first;
   })();
 
-  // Hilfs-Komponente für einen einzelnen Link
   const NavLink = ({ item }) => {
     const isActive = location.pathname === item.path;
     return (
@@ -381,221 +420,237 @@ export default function Navbar({ name, isAdmin }) {
   };
 
   return (
-    <header className="bg-white dark:bg-gray-900 shadow-md sticky top-0 z-50 text-black dark:text-white">
-      <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          {showHamburger && (
-            <button
-              onClick={() => setOpen(!open)}
-              className="text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-              aria-label="Menü öffnen"
-            >
-              ☰
-            </button>
-          )}
-
-          {/* NAV */}
-          {showHamburger ? (
-            open ? (
-              // Mobile Overlay mit Scroll + Safe-Area-Padding
-              <div
-                className="fixed inset-0 z-50 bg-white/95 dark:bg-gray-900/95 pt-20 overflow-hidden"
-                style={{ WebkitOverflowScrolling: 'touch' }}
+    <>
+      {/* FIXED Navbar (statt sticky) + Safe-Area; Overflow sichtbar damit Dropdowns nicht geclippt werden */}
+      <header
+        ref={headerRef}
+        className="bg-white dark:bg-gray-900 shadow-md fixed top-0 left-0 right-0 z-[1200] text-black dark:text-white"
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          overflow: 'visible',
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            {showHamburger && (
+              <button
+                onClick={() => setOpen(!open)}
+                className="text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                aria-label="Menü öffnen"
               >
-                <button
-                  onClick={() => setOpen(false)}
-                  className="absolute top-4 right-4 text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                  aria-label="Menü schließen"
+                ☰
+              </button>
+            )}
+
+            {/* NAV */}
+            {showHamburger ? (
+              open ? (
+                // Mobile Overlay mit Scroll + Safe-Area-Padding
+                <div
+                  className="fixed inset-0 z-[1300] bg-white/95 dark:bg-gray-900/95 pt-20 overflow-hidden"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
                 >
-                  ✖️
+                  <button
+                    onClick={() => setOpen(false)}
+                    className="absolute top-4 right-4 text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                    aria-label="Menü schließen"
+                  >
+                    ✖️
+                  </button>
+
+                  <nav
+                    className="h-full overflow-y-auto overscroll-contain flex flex-col items-center justify-center text-center gap-4 px-2 pb-6 pb-[env(safe-area-inset-bottom)]"
+                    role="navigation"
+                  >
+                    {navItems.map((item) =>
+                      item.children ? (
+                        <div key={item.label} className="w-full max-w-sm relative" ref={statsRef}>
+                          <button
+                            onClick={() => setOpenDropdown(prev => !prev)}
+                            className="w-full px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
+                          >
+                            {item.label} ▾
+                          </button>
+
+                          {openDropdown && (
+                            <div
+                              className="mt-2 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base max-h-[60vh] overflow-y-auto overscroll-contain"
+                            >
+                              {item.children.map((child) => (
+                                <Link
+                                  key={child.path}
+                                  to={child.path}
+                                  className={`block px-5 py-3 text-center hover:bg-blue-100 dark:hover:bg-gray-900 rounded ${
+                                    location.pathname === child.path
+                                      ? 'font-bold text-blue-700 dark:text-blue-300'
+                                      : 'text-gray-800 dark:text-gray-100'
+                                  }`}
+                                  onClick={() => {
+                                    setOpen(false);
+                                    setOpenDropdown(false);
+                                  }}
+                                >
+                                  {child.label}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div key={item.path} className="w-full max-w-sm">
+                          <NavLink item={item} />
+                        </div>
+                      )
+                    )}
+                  </nav>
+                </div>
+              ) : null
+            ) : (
+              // Desktop-Navigation
+              <nav className="flex flex-row gap-2 items-center" role="navigation">
+                {navItems.map((item) =>
+                  item.children ? (
+                    <div key={item.label} className="relative inline-block" ref={statsRef}>
+                      <button
+                        ref={statsBtnRef}
+                        onClick={() => setOpenDropdown(prev => !prev)}
+                        className="block px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
+                      >
+                        {item.label} ▾
+                      </button>
+
+                      {openDropdown && (
+                        <div
+                          ref={dropdownRef}
+                          className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-[4000] text-base max-h-[60vh] overflow-y-auto overscroll-contain"
+                          style={{ left: menuPos.left, top: menuPos.top }}
+                        >
+                          {item.children.map((child) => (
+                            <Link
+                              key={child.path}
+                              to={child.path}
+                              className={`block px-5 py-3 hover:bg-blue-100 dark:hover:bg-gray-700 rounded ${
+                                location.pathname === child.path
+                                  ? 'font-bold text-blue-700 dark:text-blue-300'
+                                  : 'text-gray-800 dark:text-gray-100'
+                              }`}
+                              onClick={() => {
+                                setOpen(false);
+                                setOpenDropdown(false);
+                              }}
+                            >
+                              {child.label}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <NavLink key={item.path} item={item} />
+                  )
+                )}
+              </nav>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 text-base relative" ref={profileRef}>
+            <button
+              onClick={toggleDark}
+              className="px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300"
+            >
+              {darkMode ? '☀️ Tageslicht' : '🌙 Nachtangeln'}
+            </button>
+
+            <button
+              onClick={() => setShowMenu(prev => !prev)}
+              className="px-3 py-2 rounded"
+              aria-expanded={showMenu}
+              aria-haspopup="menu"
+            >
+              👤 {displayName}
+            </button>
+
+            {showMenu && (
+              <div
+                className="absolute right-0 top-12 w-56 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-[1400] text-base"
+                role="menu"
+              >
+                <Link
+                  to="/settings"
+                  className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
+                  onClick={() => setShowMenu(false)}
+                >
+                  ⚙️ Einstellungen
+                </Link>
+
+                {/* 🔔 Push CTA */}
+                <div className="px-4 py-2">
+                  <PushToggleButton />
+                </div>
+
+                <button
+                  onClick={handleLogout}
+                  className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
+                >
+                  Abmelden
                 </button>
 
-                <nav
-                  className="h-full overflow-y-auto overscroll-contain flex flex-col items-center justify-center text-center gap-4 px-2 pb-6 pb-[env(safe-area-inset-bottom)]"
-                  role="navigation"
-                >
-                  {navItems.map((item) =>
-                    item.children ? (
-                      <div key={item.label} className="w-full max-w-sm relative" ref={statsRef}>
-                        <button
-                          onClick={() => setOpenDropdown(prev => !prev)}
-                          className="w-full px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
-                        >
-                          {item.label} ▾
-                        </button>
-
-                        {openDropdown && (
-                          <div
-                            className="mt-2 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base max-h-[60vh] overflow-y-auto overscroll-contain"
-                          >
-                            {item.children.map((child) => (
-                              <Link
-                                key={child.path}
-                                to={child.path}
-                                className={`block px-5 py-3 text-center hover:bg-blue-100 dark:hover:bg-gray-900 rounded ${
-                                  location.pathname === child.path
-                                    ? 'font-bold text-blue-700 dark:text-blue-300'
-                                    : 'text-gray-800 dark:text-gray-100'
-                                }`}
-                                onClick={() => {
-                                  setOpen(false);
-                                  setOpenDropdown(false);
-                                }}
-                              >
-                                {child.label}
-                              </Link>
-                            ))}
-                          </div>
-                        )}
+                {/* ⭐ Versionsangabe + Update-Button */}
+                <div className="border-t border-gray-200 dark:border-gray-700 mt-1 px-4 py-2">
+                  <div className="text-[11px] leading-tight text-gray-500 dark:text-gray-400">
+                    {BUILD_DATE && (
+                      <div>
+                        <span className="font-semibold">Build:</span>{' '}
+                        <span className="font-mono">{BUILD_DATE}</span>
                       </div>
-                    ) : (
-                      <div key={item.path} className="w-full max-w-sm">
-                        <NavLink item={item} />
-                      </div>
-                    )
-                  )}
-                </nav>
-              </div>
-            ) : null
-          ) : (
-            // Desktop-Navigation
-            <nav className="flex flex-row gap-2 items-center" role="navigation">
-              {navItems.map((item) =>
-                item.children ? (
-                  <div key={item.label} className="relative inline-block" ref={statsRef}>
-                    <button
-                      onClick={() => setOpenDropdown(prev => !prev)}
-                      className="block px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
-                    >
-                      {item.label} ▾
-                    </button>
-
-                    {openDropdown && (
-                      <div
-                        className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base max-h-[60vh] overflow-y-auto overscroll-contain"
-                      >
-                        {item.children.map((child) => (
-                          <Link
-                            key={child.path}
-                            to={child.path}
-                            className={`block px-5 py-3 hover:bg-blue-100 dark:hover:bg-gray-700 rounded ${
-                              location.pathname === child.path
-                                ? 'font-bold text-blue-700 dark:text-blue-300'
-                                : 'text-gray-800 dark:text-gray-100'
-                            }`}
-                            onClick={() => {
-                              setOpen(false);
-                              setOpenDropdown(false);
-                            }}
-                          >
-                            {child.label}
-                          </Link>
-                        ))}
+                    )}
+                    {GIT_COMMIT && (
+                      <div className="truncate">
+                        <span className="font-semibold">Commit:</span>{' '}
+                        <span className="font-mono">{GIT_COMMIT.slice(0, 7)}</span>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <NavLink key={item.path} item={item} />
-                )
-              )}
-            </nav>
-          )}
-        </div>
 
-        <div className="flex items-center gap-3 text-base relative" ref={profileRef}>
-          <button
-            onClick={toggleDark}
-            className="px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300"
-          >
-            {darkMode ? '☀️ Tageslicht' : '🌙 Nachtangeln'}
-          </button>
-
-          <button
-            onClick={() => setShowMenu(prev => !prev)}
-            className="px-3 py-2 rounded"
-            aria-expanded={showMenu}
-            aria-haspopup="menu"
-          >
-            👤 {displayName}
-          </button>
-
-          {showMenu && (
-            <div
-              className="absolute right-0 top-12 w-56 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50 text-base"
-              role="menu"
-            >
-              <Link
-                to="/settings"
-                className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
-                onClick={() => setShowMenu(false)}
-              >
-                ⚙️ Einstellungen
-              </Link>
-
-              {/* 🔔 Push CTA */}
-              <div className="px-4 py-2">
-                <PushToggleButton />
-              </div>
-
-              <button
-                onClick={handleLogout}
-                className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
-              >
-                Abmelden
-              </button>
-
-              {/* ⭐ Versionsangabe + Update-Button */}
-              <div className="border-t border-gray-200 dark:border-gray-700 mt-1 px-4 py-2">
-                <div className="text-[11px] leading-tight text-gray-500 dark:text-gray-400">
-                  {BUILD_DATE && (
-                    <div>
-                      <span className="font-semibold">Build:</span>{' '}
-                      <span className="font-mono">{BUILD_DATE}</span>
-                    </div>
-                  )}
-                  {GIT_COMMIT && (
-                    <div className="truncate">
-                      <span className="font-semibold">Commit:</span>{' '}
-                      <span className="font-mono">{GIT_COMMIT.slice(0, 7)}</span>
-                    </div>
+                  {/* 🔄 Intelligenter Update-Button */}
+                  {updateReady ? (
+                    <button
+                      onClick={applyUpdateNow}
+                      disabled={updating}
+                      className="mt-2 w-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 px-3 py-2 rounded disabled:opacity-60"
+                      title="Neue Version verfügbar – jetzt anwenden"
+                    >
+                      {updating ? '⏳ Aktualisiere…' : '⤴️ App aktualisieren'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        try {
+                          setUpdating(true);
+                          const reg = swRegRef.current || (await navigator.serviceWorker.getRegistration());
+                          await reg?.update();
+                          if (reg?.waiting) setUpdateReady(true);
+                          else window.location.reload(); // Fallback: klassischer Reload
+                        } catch {
+                          window.location.reload();
+                        } finally {
+                          setUpdating(false);
+                        }
+                      }}
+                      className="mt-2 w-full text-xs text-blue-600 dark:text-blue-400"
+                    >
+                      🔄 App neu starten
+                    </button>
                   )}
                 </div>
-
-                {/* 🔄 Intelligenter Update-Button */}
-                {updateReady ? (
-                  <button
-                    onClick={applyUpdateNow}
-                    disabled={updating}
-                    className="mt-2 w-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 px-3 py-2 rounded disabled:opacity-60"
-                    title="Neue Version verfügbar – jetzt anwenden"
-                  >
-                    {updating ? '⏳ Aktualisiere…' : '⤴️ App aktualisieren'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={async () => {
-                      try {
-                        setUpdating(true);
-                        const reg = swRegRef.current || (await navigator.serviceWorker.getRegistration());
-                        await reg?.update();
-                        if (reg?.waiting) setUpdateReady(true);
-                        else window.location.reload(); // Fallback: klassischer Reload
-                      } catch {
-                        window.location.reload();
-                      } finally {
-                        setUpdating(false);
-                      }
-                    }}
-                    className="mt-2 w-full text-xs text-blue-600 dark:text-blue-400"
-                  >
-                    🔄 App neu starten
-                  </button>
-                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Spacer reserviert Platz unter FIXED-Header (robust gegen Toolbar-Jitter) */}
+      <div aria-hidden="true" style={{ height: headerH }} />
+    </>
   );
 }

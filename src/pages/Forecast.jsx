@@ -8,10 +8,16 @@ function renderFishRating(probability) {
   return '🐟'.repeat(rating);
 }
 
+function formatDate(ts) {
+  // OpenWeatherMap daily.dt ist Unix (Sekunden)
+  const d = new Date((ts ?? 0) * 1000);
+  return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+}
+
 export default function Forecast() {
   const [weatherData, setWeatherData] = useState(null);
   const [aiPrediction, setAiPrediction] = useState(null);
-  const [dailyPredictions, setDailyPredictions] = useState([]);
+  const [dailyPredictions, setDailyPredictions] = useState([]); // <-- wird unten genutzt
   const [loading, setLoading] = useState(false);
 
   const loadWeatherAndPredict = async () => {
@@ -54,7 +60,6 @@ export default function Forecast() {
         body: JSON.stringify(weather)
       });
       const aiResult = await aiResponse.json();
-      console.log("KI-Server Antwort:", aiResult);
       setAiPrediction(aiResult);
     } catch (err) {
       console.error("Fehler bei der KI-Server-Anfrage:", err);
@@ -64,7 +69,7 @@ export default function Forecast() {
     const dailyWithPrediction = await Promise.all(
       daily.map(async (day) => {
         const dayWeather = {
-          temp: day.temp.day,
+          temp: day.temp?.day ?? day.temp, // fallback
           pressure: day.pressure,
           wind: day.wind_speed,
           humidity: day.humidity,
@@ -123,11 +128,10 @@ export default function Forecast() {
         <button
           onClick={loadWeatherAndPredict}
           disabled={loading}
-          className={`px-4 py-2 rounded-lg font-medium transition ${
-            loading
+          className={`px-4 py-2 rounded-lg font-medium transition ${loading
               ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
               : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-          }`}
+            }`}
         >
           {loading ? 'Lädt...' : '🔄 Aktualisieren'}
         </button>
@@ -142,9 +146,7 @@ export default function Forecast() {
                 🎯 Fangwahrscheinlichkeit: {aiPrediction.probability}% {renderFishRating(aiPrediction.probability)}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                {aiPrediction.prediction === 1
-                  ? "Fang wahrscheinlich"
-                  : "Schneidertag wahrscheinlich"}
+                {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidertag wahrscheinlich"}
               </p>
 
               {aiPrediction.stats && (
@@ -165,10 +167,6 @@ export default function Forecast() {
                     <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
                     <div className="ml-2">{getPressureTrendLabel()}</div>
                   </div>
-
-             
-
-
                   <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
                     <div className="font-medium">Temp-Mittel (3 Tage):</div>
                     <div className="ml-2">
@@ -177,22 +175,17 @@ export default function Forecast() {
                         : 'n/a'}
                     </div>
                   </div>
-
                   <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
                     <div className="font-medium">Temp-Volatilität (3 Tage):</div>
                     <div className="ml-2 flex items-center gap-2">
                       {aiPrediction?.trend?.temp_volatility_3d != null ? (
                         <>
-                          <span>{aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C</span>
+                          <span>{aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C</span>
                           {(() => {
                             const v = aiPrediction.trend.temp_volatility_3d;
-                            if (v < 3) {
-                              return <span className="text-green-600 dark:text-green-400 font-semibold">✅ günstig</span>;
-                            } else if (v < 6) {
-                              return <span className="text-yellow-600 dark:text-yellow-300 font-semibold">⚠️ wechselhaft</span>;
-                            } else {
-                              return <span className="text-red-600 dark:text-red-400 font-semibold">❌ ungünstig</span>;
-                            }
+                            if (v < 3) return <span className="text-green-600 dark:text-green-400 font-semibold">✅ günstig</span>;
+                            if (v < 6) return <span className="text-yellow-600 dark:text-yellow-300 font-semibold">⚠️ wechselhaft</span>;
+                            return <span className="text-red-600 dark:text-red-400 font-semibold">❌ ungünstig</span>;
                           })()}
                         </>
                       ) : (
@@ -200,46 +193,128 @@ export default function Forecast() {
                       )}
                     </div>
                   </div>
-
                 </div>
               </div>
             </div>
-          </div>
 
-          
+            {/* 🎣 KI: Wahrscheinlichkeiten pro Fischart */}
+            {aiPrediction?.per_fish_type && Object.keys(aiPrediction.per_fish_type).length > 0 ? (
+              <div className="mt-6">
+                <h4 className="font-semibold mb-2 text-gray-800 dark:text-gray-100">🐠 Wahrscheinlichkeiten nach Fischart</h4>
+                <div className="space-y-2">
+                  {Object.entries(aiPrediction.per_fish_type)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([fish, prob]) => (
+                      <div key={fish} className="flex items-center justify-between px-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-700 shadow-sm">
+                        <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-blue-700 dark:text-blue-300 text-sm">
+                            {prob.toFixed(1)} %
+                          </span>
+                          <span>{renderFishRating(prob)}</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-sm text-gray-500 dark:text-gray-400 italic mt-6">
+                Keine Fischarten-Prognose verfügbar. 🤷‍♂️
+              </p>
+            )}
+          </div>
         ) : (
           <p className="text-center text-gray-500 dark:text-gray-400">Lade KI-Prognose…</p>
         )}
-             {/* 🎣 KI: Wahrscheinlichkeiten pro Fischart */}
-{aiPrediction?.per_fish_type && Object.keys(aiPrediction.per_fish_type).length > 0 ? (
-  <div className="mt-6">
-    <h4 className="font-semibold mb-2 text-gray-800 dark:text-gray-100">🐠 Wahrscheinlichkeiten nach Fischart</h4>
-    <div className="space-y-2">
-      {Object.entries(aiPrediction.per_fish_type)
-        .sort(([, a], [, b]) => b - a)
-        .map(([fish, prob]) => (
-          <div
-            key={fish}
-            className="flex items-center justify-between px-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-700 shadow-sm"
-          >
-            <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-blue-700 dark:text-blue-300 text-sm">
-                {prob.toFixed(1)} %
-              </span>
-              <span>{renderFishRating(prob)}</span>
+
+        {/* 🗓️ 7-Tage-Ausblick: Datum • Icon • Temperatur • Fischarten-Prognose */}
+        {dailyPredictions?.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6">
+            <h3 className="font-bold text-lg mb-4 text-gray-800 dark:text-gray-100">🗓️ 7-Tage-Ausblick</h3>
+
+            <div className="space-y-3">
+              {dailyPredictions.map((d, idx) => {
+                const icon = d.weather?.[0]?.icon;
+                const desc = d.weather?.[0]?.description ?? 'Wetter';
+                const tempDay = d?.temp?.day != null ? Math.round(d.temp.day) : null;
+                const fishMap = d.aiPrediction?.per_fish_type || {};
+                // Top 3 Fischarten nach Wahrscheinlichkeit
+                const sortedFish = Object.entries(fishMap).sort(([, a], [, b]) => b - a);
+                const top = sortedFish.slice(0, 3);
+                const moreCount = Math.max(sortedFish.length - top.length, 0);
+
+                const dateStr = new Date(d.dt * 1000).toLocaleDateString('de-DE', {
+                  weekday: 'short', day: '2-digit', month: '2-digit'
+                });
+
+                return (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700"
+                  >
+                    {/* Kopfzeile: Datum • Icon • Temperatur */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {icon ? (
+                          <img
+                            src={`https://openweathermap.org/img/wn/${icon}@2x.png`}
+                            alt={desc}
+                            className="w-10 h-10"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-gray-200 dark:bg-gray-600" />
+                        )}
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-gray-100">{dateStr}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-300 capitalize">{desc}</div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                          {tempDay != null ? `${tempDay}°C` : '–'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Fischarten-Prognose */}
+                    <div className="mt-2">
+                      {top.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {top.map(([fish, prob]) => (
+                            <div
+                              key={fish}
+                              className="px-2 py-1 rounded-md bg-white/70 dark:bg-black/20 border border-gray-200/50 dark:border-white/10 text-sm flex items-center gap-2"
+                            >
+                              <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
+                              <span className="font-mono text-gray-700 dark:text-gray-200">
+                                {prob.toFixed(1)}%
+                              </span>
+                              <span className="leading-none">
+                                {renderFishRating(prob)}
+                              </span>
+                            </div>
+                          ))}
+                          {moreCount > 0 && (
+                            <div className="px-2 py-1 rounded-md bg-white/50 dark:bg-black/10 border border-dashed border-gray-300/60 dark:border-white/20 text-sm">
+                              +{moreCount} weitere
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-sm italic text-gray-500 dark:text-gray-300">
+                          Keine Fischarten-Prognose verfügbar.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        ))}
-    </div>
-  </div>
-) : (
-  <p className="text-center text-sm text-gray-500 dark:text-gray-400 italic mt-6">
-    Keine Fischarten-Prognose verfügbar. 🤷‍♂️
-  </p>
-)}
+        )}
 
-     
       </div>
     </div>
   );
