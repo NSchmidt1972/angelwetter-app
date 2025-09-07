@@ -3,11 +3,12 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import { useEffect, useState, Suspense } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabaseClient';
-import PushInit from './components/PushInit';            // ✅ NEU: OneSignal Initialisierung
+import PushInit from './components/PushInit';
 import AppRoutes from './AppRoutes';
+import AchievementLayer from './achievements/AchievementLayer'; // ✅ NEU
 import './index.css';
 
-function AppContent() {
+function AppContentInner({ showEffect }) {
   const { user, loading: authLoading } = useAuth();
   const [anglerName, setAnglerName] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
@@ -43,18 +44,17 @@ function AppContent() {
       .select('name')
       .eq('id', user.id)
       .single()
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (data?.name) {
           const fullName = data.name.trim();
           setAnglerName(fullName);
           localStorage.setItem('anglerName', fullName);
 
           const [first, last] = fullName.split(' ');
-          supabase.from('profiles').select('name').then(({ data: allProfiles }) => {
-            const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
-            const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
-            localStorage.setItem('shortAnglerName', shortName);
-          });
+          const { data: allProfiles } = await supabase.from('profiles').select('name');
+          const firstNameCount = (allProfiles || []).filter(p => p.name?.startsWith(first + ' ')).length;
+          const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
+          localStorage.setItem('shortAnglerName', shortName);
         } else {
           console.warn('⚠️ Kein Name im Profil gefunden oder Fehler:', error);
           setAnglerName(null);
@@ -139,7 +139,7 @@ function AppContent() {
 
   return (
     <>
-      <PushInit /> {/* ✅ auch im „normalen“ Zustand */}
+      <PushInit />
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
         <AppRoutes
           isLoggedIn={isLoggedIn}
@@ -147,9 +147,19 @@ function AppContent() {
           anglerName={anglerName}
           weatherData={weatherData}
           setWeatherData={setWeatherData}
+          showEffect={showEffect}          // ✅ NEU: weiterreichen
         />
       </Suspense>
     </>
+  );
+}
+
+function AppContent() {
+  // ⬅️ Hier wird der Layer einmal ganz oben eingeclipst.
+  return (
+    <AchievementLayer>
+      {(showEffect) => <AppContentInner showEffect={showEffect} />}
+    </AchievementLayer>
   );
 }
 

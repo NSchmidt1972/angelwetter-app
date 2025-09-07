@@ -24,34 +24,53 @@ const FALLBACKS = {
 };
 
 const APP_VERSION = BUILD_INFO?.version || FALLBACKS.version;
-const BUILD_DATE  = BUILD_INFO?.date    || FALLBACKS.date;
-const GIT_COMMIT  = BUILD_INFO?.commit  || FALLBACKS.commit;
+const BUILD_DATE = BUILD_INFO?.date || FALLBACKS.date;
+const GIT_COMMIT = BUILD_INFO?.commit || FALLBACKS.commit;
 
-/* 🔔 Kleiner v16-kompatibler Push-Button (CTA) */
+/* 🔔 OneSignal v16-kompatibler Push-Button – nur UI-Steuerung (kein Supabase) */
 function PushToggleButton() {
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const [supported, setSupported] = useState(null);
   const [permission, setPermission] = useState(null);
   const [optedIn, setOptedIn] = useState(null);
-  const [subId, setSubId] = useState(null);
+  const [subscriptionId, setSubscriptionId] = useState(null);
+
   const [busy, setBusy] = useState(false);
-  const enabled = !!(permission && optedIn && subId);
+  const [copied, setCopied] = useState(false);
+
+  // Aktiv, sobald Permission + Opt-in + Subscription-ID vorhanden
+  const enabled = !!(permission && optedIn && subscriptionId);
+
+  async function getSubscriptionId(OS) {
+    return (
+      OS.User?.PushSubscription?.id ??
+      (await OS.User?.PushSubscription?.getId?.()) ??
+      null
+    );
+  }
 
   useEffect(() => {
     let cleanup;
 
     const init = async (OS) => {
       setSdkLoaded(true);
-      setSupported(OS.Notifications.isPushSupported());
+      setSupported(!!OS.Notifications.isPushSupported());
       setPermission(!!OS.Notifications.permission);
       setOptedIn(!!OS.User?.PushSubscription?.optedIn);
-      setSubId(OS.User?.PushSubscription?.id ?? null);
+
+      const sid = await getSubscriptionId(OS);
+      setSubscriptionId(sid ?? null);
 
       const onPerm = (perm) => setPermission(!!perm);
-      const onSubChange = (ev) => {
+      const onSubChange = async (ev) => {
         const cur = ev?.current || {};
-        if (Object.prototype.hasOwnProperty.call(cur, 'optedIn')) setOptedIn(!!cur.optedIn);
-        if (Object.prototype.hasOwnProperty.call(cur, 'id')) setSubId(cur.id ?? null);
+        if ('optedIn' in cur) setOptedIn(!!cur.optedIn);
+        if ('id' in cur) {
+          setSubscriptionId(cur.id ?? null);
+        } else {
+          const sid2 = await getSubscriptionId(OS);
+          setSubscriptionId(sid2 ?? null);
+        }
       };
 
       OS.Notifications.addEventListener('permissionChange', onPerm);
@@ -63,13 +82,14 @@ function PushToggleButton() {
       };
     };
 
-    if (window.OneSignal && window.OneSignal.Notifications) {
+    if (window.OneSignal?.Notifications) {
       init(window.OneSignal);
     } else {
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       window.OneSignalDeferred.push(init);
     }
-    return () => { if (cleanup) cleanup(); };
+
+    return () => cleanup?.();
   }, []);
 
   const subscribe = () => {
@@ -80,19 +100,25 @@ function PushToggleButton() {
       try {
         if (!OS.Notifications.permission) {
           const ok = await OS.Notifications.requestPermission();
-          if (!ok) { setBusy(false); return; }
+          if (!ok) return;
         }
         await navigator.serviceWorker.ready;
+
         await OS.User.PushSubscription.optIn();
         if (typeof OS.Notifications.subscribe === 'function') {
           await OS.Notifications.subscribe();
         }
+
+        // ID „nachlaufen“
         for (let i = 0; i < 10; i++) {
-          if (OS.User?.PushSubscription?.id) break;
-          await new Promise(r => setTimeout(r, 200));
+          const sid = await getSubscriptionId(OS);
+          if (sid) {
+            setSubscriptionId(sid);
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 200));
         }
         setOptedIn(!!OS.User?.PushSubscription?.optedIn);
-        setSubId(OS.User?.PushSubscription?.id ?? null);
       } finally {
         setBusy(false);
       }
@@ -107,37 +133,68 @@ function PushToggleButton() {
       try {
         await OS.User.PushSubscription.optOut();
         setOptedIn(false);
-        setSubId(null);
+        setSubscriptionId(null);
       } finally {
         setBusy(false);
       }
     });
   };
 
+  const copyId = async () => {
+    try {
+      await navigator.clipboard.writeText(subscriptionId || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* noop */
+    }
+  };
+
   if (!sdkLoaded || supported === false) return null;
 
-  if (enabled) {
-    return (
-      <button
-        onClick={unsubscribe}
-        disabled={busy}
-        className="px-3 py-2 rounded-2xl bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-60 w-full text-left"
-        title="Benachrichtigungen deaktivieren"
-      >
-        🔔 Push-Aktiv
-      </button>
-    );
-  }
-
   return (
-    <button
-      onClick={subscribe}
-      disabled={busy || permission === false}
-      className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60 w-full text-left"
-      title={permission === false ? 'Benachrichtigungen im Browser blockiert' : 'Benachrichtigungen aktivieren'}
-    >
-      🔔 Push-Aktivieren
-    </button>
+    <div className="w-full">
+      {enabled ? (
+        <button
+          onClick={unsubscribe}
+          disabled={busy}
+          className="px-3 py-2 rounded-2xl bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-60 w-full text-left"
+          title="Benachrichtigungen deaktivieren"
+        >
+          🔔 Push-Aktiv
+        </button>
+      ) : (
+        <button
+          onClick={subscribe}
+          disabled={busy || permission === false}
+          className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60 w-full text-left"
+          title={
+            permission === false
+              ? 'Benachrichtigungen im Browser blockiert'
+              : 'Benachrichtigungen aktivieren'
+          }
+        >
+          🔔 Push-Aktivieren
+        </button>
+      )}
+
+      {/* Subscription-ID anzeigen */}
+      <div className="mt-2 text-[11px] leading-snug text-gray-600 dark:text-gray-400">
+        <div className="font-semibold">Subscription-ID:</div>
+        <div className="font-mono break-all select-all">
+          {subscriptionId || '— keine ID —'}
+        </div>
+        <div className="mt-1">
+          <button
+            onClick={copyId}
+            disabled={!subscriptionId}
+            className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
+          >
+            {copied ? '✓ Kopiert' : 'ID kopieren'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -235,13 +292,16 @@ export default function Navbar({ name, isAdmin }) {
   // Outside click (Profil + Statistik inkl. Dropdown)
   useEffect(() => {
     function handleClickOutside(e) {
-      if (profileRef.current && !profileRef.current.contains(e.target)) setShowMenu(false);
-      const clickedStatsArea = statsRef.current && statsRef.current.contains(e.target);
-      const clickedDropdown = dropdownRef.current && dropdownRef.current.contains(e.target);
+      if (profileRef.current && !profileRef.current.contains(e.target))
+        setShowMenu(false);
+      const clickedStatsArea =
+        statsRef.current && statsRef.current.contains(e.target);
+      const clickedDropdown =
+        dropdownRef.current && dropdownRef.current.contains(e.target);
       if (!clickedStatsArea && !clickedDropdown) setOpenDropdown(false);
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Responsive: wann Hamburger anzeigen
@@ -255,11 +315,11 @@ export default function Navbar({ name, isAdmin }) {
       setShowHamburger(isMobile || isTabletPortrait);
     }
     checkDevice();
-    window.addEventListener("resize", checkDevice);
-    window.addEventListener("orientationchange", checkDevice);
+    window.addEventListener('resize', checkDevice);
+    window.addEventListener('orientationchange', checkDevice);
     return () => {
-      window.removeEventListener("resize", checkDevice);
-      window.removeEventListener("orientationchange", checkDevice);
+      window.removeEventListener('resize', checkDevice);
+      window.removeEventListener('orientationchange', checkDevice);
     };
   }, []);
 
@@ -268,7 +328,9 @@ export default function Navbar({ name, isAdmin }) {
     if (open) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = prev; };
+      return () => {
+        document.body.style.overflow = prev;
+      };
     }
   }, [open]);
 
@@ -313,9 +375,15 @@ export default function Navbar({ name, isAdmin }) {
         const onControllerChange = () => {
           window.location.reload();
         };
-        navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+        navigator.serviceWorker.addEventListener(
+          'controllerchange',
+          onControllerChange
+        );
         offControllerChange = () =>
-          navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+          navigator.serviceWorker.removeEventListener(
+            'controllerchange',
+            onControllerChange
+          );
 
         const onVis = async () => {
           if (document.visibilityState === 'visible') await reg.update();
@@ -327,7 +395,9 @@ export default function Navbar({ name, isAdmin }) {
       }
     };
     wireUp();
-    return () => { if (offControllerChange) offControllerChange(); };
+    return () => {
+      if (offControllerChange) offControllerChange();
+    };
   }, []);
 
   // 🚀 Sofort aktualisieren – robuster Dreistufenplan
@@ -335,7 +405,8 @@ export default function Navbar({ name, isAdmin }) {
     if (updating) return;
     setUpdating(true);
     try {
-      const reg = swRegRef.current || (await navigator.serviceWorker.getRegistration());
+      const reg =
+        swRegRef.current || (await navigator.serviceWorker.getRegistration());
       if (!reg) {
         window.location.reload();
         return;
@@ -354,7 +425,9 @@ export default function Navbar({ name, isAdmin }) {
       try {
         await reg.update();
         if (reg.waiting) {
-          try { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (_) {}
+          try {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          } catch (_) {}
           try {
             await waitForControllerChange(3000);
             return;
@@ -364,12 +437,12 @@ export default function Navbar({ name, isAdmin }) {
 
       try {
         const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.allSettled(regs.map(r => r.unregister()));
+        await Promise.allSettled(regs.map((r) => r.unregister()));
       } catch (_) {}
       try {
         const keys = await caches.keys();
-        await Promise.allSettled(keys.map(k => caches.delete(k)));
-      } catch (_) {}
+        await Promise.allSettled(keys.map((k) => caches.delete(k)));
+      } catch (e) {}
 
       window.location.reload();
     } finally {
@@ -390,10 +463,10 @@ export default function Navbar({ name, isAdmin }) {
         { label: 'Fun-Facts', path: '/fun' },
         { label: 'Prognose', path: '/forecast' },
         { label: 'Kalender', path: '/calendar' },
-        { label: 'Karte', path: '/map' }
-      ]
+        { label: 'Karte', path: '/map' },
+      ],
     },
-    ...(isAdmin ? [{ label: '🔧 Admin', path: '/admin' }] : [])
+    ...(isAdmin ? [{ label: '🔧 Admin', path: '/admin' }] : []),
   ];
 
   if (!user) return null;
@@ -421,7 +494,7 @@ export default function Navbar({ name, isAdmin }) {
 
   return (
     <>
-      {/* FIXED Navbar (statt sticky) + Safe-Area; Overflow sichtbar damit Dropdowns nicht geclippt werden */}
+      {/* FIXED Navbar + Safe-Area; Overflow sichtbar damit Dropdowns nicht geclippt werden */}
       <header
         ref={headerRef}
         className="bg-white dark:bg-gray-900 shadow-md fixed top-0 left-0 right-0 z-[1200] text-black dark:text-white"
@@ -464,18 +537,20 @@ export default function Navbar({ name, isAdmin }) {
                   >
                     {navItems.map((item) =>
                       item.children ? (
-                        <div key={item.label} className="w-full max-w-sm relative" ref={statsRef}>
+                        <div
+                          key={item.label}
+                          className="w-full max-w-sm relative"
+                          ref={statsRef}
+                        >
                           <button
-                            onClick={() => setOpenDropdown(prev => !prev)}
+                            onClick={() => setOpenDropdown((prev) => !prev)}
                             className="w-full px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
                           >
                             {item.label} ▾
                           </button>
 
                           {openDropdown && (
-                            <div
-                              className="mt-2 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base max-h-[60vh] overflow-y-auto overscroll-contain"
-                            >
+                            <div className="mt-2 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base max-h-[60vh] overflow-y-auto overscroll-contain">
                               {item.children.map((child) => (
                                 <Link
                                   key={child.path}
@@ -513,7 +588,7 @@ export default function Navbar({ name, isAdmin }) {
                     <div key={item.label} className="relative inline-block" ref={statsRef}>
                       <button
                         ref={statsBtnRef}
-                        onClick={() => setOpenDropdown(prev => !prev)}
+                        onClick={() => setOpenDropdown((prev) => !prev)}
                         className="block px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
                       >
                         {item.label} ▾
@@ -562,7 +637,7 @@ export default function Navbar({ name, isAdmin }) {
             </button>
 
             <button
-              onClick={() => setShowMenu(prev => !prev)}
+              onClick={() => setShowMenu((prev) => !prev)}
               className="px-3 py-2 rounded"
               aria-expanded={showMenu}
               aria-haspopup="menu"
@@ -627,7 +702,9 @@ export default function Navbar({ name, isAdmin }) {
                       onClick={async () => {
                         try {
                           setUpdating(true);
-                          const reg = swRegRef.current || (await navigator.serviceWorker.getRegistration());
+                          const reg =
+                            swRegRef.current ||
+                            (await navigator.serviceWorker.getRegistration());
                           await reg?.update();
                           if (reg?.waiting) setUpdateReady(true);
                           else window.location.reload(); // Fallback: klassischer Reload

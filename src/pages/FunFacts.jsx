@@ -571,56 +571,62 @@ export default function FunFacts() {
     return { max, winners, ranking: entries };
   }, [validFishes]);
 
-  // 18.🦉 Nachteule
-  const nightOwl = useMemo(() => {
-    if (validFishes.length === 0) return { maxMin: null, winners: [], ranking: [] };
+  // 18. 🦉 Nachteulen – "meiste Fische zwischen 22 und 4 Uhr"
+const nightOwls = useMemo(() => {
+  if (validFishes.length === 0) return { winners: [], ranking: [], total: 0 };
 
-    const bestByAngler = {};
-    const nightCounts = {};
+  const counts = {};
+  const lastMinutes = {};
+  const samples = {};
 
-    validFishes.forEach((f) => {
-      const who = (f.angler || 'Unbekannt').trim();
-      if (!who) return;
+  const toTimeLabel = (mins) =>
+    new Date(1970, 0, 1, Math.floor(mins / 60), mins % 60)
+      .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
-      const dt = new Date(f.timestamp);
-      const minutes = dt.getHours() * 60 + dt.getMinutes();
-      const isNight = dt.getHours() >= 22 || dt.getHours() < 5;
+  validFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    if (!who) return;
 
-      if (!bestByAngler[who] || minutes > bestByAngler[who].minutes) {
-        bestByAngler[who] = { minutes, entry: f };
-      }
-      if (isNight) nightCounts[who] = (nightCounts[who] || 0) + 1;
-    });
+    const dt = new Date(f.timestamp);
+    const h = dt.getHours();
+    const isNightWindow = h >= 22 || h < 4; // 22:00–03:59
+    if (!isNightWindow) return;
 
-    const toTimeLabel = (mins) =>
-      new Date(1970, 0, 1, Math.floor(mins / 60), mins % 60)
-        .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const mins = h * 60 + dt.getMinutes();
 
-    const entries = Object.entries(bestByAngler).map(([angler, { minutes, entry }]) => ({
-      angler,
-      minutes,
-      timeLabel: toTimeLabel(minutes),
-      night: nightCounts[angler] || 0,
-      sample: entry,
-    }));
+    counts[who] = (counts[who] || 0) + 1;
+    // Merke spätesten Nachtfang pro Angler (nur als Tie-Breaker/Anzeige)
+    if (lastMinutes[who] == null || mins > lastMinutes[who]) {
+      lastMinutes[who] = mins;
+      samples[who] = f; // beliebiges Beispiel zum Anzeigen
+    }
+  });
 
-    if (entries.length === 0) return { maxMin: null, winners: [], ranking: [] };
+  const entries = Object.keys(counts).map((angler) => ({
+    angler,
+    count: counts[angler],
+    lastMinutes: lastMinutes[angler] ?? null,
+    lastTimeLabel: lastMinutes[angler] != null ? toTimeLabel(lastMinutes[angler]) : null,
+    sample: samples[angler] ?? null,
+  }));
 
-    entries.sort((a, b) =>
-      (b.minutes - a.minutes) || (b.night - a.night) || a.angler.localeCompare(b.angler)
-    );
+  entries.sort((a, b) =>
+    (b.count - a.count) ||
+    (b.lastMinutes - a.lastMinutes) ||
+    a.angler.localeCompare(b.angler)
+  );
 
-    const maxMin = entries[0].minutes;
-    const winners = entries.filter(e => e.minutes === maxMin);
+  const winners = entries.length ? entries.filter(e => e.count === entries[0].count) : [];
+  const total = entries.reduce((s, e) => s + e.count, 0);
 
-    return { maxMin, winners, ranking: entries };
-  }, [validFishes]);
+  return { winners, ranking: entries, total };
+}, [validFishes]);
 
-  // 19. 🌅 Früher Wurm: 04:30–09:00
+  // 19. 🌅 Früher Wurm: 04:00–09:00
   const earlyBird = useMemo(() => {
-    if (validFishes.length === 0) return { minMin: null, winners: [], ranking: [], window: { start: '04:30', end: '09:00' } };
+    if (validFishes.length === 0) return { minMin: null, winners: [], ranking: [], window: { start: '04:00', end: '09:00' } };
 
-    const START_MIN = 4 * 60 + 30;
+    const START_MIN = 4 * 60;
     const END_MIN   = 9 * 60;
 
     const bestByAngler = {};
@@ -652,7 +658,7 @@ export default function FunFacts() {
       sample: entry,
     }));
 
-    if (entries.length === 0) return { minMin: null, winners: [], ranking: [], window: { start: '04:30', end: '09:00' } };
+    if (entries.length === 0) return { minMin: null, winners: [], ranking: [], window: { start: '04:00', end: '09:00' } };
 
     entries.sort((a, b) =>
       (a.minutes - b.minutes) || (b.early - a.early) || a.angler.localeCompare(b.angler)
@@ -661,7 +667,7 @@ export default function FunFacts() {
     const minMin = entries[0].minutes;
     const winners = entries.filter(e => e.minutes === minMin);
 
-    return { minMin, winners, ranking: entries, window: { start: '04:30', end: '09:00' } };
+    return { minMin, winners, ranking: entries, window: { start: '04:00', end: '09:00' } };
   }, [validFishes]);
 
   // 20. Regen-Helper
@@ -1051,6 +1057,143 @@ export default function FunFacts() {
 
     return { top3: ranking };
   }, [validFishes]);
+
+  // 👑 Schneiderkönig: Wer hat die meisten Schneidertage?
+const schneiderKoenig = useMemo(() => {
+  const counts = {};
+  fishes.forEach(f => {
+    if (f.blank) {
+      const who = (f.angler || 'Unbekannt').trim();
+      counts[who] = (counts[who] || 0) + 1;
+    }
+  });
+
+  const entries = Object.entries(counts).map(([angler, count]) => ({ angler, count }));
+  if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  entries.sort((a, b) => (b.count - a.count) || a.angler.localeCompare(b.angler));
+  const max = entries[0].count;
+  const winners = entries.filter(e => e.count === max);
+
+  return { max, winners, ranking: entries };
+}, [fishes]);
+
+
+// 📉 Schlechtester Monat: Wo gab's die meisten Schneidertage?
+const worstBlankMonth = useMemo(() => {
+  if (fishes.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  const byMonth = {};
+  for (const f of fishes) {
+    if (!f.blank) continue; // nur Schneidertage zählen
+    const d = new Date(f.timestamp);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; // YYYY-MM
+    byMonth[key] = (byMonth[key] || 0) + 1;
+  }
+
+  const entries = Object.entries(byMonth).map(([month, count]) => ({ month, count }));
+  if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  entries.sort((a, b) => (b.count - a.count) || a.month.localeCompare(b.month));
+  const max = entries[0].count;
+  const winners = entries.filter(e => e.count === max);
+  const ranking = entries; // bereits sortiert
+
+  return { max, winners, ranking };
+}, [fishes]);
+
+// 🌡️ Temperatur in °C robust extrahieren (aus String- oder Objekt-Wetterfeldern)
+function extractTempC(f) {
+  let w = f?.weather ?? null;
+
+  // Direktfelder erlauben (falls du schon normalized hast)
+  if (typeof f?.temperature === 'number') w = { current: { temp: f.temperature } };
+  if (typeof f?.temp === 'number') w = { current: { temp: f.temp } };
+
+  // String → JSON versuchen
+  if (typeof w === 'string') {
+    try { w = JSON.parse(w); } catch { /* noop */ }
+  }
+  if (!w || typeof w !== 'object') return null;
+
+  // Kandidaten sammeln
+  const candidates = [];
+  const pushNum = (v) => {
+    const n = Number(v);
+    if (!Number.isNaN(n)) candidates.push(n);
+  };
+
+  // Häufige Pfade (OpenWeather & Co.)
+  pushNum(w?.current?.temp);
+  pushNum(w?.temp);
+  pushNum(w?.main?.temp);
+  pushNum(w?.hourly?.[0]?.temp);
+  pushNum(w?.daily?.[0]?.temp?.day);
+
+  // Falls gar nichts gefunden → null
+  if (candidates.length === 0) return null;
+
+  // Nimm den plausibelsten Wert (median-ish: sortiert, Mitte)
+  candidates.sort((a, b) => a - b);
+  let t = candidates[Math.floor(candidates.length / 2)];
+
+  // Kelvin-Heuristik → in °C umrechnen
+  if (t > 80) t = t - 273.15;
+
+  // Fahrenheit-Heuristik (selten): > 45°C nie realistisch für Wasser – wenn 50..120 → F → °C
+  if (t > 45 && t < 120) t = (t - 32) * (5 / 9);
+
+  return t;
+}
+// 🔥 Heißester Fang: Größter Fisch bei der höchsten gemessenen Temperatur
+const hottestCatch = useMemo(() => {
+  const withTemp = validFishes
+    .map(f => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
+    .filter(x => x.t != null && !Number.isNaN(x.size) && x.size > 0);
+
+  if (withTemp.length === 0) return null;
+
+  // höchste Temperatur finden
+  const maxT = Math.max(...withTemp.map(x => x.t));
+
+  // Kandidaten bei maxT
+  const atMaxT = withTemp.filter(x => Math.abs(x.t - maxT) < 1e-9);
+  const maxSize = Math.max(...atMaxT.map(x => x.size));
+  const winners = atMaxT.filter(x => Math.abs(x.size - maxSize) < 1e-9).map(x => x.f);
+
+  return { tempC: maxT, size: maxSize, items: winners };
+}, [validFishes]);
+
+// ❄️ Kältester Fang: Wer hat bei Frost (≤ 0°C) gefangen?
+const frostCatch = useMemo(() => {
+  const frost = validFishes
+    .map(f => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
+    .filter(x => x.t != null && x.t <= 0 && !Number.isNaN(x.size) && x.size > 0);
+
+  if (frost.length === 0) return { max: 0, winners: [], ranking: [] };
+
+  // pro Angler zählen + größte Frost-Fanggröße merken
+  const byAngler = {};
+  for (const x of frost) {
+    const who = (x.f.angler || 'Unbekannt').trim();
+    if (!byAngler[who]) byAngler[who] = { count: 0, bestSize: 0, sample: null };
+    byAngler[who].count += 1;
+    if (x.size > byAngler[who].bestSize) {
+      byAngler[who].bestSize = x.size;
+      byAngler[who].sample = x.f;
+    }
+  }
+
+  const entries = Object.entries(byAngler).map(([angler, v]) => ({ angler, ...v }));
+  entries.sort((a, b) =>
+    (b.count - a.count) || (b.bestSize - a.bestSize) || a.angler.localeCompare(b.angler)
+  );
+  const max = entries[0].count;
+  const winners = entries.filter(e => e.count === max);
+
+  return { max, winners, ranking: entries };
+}, [validFishes]);
+
 
   function monthLabel(ym) {
     const [y, m] = ym.split('-').map(Number);
@@ -1462,40 +1605,59 @@ export default function FunFacts() {
       </p>
     </Card>,
 
-    /* 17) Nachteule */
-    <Card key="night" title="🦉 Wer ist unsere Nachteule am See? (späteste Fangzeit)">
-      {nightOwl.winners.length > 0 ? (
-        <ul className="space-y-2">
-          {nightOwl.winners.map((it, idx) => (
-            <li key={idx} className="flex items-start justify-between gap-3">
-              <div className="max-w-[70%]">
-                <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-300">
-                  Spätester Fang um {it.timeLabel} Uhr
-                </div>
-                {it.sample && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    Beispiel: {it.sample.fish}
-                    {parseFloat(it.sample.size) > 0 ? ` • ${parseFloat(it.sample.size).toFixed(0)} cm` : ''} • {formatDateTime(it.sample.timestamp)}
-                  </div>
-                )}
-              </div>
-              <div className="text-right">
-                <div className="text-xl font-bold text-green-700 dark:text-green-300">{it.timeLabel}</div>
-                <div className="mt-1">
-                  <Pill>🌙 Nachtfänge: {it.night}</Pill>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>Keine Daten</p>
-      )}
-    </Card>,
+    /* 17) Nachteule – Meiste Nachtfänge (22–04 Uhr) */
+<Card key="night-count" title="🦉 Wer ist unsere Nachteule?">
+  {nightOwls.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {nightOwls.winners.map((it, idx) => (
+        <li key={idx} className="flex items-start justify-between gap-3">
+          <div className="max-w-[70%]">
+            <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              {it.count} Nachtfang{it.count === 1 ? '' : 'e'} (22–04 Uhr)
+            </div>
+            
+          </div>
+          <div className="text-right">
+            
+            <div className="mt-1">
+              <Pill>🌙 Gesamt: {it.count}</Pill>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+
+ {/* Optional: kleines Ranking (Top 5) */}
+  {nightOwls.ranking.length > 0 && (
+    <div className="mt-4">
+      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+        Ranking (Top 5)
+      </div>
+      <ul className="divide-y divide-gray-200/60 dark:divide-white/10 rounded-lg border border-gray-200/60 dark:border-white/10 overflow-hidden">
+        {nightOwls.ranking.slice(0, 5).map((r, i) => (
+          <li key={r.angler} className="flex items-center justify-between px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="w-6 text-sm tabular-nums text-gray-500 dark:text-gray-400">{i + 1}.</span>
+              <span className="font-medium">{r.angler}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              
+              <Pill>🌙 {r.count}</Pill>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+</Card>,
+
 
     /* 18) Early Bird */
-    <Card key="early" title="🌅 Wer fängt den frühen Wurm? (früheste Fangzeit)">
+    <Card key="early" title="🌅 Wer fängt den frühen Wurm? (4:00 - 9:00 Uhr)">
       {earlyBird.winners.length > 0 ? (
         <ul className="space-y-2">
           {earlyBird.winners.map((it, idx) => (
@@ -1505,18 +1667,11 @@ export default function FunFacts() {
                 <div className="text-sm text-gray-600 dark:text-gray-300">
                   Frühester Fang um {it.timeLabel} Uhr
                 </div>
-                {it.sample && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    Beispiel: {it.sample.fish}
-                    {parseFloat(it.sample.size) > 0 ? ` • ${parseFloat(it.sample.size).toFixed(0)} cm` : ''} • {formatDateTime(it.sample.timestamp)}
-                  </div>
-                )}
+                
               </div>
               <div className="text-right">
-                <div className="text-xl font-bold text-green-700 dark:text-green-300">{it.timeLabel}</div>
-                <div className="mt-1">
-                  <Pill>🌅 Frühfänge: {it.early} (04:30–09:00)</Pill>
-                </div>
+                <div className="text-xl font-bold text-green-700 dark:text-green-300">{it.early} x</div>
+                
               </div>
             </li>
           ))}
@@ -1762,13 +1917,139 @@ export default function FunFacts() {
       )}
     </Card>,
 
+    <Card title="❌ Wer ist der Schneiderkönig?">
+  {schneiderKoenig.winners.length > 0 ? (
+    <ul className="space-y-2">
+      {schneiderKoenig.winners.map((it, idx) => (
+        <li key={idx} className="flex items-center justify-between">
+          <span className="font-medium text-green-700 dark:text-green-300">
+            {it.angler}
+          </span>
+          <span className="font-bold text-xl text-green-700 dark:text-green-300">
+            {it.count}x
+          </span>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p>Keine Schneidertage erfasst.</p>
+  )}
+</Card>,
+
+/* 📉 Schlechtester Monat (meiste Schneidertage) */
+<Card key="worstBlankMonth" title="📉 Schlechtester Monat (meiste Schneidertage)">
+  {worstBlankMonth.max > 0 ? (
+    <>
+      <p className="mb-2">
+        Meiste Schneidertage: <b className="text-green-700 dark:text-green-300">
+          {worstBlankMonth.max}
+        </b>
+      </p>
+
+      {/* alle Monate mit dem Höchstwert */}
+      <ul className="space-y-1 mb-3">
+        {worstBlankMonth.winners.map((m, i) => (
+          <li key={i} className="flex justify-between">
+            <span className="font-medium">{monthLabel(m.month)}</span>
+            <span className="font-bold text-green-700 dark:text-green-300">{m.count}x</span>
+          </li>
+        ))}
+      </ul>
+
+      {/* kleine Rangliste (Top 5) */}
+      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Rangliste (Top 5):</div>
+      <ul className="space-y-1">
+        {worstBlankMonth.ranking.slice(0, 5).map((m, i) => (
+          <li key={i} className="flex justify-between text-sm">
+            <span>{i + 1}. {monthLabel(m.month)}</span>
+            <span className="font-semibold">{m.count}x</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  ) : (
+    <p>Keine Schneidertage erfasst.</p>
+  )}
+</Card>,
+
+/* 🔥 Heißester Fang */
+<Card key="hottestCatch" title="🔥 Heißester Fang (größter Fisch bei höchster Temperatur)">
+  {hottestCatch ? (
+    <>
+      <p className="mb-2">
+        Höchste Temperatur: <b className="text-green-700 dark:text-green-300">
+          {hottestCatch.tempC.toFixed(1)}°C
+        </b>
+      </p>
+      <ul className="space-y-2">
+        {hottestCatch.items.map((f) => (
+          <li key={f.id} className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                {f.fish} • {formatDateTime(f.timestamp)}
+              </div>
+            </div>
+            <div className="text-xl font-bold text-green-700 dark:text-green-300">
+              {parseFloat(f.size).toFixed(0)} cm
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  ) : (
+    <p>Keine Temperaturdaten vorhanden.</p>
+  )}
+</Card>,
+
+/* ❄️ Kältester Fang (Frost) */
+<Card key="frostCatch" title="❄️ Kältester Fang: Wer hat bei Frost gefangen? (≤ 0 °C)">
+  {frostCatch.ranking.length > 0 ? (
+    <>
+      <ul className="space-y-2">
+        {frostCatch.winners.map((it, idx) => (
+          <li key={idx} className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+              {it.sample && (
+                <div className="text-xs text-gray-600 dark:text-gray-300">
+                  Beispiel: {it.sample.fish} • {parseFloat(it.bestSize).toFixed(0)} cm • {formatDateTime(it.sample.timestamp)}
+                </div>
+              )}
+            </div>
+            <div className="text-right">
+              <div className="text-xl font-bold text-green-700 dark:text-green-300">{it.count}x</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Frost-Fänge</div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* kleine Rangliste */}
+      <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">Rangliste (Top 5):</div>
+      <ul className="space-y-1">
+        {frostCatch.ranking.slice(0,5).map((it, i) => (
+          <li key={i} className="flex justify-between text-sm">
+            <span>{i+1}. {it.angler}</span>
+            <span className="font-semibold">{it.count}x</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  ) : (
+    <p>Keine Frost-Fänge gefunden.</p>
+  )}
+</Card>,
+
+
+
   ]), [
     mostInOneDay, biggest, smallest, mostInOneHour, mostSpeciesInOneDay,
     mostMonsterFishes, mostFishesDay, mostFishesMonth, mostFishesWeekday,
     mostSpeciesInOneHour, mostPlacesAngler, predatorKing, heaviestFish,
-    mostEfficientAngler, mostRotaugen, mostAtFullMoon, nightOwl, earlyBird,
+    mostEfficientAngler, mostRotaugen, mostAtFullMoon, nightOwls, earlyBird,
     mostInRain, sunshineOnly, topThreeSpecies, longestBreakBetweenCatchDays,
-    longestCatchStreak, fishPairs, eelWizard, grundelChampion, foreignAnglers
+    longestCatchStreak, fishPairs, eelWizard, grundelChampion, foreignAnglers, schneiderKoenig, worstBlankMonth, hottestCatch, frostCatch
   ]);
 
   // ⬇️ Early-Returns JETZT – nachdem ALLE Hooks aufgerufen wurden

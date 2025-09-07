@@ -1,3 +1,4 @@
+// src/AppRoutes.jsx
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 // MapView NICHT direkt importieren – bleibt lazy
@@ -43,7 +44,14 @@ const SpotAdmin = safeLazy(() => import('./components/SpotAdmin'), 'SpotAdmin');
 const SettingsPage = safeLazy(() => import('./pages/SettingsPage'), 'SettingsPage');
 const FunFacts = safeLazy(() => import('./pages/FunFacts'), 'FunFacts');
 
-export default function AppRoutes({ isLoggedIn, isAdmin, anglerName, weatherData, setWeatherData }) {
+export default function AppRoutes({
+  isLoggedIn,
+  isAdmin,
+  anglerName,
+  weatherData,
+  setWeatherData,
+  showEffect, // ✅ von App entgegennehmen
+}) {
   const isRecoveryLink = window.location.hash.includes('type=recovery');
 
   return (
@@ -65,19 +73,23 @@ export default function AppRoutes({ isLoggedIn, isAdmin, anglerName, weatherData
               </>
             }
           />
+
           <Route
             path="/new-catch"
             element={
               <>
                 <Navbar name={anglerName} isAdmin={isAdmin} />
+                {/* ✅ Achievements werden an NewCatch weitergereicht */}
                 <NewCatch
                   anglerName={anglerName}
                   weatherData={weatherData}
                   setWeatherData={setWeatherData}
+                  showEffect={showEffect}
                 />
               </>
             }
           />
+
           <Route
             path="/catches"
             element={

@@ -1,3 +1,4 @@
+// src/components/FishCatchForm.jsx
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,6 +11,11 @@ import { processAndUploadImage } from "../services/imageProcessing";
 import { loadWeatherForPosition } from "../services/weather";
 import { saveBlankDay } from "../services/blankService";
 import { saveCatchEntry } from "../services/catchService";
+
+// ✅ NEU: Supabase + Achievements
+import { supabase } from "../supabaseClient";
+import { useAchievements } from "../achievements/useAchievements";
+import { localRemember } from "../achievements/localRemember";
 
 /* =========================
    Regionale Fischlisten (manuelle Auswahl, KEINE Auto-Erkennung)
@@ -76,7 +82,11 @@ function fishListForRegion(region) {
   }
 }
 
-export default function FishCatchForm({ setWeatherData }) {
+export default function FishCatchForm({
+  setWeatherData,
+  showEffect,          // ✅ NEU: von NewCatch übergeben
+  anglerName: propAnglerName, // optional, falls du ihn schon als Prop bekommst
+}) {
   const [fish, setFish] = useState("");
   const [size, setSize] = useState("");
   const [weight, setWeight] = useState("");
@@ -92,6 +102,13 @@ export default function FishCatchForm({ setWeatherData }) {
   const [showTakenDialog, setShowTakenDialog] = useState(false);
   const [pendingEntry, setPendingEntry] = useState(null);
 
+  // ✅ Achievements-Hook initialisieren
+  const { checkOnNewCatch } = useAchievements({
+    supabase,
+    showEffect,
+    remember: localRemember,
+  });
+
   // ✅ Region nur manuell wählbar (persistiert in localStorage)
   const allowedRegions = Object.keys(REGION_LABELS);
   const [region, setRegion] = useState(() => {
@@ -103,7 +120,8 @@ export default function FishCatchForm({ setWeatherData }) {
   const fileInputRef = useRef();
   const navigate = useNavigate();
 
-  const anglerName = localStorage.getItem("anglerName") || "Unbekannt";
+  // Quelle für Namen: Prop > localStorage
+  const anglerName = propAnglerName || localStorage.getItem("anglerName") || "Unbekannt";
   const FERKENSBRUCH_LAT = 51.3135;
   const FERKENSBRUCH_LON = 6.256;
 
@@ -177,7 +195,6 @@ export default function FishCatchForm({ setWeatherData }) {
         lat: position?.lat ?? null,
         lon: position?.lon ?? null,
         location_name: locationName,
-        
       };
 
       setPendingEntry(newEntry);
@@ -192,7 +209,8 @@ export default function FishCatchForm({ setWeatherData }) {
 
   const finalizeCatch = async (taken) => {
     try {
-      await saveCatchEntry(
+      // Speichern (dein bestehender Service)
+      const inserted = await saveCatchEntry(
         pendingEntry,
         taken,
         position,
@@ -200,6 +218,25 @@ export default function FishCatchForm({ setWeatherData }) {
         FERKENSBRUCH_LAT,
         FERKENSBRUCH_LON
       );
+
+      // ✅ ACHIEVEMENTS: userId + lastCatch bestimmen
+      let userId = null;
+      try {
+        const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+        if (!sessionErr) userId = sessionData?.session?.user?.id ?? null;
+      } catch {
+        // ignore
+      }
+
+      const lastCatch = inserted?.id
+        ? { ...inserted }
+        : { ...pendingEntry, id: undefined, taken };
+
+      if (userId) {
+        // Nach erfolgreichem Speichern prüfen
+        await checkOnNewCatch({ userId, lastCatch });
+      }
+
       navigate("/catches");
     } catch (err) {
       console.error(err);

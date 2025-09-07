@@ -29,6 +29,10 @@ export default function Analysis({ anglerName }) {
   const [weatherNow, setWeatherNow] = useState(null);
   const [selectedYear, setSelectedYear] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
+
+  // NEW: Fisch-Filter nur für Wetterauswertungen
+  const [selectedFish, setSelectedFish] = useState('Alle');
+
   const currentMonthIndex = new Date().getMonth();
   const monthRefs = useRef([]);
 
@@ -46,19 +50,18 @@ export default function Analysis({ anglerName }) {
       const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
 
       const filtered = data.filter(f => {
-  if (f.is_marilou) return false;
+        if (f.is_marilou) return false;
 
-  const fangDatum = new Date(f.timestamp);
-  if (!istVertrauter && fangDatum < PUBLIC_FROM) return false;
-  if (istVertrauter && filterSetting !== 'all' && fangDatum < PUBLIC_FROM) return false;
+        const fangDatum = new Date(f.timestamp);
+        if (!istVertrauter && fangDatum < PUBLIC_FROM) return false;
+        if (istVertrauter && filterSetting !== 'all' && fangDatum < PUBLIC_FROM) return false;
 
-  const istEigenerFang = f.angler === anglerName;
-  const ort = f.location_name?.toLowerCase().trim() ?? '';
-  const ortIstFerkensbruch = f.location_name == null || ort.includes('lobberich');
+        const istEigenerFang = f.angler === anglerName;
+        const ort = f.location_name?.toLowerCase().trim() ?? '';
+        const ortIstFerkensbruch = f.location_name == null || ort.includes('lobberich');
 
-  return onlyMine ? istEigenerFang : ortIstFerkensbruch;
-});
-
+        return onlyMine ? istEigenerFang : ortIstFerkensbruch;
+      });
 
       setFishes(filtered);
     }
@@ -69,7 +72,7 @@ export default function Analysis({ anglerName }) {
 
   const totalFishes = fishes.filter(f => f.fish && f.fish.trim() !== '').length;
 
-  // Neu: Angler-spezifische Tagesauswertung
+  // Tagesauswertung pro Angler
   const anglerTageMap = {};
   fishes.forEach(f => {
     const dateStr = new Date(f.timestamp).toDateString();
@@ -89,11 +92,27 @@ export default function Analysis({ anglerName }) {
   const sumDays = blankDays + catchDays;
   const blankRatio = sumDays > 0 ? ((blankDays / sumDays) * 100).toFixed(1) : '0.0';
 
-  const validFishes = fishes.filter(f =>
+  // Basis: gültige Fänge (für Gesamtauswertungen / Monate immer ALLE Fische)
+  const baseValidFishes = fishes.filter(f =>
     !f.blank && f.fish && f.fish.trim().toLowerCase() !== 'unbekannt'
   );
 
-  const yearMonthStats = validFishes.reduce((map, f) => {
+  // Wetter-Fischoptionen
+  const fishOptions = Array.from(
+    new Set(
+      baseValidFishes
+        .map(f => f.fish?.trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b, 'de'));
+
+  // Für die Wetter-Statistiken ggf. nach Fisch filtern
+  const weatherValidFishes = selectedFish === 'Alle'
+    ? baseValidFishes
+    : baseValidFishes.filter(f => f.fish?.trim() === selectedFish);
+
+  // Monats-Statistiken (bewusst auf Basis ALLER gültigen Fänge)
+  const yearMonthStats = baseValidFishes.reduce((map, f) => {
     const date = new Date(f.timestamp);
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -124,6 +143,7 @@ export default function Analysis({ anglerName }) {
     }
   }, [selectedYear, currentMonthIndex]);
 
+  // --- Wetter-Statistiken (auf Basis weatherValidFishes) ---
   const statsReducer = (groupFn) => (map, f) => {
     const key = groupFn(f);
     if (!key) return map;
@@ -131,39 +151,42 @@ export default function Analysis({ anglerName }) {
     return map;
   };
 
-  const hourStats = validFishes.reduce(statsReducer(f => {
+  const hourStats = weatherValidFishes.reduce(statsReducer(f => {
     const h = new Date(f.timestamp).getHours();
     return `${h.toString().padStart(2, '0')}:00–${(h + 1).toString().padStart(2, '0')}:00`;
   }), {});
 
-  const tempStats = validFishes.reduce(statsReducer(f => {
+  const tempStats = weatherValidFishes.reduce(statsReducer(f => {
     const t = f.weather?.temp;
-    return t != null ? `${Math.floor(t / 5) * 5}–${Math.floor(t / 5) * 5 + 5} °C` : null;
+    return t != null ? `${Math.floor(t / 5) * 5}–${Math.floor(t / 5) * 5 + 5} °C` : null;
   }), {});
 
-  const pressureStats = validFishes.reduce(statsReducer(f => {
+  const pressureStats = weatherValidFishes.reduce(statsReducer(f => {
     const p = f.weather?.pressure;
-    return p != null ? `${Math.floor(p / 10) * 10}–${Math.floor(p / 10) * 10 + 9} hPa` : null;
+    return p != null ? `${Math.floor(p / 10) * 10}–${Math.floor(p / 10) * 10 + 9} hPa` : null;
   }), {});
 
-  const windStats = validFishes.reduce(statsReducer(f => {
+  const windStats = weatherValidFishes.reduce(statsReducer(f => {
     const w = f.weather?.wind;
-    return w != null ? `${Math.floor(w / 3) * 3}–${Math.floor(w / 3) * 3 + 3} m/s` : null;
+    return w != null ? `${Math.floor(w / 3) * 3}–${Math.floor(w / 3) * 3 + 3} m/s` : null;
   }), {});
 
-  const windDirStats = validFishes.reduce(statsReducer(f => {
+  const windDirStats = weatherValidFishes.reduce(statsReducer(f => {
     const deg = f.weather?.wind_deg;
     return deg != null ? windDirection(deg) : null;
   }), {});
 
-  const humidityStats = validFishes.reduce(statsReducer(f => {
+  const humidityStats = weatherValidFishes.reduce(statsReducer(f => {
     const h = f.weather?.humidity;
-    return h != null ? `${Math.floor(h / 10) * 10}–${Math.floor(h / 10) * 10 + 9} %` : null;
+    return h != null ? `${Math.floor(h / 10) * 10}–${Math.floor(h / 10) * 10 + 9} %` : null;
   }), {});
 
-  const descStats = validFishes.reduce(statsReducer(f => f.weather?.description?.toLowerCase().trim() || 'unbekannt'), {});
+  const descStats = weatherValidFishes.reduce(
+    statsReducer(f => f.weather?.description?.toLowerCase().trim() || 'unbekannt'),
+    {}
+  );
 
-  const moonStats = validFishes.reduce(statsReducer(f => {
+  const moonStats = weatherValidFishes.reduce(statsReducer(f => {
     const phase = f.weather?.moon_phase;
     return phase == null ? 'unbekannt' : getMoonDescription(phase);
   }), {});
@@ -208,8 +231,9 @@ export default function Analysis({ anglerName }) {
     moon: weatherNow?.daily?.[0]?.moon_phase != null ? getMoonDescription(weatherNow.daily[0].moon_phase) : null
   };
 
+  // Icons passend zur Auswahl
   const descIconMap = {};
-  for (const f of validFishes) {
+  for (const f of weatherValidFishes) {
     const desc = f.weather?.description?.toLowerCase().trim();
     const icon = f.weather?.icon;
     if (desc && icon && !descIconMap[desc]) {
@@ -228,8 +252,7 @@ export default function Analysis({ anglerName }) {
           return (
             <li
               key={label}
-              className={`flex justify-between items-center px-4 py-2 text-sm ${activeKey === label ? 'bg-green-100 dark:bg-green-900 font-bold' : ''
-                }`}
+              className={`flex justify-between items-center px-4 py-2 text-sm ${activeKey === label ? 'bg-green-100 dark:bg-green-900 font-bold' : ''}`}
             >
               <div className="flex items-center gap-2">
                 {iconUrl && (
@@ -287,8 +310,8 @@ export default function Analysis({ anglerName }) {
             key={year}
             onClick={() => setSelectedYear(year)}
             className={`px-4 py-1 rounded-full border transition ${year === selectedYear
-                ? 'bg-blue-600 text-white font-semibold'
-                : 'bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border-blue-400 hover:bg-blue-100 dark:hover:bg-gray-700'
+              ? 'bg-blue-600 text-white font-semibold'
+              : 'bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border-blue-400 hover:bg-blue-100 dark:hover:bg-gray-700'
               }`}
           >
             {year}
@@ -310,8 +333,8 @@ export default function Analysis({ anglerName }) {
                       if (i === currentMonthIndex) monthRefs.current[i] = el;
                     }}
                     className={`min-w-[200px] rounded-lg p-4 text-center flex-shrink-0 shadow transition ${i === currentMonthIndex
-                        ? 'border-2 border-blue-500 bg-white dark:bg-gray-800'
-                        : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                      ? 'border-2 border-blue-500 bg-white dark:bg-gray-800'
+                      : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
                       }`}
                   >
                     <h3 className="text-base font-bold mb-2 text-gray-800 dark:text-gray-100">{monthNames[i]}</h3>
@@ -336,18 +359,46 @@ export default function Analysis({ anglerName }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-10">
-        {renderStatList("🌡 Temperaturbereiche", tempStats, activeKeys.temp)}
-        {renderStatList("🧪 Luftdruck", pressureStats, activeKeys.pressure)}
-        {renderStatList("💨 Windstärken", windStats, activeKeys.wind)}
-        {renderStatList("🧭 Windrichtungen", windDirStats, activeKeys.windDir)}
-        {renderStatList("💦 Luftfeuchtigkeit", humidityStats, activeKeys.humidity)}
-        {renderStatList("🌦 Wetterbeschreibung", descStats, activeKeys.description)}
-        {renderStatList("🌙 Mondphasen", moonStats, activeKeys.moon)}
-        {renderStatList("⏰ Fangzeiten", hourStats, activeKeys.time)}
+      {/* --- Fisch-Auswahl NUR für Wetterauswertungen --- */}
+      <div className="max-w-4xl mx-auto mt-10 mb-4">
+        <label className="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-2">
+          Wetterauswertungen filtern nach Fisch
+        </label>
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedFish}
+            onChange={(e) => setSelectedFish(e.target.value)}
+            className="w-full md:w-80 px-3 py-2 rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="Alle">Alle</option>
+            {fishOptions.map((fo) => (
+              <option key={fo} value={fo}>{fo}</option>
+            ))}
+          </select>
+          {selectedFish !== 'Alle' && (
+            <button
+              onClick={() => setSelectedFish('Alle')}
+              className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm hover:bg-gray-200 dark:hover:bg-gray-700"
+              title="Filter zurücksetzen"
+            >
+              Zurücksetzen
+            </button>
+          )}
+        </div>
+       
+      </div>
+
+      {/* --- Wetterstatistiken (gefiltert) --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-6">
+        {renderStatList("🌡 Temperaturbereiche",     tempStats,     activeKeys.temp)}
+        {renderStatList("🧪 Luftdruck",              pressureStats, activeKeys.pressure)}
+        {renderStatList("💨 Windstärken",            windStats,     activeKeys.wind)}
+        {renderStatList("🧭 Windrichtungen",         windDirStats,  activeKeys.windDir)}
+        {renderStatList("💦 Luftfeuchtigkeit",       humidityStats, activeKeys.humidity)}
+        {renderStatList("🌦 Wetterbeschreibung",     descStats,     activeKeys.description)}
+        {renderStatList("🌙 Mondphasen",             moonStats,     activeKeys.moon)}
+        {renderStatList("⏰ Fangzeiten",             hourStats,     activeKeys.time)}
       </div>
     </div>
   );
-
 }
-
