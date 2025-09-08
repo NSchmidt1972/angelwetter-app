@@ -245,25 +245,56 @@ export default function FunFacts() {
   }, [validFishes]);
 
   // 7) Tag mit den meisten Fischen (gesamt, alle Angler)
-  const mostFishesDay = useMemo(() => {
-    if (validFishes.length === 0) return { count: 0, days: [] };
+const mostFishesDay = useMemo(() => {
+  if (validFishes.length === 0) return { count: 0, days: [] };
 
-    const byDay = {};
-    validFishes.forEach(f => {
-      const d = new Date(f.timestamp);
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      byDay[key] = (byDay[key] || 0) + 1;
-    });
+  const byDay = {};
+  validFishes.forEach(f => {
+    const d = new Date(f.timestamp);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
-    let best = 0;
-    let winners = [];
-    Object.entries(byDay).forEach(([day, count]) => {
-      if (count > best) { best = count; winners = [{ day, count }]; }
-      else if (count === best) { winners.push({ day, count }); }
-    });
+    if (!byDay[key]) {
+      byDay[key] = { count: 0, anglers: new Set() };
+    }
+    byDay[key].count += 1;
+    byDay[key].anglers.add(f.angler);
+  });
 
-    return { count: best, days: winners };
-  }, [validFishes]);
+  let best = 0;
+  let winners = [];
+  Object.entries(byDay).forEach(([day, data]) => {
+    if (data.count > best) {
+      best = data.count;
+      winners = [{ 
+        day,
+        count: data.count,
+        anglers: Array.from(data.anglers)
+      }];
+    } else if (data.count === best) {
+      winners.push({ 
+        day,
+        count: data.count,
+        anglers: Array.from(data.anglers)
+      });
+    }
+  });
+
+  // 🔤 Datum ins Deutsche formatieren
+  const formatter = new Intl.DateTimeFormat("de-DE", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  });
+
+  winners = winners.map(w => ({
+    ...w,
+    dayLabel: formatter.format(new Date(w.day))
+  }));
+
+  return { count: best, days: winners };
+}, [validFishes]);
+
 
   // 8) Monat mit den meisten Fischen (gesamt)
   const mostFishesMonth = useMemo(() => {
@@ -1364,24 +1395,43 @@ const frostCatch = useMemo(() => {
       )}
     </Card>,
 
-    /* 7) Tag mit den meisten Fischen */
-    <Card key="dayMax" title="📅 An welchem Tag wurden die meisten Fische gefangen?">
-      {mostFishesDay.count > 0 ? (
-        <>
-          <p className="mb-2">Insgesamt <b className="text-green-700 dark:text-green-300">{mostFishesDay.count}</b> Fänge.</p>
-          <ul className="space-y-1">
-            {mostFishesDay.days.map((d, i) => (
-              <li key={i} className="flex justify-between">
-                <span className="font-medium">{d.day}</span>
-                <span className="font-bold text-green-700 dark:text-green-300">{d.count}x</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <p>Keine Daten</p>
-      )}
-    </Card>,
+   /* 7) Tag mit den meisten Fischen */
+<Card key="mostFishesDay" title="📅 An welchem Tag wurden die meisten Fische gefangen?">
+  {mostFishesDay.count > 0 ? (
+    <>
+      <p className="mb-2">
+        Insgesamt{" "}
+        <b className="text-green-700 dark:text-green-300">
+          {mostFishesDay.count}
+        </b>{" "}
+        Fänge.
+      </p>
+      <ul className="space-y-2">
+        {mostFishesDay.days.map((d, i) => (
+          <li
+            key={i}
+            className="p-2 rounded bg-gray-50 dark:bg-gray-800 flex flex-col"
+          >
+            <div className="flex justify-between items-center">
+              <span className="font-medium">{d.dayLabel}</span>
+              <span className="font-bold text-green-700 dark:text-green-300">
+                {d.count}x
+              </span>
+            </div>
+            {d.anglers && d.anglers.length > 0 && (
+              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                👤 {d.anglers.join(", ")}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>,
+
 
     /* 8) Monat mit den meisten Fischen */
     <Card key="monthMax" title="📅 In welchem Monat gab es die meisten Fische?">
@@ -1879,7 +1929,7 @@ const frostCatch = useMemo(() => {
     </Card>,
 
     /* 27) Fremdangeln */
-    <Card key="foreign" title="🌍 Wer angelt gern fremd?">
+    <Card key="foreign" title="🌍 Wer angelt gern woanders?">
       {foreignAnglers.top3.length > 0 ? (
         <ul className="space-y-4">
           {foreignAnglers.top3.map((p, idx) => (

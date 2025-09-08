@@ -8,11 +8,11 @@ function formatGermanDate(input) {
   if (md) {
     const [, mm, dd] = md;
     const date = new Date(2000, Number(mm) - 1, Number(dd));
-    return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "long" }).format(date);
+    return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" }).format(date);
   }
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(input) ? new Date(input) : null;
   if (iso && !isNaN(iso)) {
-    return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "long" }).format(iso);
+    return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" }).format(iso);
   }
   return input;
 }
