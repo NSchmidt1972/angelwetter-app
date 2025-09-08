@@ -1,12 +1,10 @@
 // src/AppRoutes.jsx
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
-// MapView NICHT direkt importieren – bleibt lazy
 import UpdatePassword from './pages/UpdatePassword';
 import ResetDone from './pages/ResetDone';
 import AuthVerified from './pages/AuthVerified';
 import ForgotPassword from './pages/ForgotPassword';
-
 import { lazy } from 'react';
 
 // 🔐 Sichere lazy-Helferfunktion: Fällt auf Platzhalter zurück, wenn Modul fehlt
@@ -38,8 +36,9 @@ const AdminOverview = lazy(() => import('./pages/AdminOverview'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const AuthForm = lazy(() => import('./components/AuthForm'));
 const MapView = lazy(() => import('./pages/MapView'));
+const Regulations = lazy(() => import('./pages/Regulations')); // ✅ NEU
 
-// ⚠️ Diese drei Dateien existieren bei dir aktuell nicht → safeLazy verwendet:
+// ⚠️ Diese drei Dateien existieren evtl. (noch) nicht → safeLazy verwenden:
 const SpotAdmin = safeLazy(() => import('./components/SpotAdmin'), 'SpotAdmin');
 const SettingsPage = safeLazy(() => import('./pages/SettingsPage'), 'SettingsPage');
 const FunFacts = safeLazy(() => import('./pages/FunFacts'), 'FunFacts');
@@ -99,6 +98,7 @@ export default function AppRoutes({
               </>
             }
           />
+
           <Route
             path="/analysis"
             element={
@@ -108,6 +108,7 @@ export default function AppRoutes({
               </>
             }
           />
+
           <Route
             path="/leaderboard"
             element={
@@ -117,6 +118,7 @@ export default function AppRoutes({
               </>
             }
           />
+
           <Route
             path="/top-fishes"
             element={
@@ -126,6 +128,7 @@ export default function AppRoutes({
               </>
             }
           />
+
           <Route
             path="/calendar"
             element={
@@ -135,6 +138,7 @@ export default function AppRoutes({
               </>
             }
           />
+
           <Route
             path="/map"
             element={
@@ -144,12 +148,24 @@ export default function AppRoutes({
               </>
             }
           />
+
           <Route
             path="/forecast"
             element={
               <>
                 <Navbar name={anglerName} isAdmin={isAdmin} />
                 <Forecast weatherData={weatherData} />
+              </>
+            }
+          />
+
+          {/* ✅ NEU: Regeln-Seite */}
+          <Route
+            path="/regeln"
+            element={
+              <>
+                <Navbar name={anglerName} isAdmin={isAdmin} />
+                <Regulations />
               </>
             }
           />

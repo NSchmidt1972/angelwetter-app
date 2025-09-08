@@ -6,6 +6,7 @@ import { supabase } from './supabaseClient';
 import PushInit from './components/PushInit';
 import AppRoutes from './AppRoutes';
 import AchievementLayer from './achievements/AchievementLayer'; // ✅ NEU
+import Regulations from "./pages/Regulations";
 import './index.css';
 
 function AppContentInner({ showEffect }) {

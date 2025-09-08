@@ -455,6 +455,7 @@ export default function Navbar({ name, isAdmin }) {
     { label: '+   🐠', path: '/new-catch' },
     { label: 'Fangliste', path: '/catches' },
     { label: 'Rangliste', path: '/leaderboard' },
+    { label: 'Regeln', path: '/regeln' }, // ✅ neuer Menüpunkt
     {
       label: 'Statistik',
       children: [
