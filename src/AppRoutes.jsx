@@ -7,7 +7,7 @@ import AuthVerified from './pages/AuthVerified';
 import ForgotPassword from './pages/ForgotPassword';
 import { lazy } from 'react';
 
-// 🔐 Sichere lazy-Helferfunktion: Fällt auf Platzhalter zurück, wenn Modul fehlt
+// 🔐 Sicherer Lazy-Helper (Fallback-Komponente falls Modul fehlt)
 function safeLazy(importer, FallbackName) {
   return lazy(async () => {
     try {
@@ -19,15 +19,14 @@ function safeLazy(importer, FallbackName) {
           <div className="p-6 text-center text-red-600">
             {FallbackName} ist (noch) nicht verfügbar.
           </div>
-        )
+        ),
       };
     }
   });
 }
 
+// Pages, die weiterhin existieren
 const Home = lazy(() => import('./pages/Home'));
-const Catches = lazy(() => import('./pages/Catches'));
-const NewCatch = lazy(() => import('./pages/NewCatch'));
 const Analysis = lazy(() => import('./pages/Analysis'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard'));
 const TopFishes = lazy(() => import('./pages/TopFishes'));
@@ -36,12 +35,16 @@ const AdminOverview = lazy(() => import('./pages/AdminOverview'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const AuthForm = lazy(() => import('./components/AuthForm'));
 const MapView = lazy(() => import('./pages/MapView'));
-const Regulations = lazy(() => import('./pages/Regulations')); // ✅ NEU
+const Regulations = lazy(() => import('./pages/Regulations'));
 
-// ⚠️ Diese drei Dateien existieren evtl. (noch) nicht → safeLazy verwenden:
+// ⚠️ Optional/experimentell
 const SpotAdmin = safeLazy(() => import('./components/SpotAdmin'), 'SpotAdmin');
 const SettingsPage = safeLazy(() => import('./pages/SettingsPage'), 'SettingsPage');
 const FunFacts = safeLazy(() => import('./pages/FunFacts'), 'FunFacts');
+
+// ✅ Direkt die neuen Komponenten laden (statt pages/Catches & pages/NewCatch)
+const CatchList = lazy(() => import('./components/catchlist/CatchList'));
+const FishCatchForm = lazy(() => import('./components/FishCatchForm'));
 
 export default function AppRoutes({
   isLoggedIn,
@@ -49,13 +52,13 @@ export default function AppRoutes({
   anglerName,
   weatherData,
   setWeatherData,
-  showEffect, // ✅ von App entgegennehmen
+  showEffect,
 }) {
   const isRecoveryLink = window.location.hash.includes('type=recovery');
 
   return (
     <Routes>
-      {/* Immer erreichbare Seiten */}
+      {/* Öffentliche Routen */}
       <Route path="/update-password" element={<UpdatePassword />} />
       <Route path="/reset-done" element={<ResetDone />} />
       <Route path="/auth-verified" element={<AuthVerified />} />
@@ -73,13 +76,13 @@ export default function AppRoutes({
             }
           />
 
+          {/* ✅ Neuer Fang (direkt die Form) */}
           <Route
             path="/new-catch"
             element={
               <>
                 <Navbar name={anglerName} isAdmin={isAdmin} />
-                {/* ✅ Achievements werden an NewCatch weitergereicht */}
-                <NewCatch
+                <FishCatchForm
                   anglerName={anglerName}
                   weatherData={weatherData}
                   setWeatherData={setWeatherData}
@@ -89,12 +92,13 @@ export default function AppRoutes({
             }
           />
 
+          {/* ✅ Fangliste (direkt CatchList) */}
           <Route
             path="/catches"
             element={
               <>
                 <Navbar name={anglerName} isAdmin={isAdmin} />
-                <Catches name={anglerName} />
+                <CatchList anglerName={anglerName} />
               </>
             }
           />
@@ -159,7 +163,7 @@ export default function AppRoutes({
             }
           />
 
-          {/* ✅ NEU: Regeln-Seite */}
+          {/* Regeln */}
           <Route
             path="/regeln"
             element={
@@ -170,7 +174,7 @@ export default function AppRoutes({
             }
           />
 
-          {/* Diese drei sind safeLazy – App crasht nicht, wenn Module fehlen */}
+          {/* Optionale Seiten via safeLazy */}
           <Route
             path="/fun"
             element={
@@ -190,7 +194,9 @@ export default function AppRoutes({
                   <AdminOverview />
                 </>
               ) : (
-                <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Adminbereich</div>
+                <div className="p-6 text-center text-red-600">
+                  🚫 Kein Zugriff – Adminbereich
+                </div>
               )
             }
           />
@@ -204,7 +210,9 @@ export default function AppRoutes({
                   <SpotAdmin />
                 </>
               ) : (
-                <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Nur für Admins</div>
+                <div className="p-6 text-center text-red-600">
+                  🚫 Kein Zugriff – Nur für Admins
+                </div>
               )
             }
           />
@@ -226,7 +234,13 @@ export default function AppRoutes({
           <Route path="/auth" element={<AuthForm />} />
           <Route
             path="*"
-            element={isRecoveryLink ? <Navigate to="/update-password" /> : <Navigate to="/auth" />}
+            element={
+              isRecoveryLink ? (
+                <Navigate to="/update-password" />
+              ) : (
+                <Navigate to="/auth" />
+              )
+            }
           />
         </>
       )}
