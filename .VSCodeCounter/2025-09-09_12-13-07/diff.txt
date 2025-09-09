@@ -1,0 +1,105 @@
+Date : 2025-09-09 12:13:07
+Directory : /root/angelwetter-app/src
+Total : 64 files,  8086 codes, 521 comments, 1167 blanks, all 9774 lines
+
+Languages
++----------------+------------+------------+------------+------------+------------+
+| language       | files      | code       | comment    | blank      | total      |
++----------------+------------+------------+------------+------------+------------+
+| JavaScript JSX |         35 |      6,886 |        294 |        947 |      8,127 |
+| JavaScript     |         24 |      1,135 |        225 |        205 |      1,565 |
+| PostCSS        |          2 |         85 |          2 |         16 |        103 |
+| XML            |          2 |          0 |          0 |          0 |          0 |
+| JSON           |          1 |        -20 |          0 |         -1 |        -21 |
++----------------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                          | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                             |         64 |      8,086 |        521 |      1,167 |      9,774 |
+| . (Files)                                                     |          8 |        535 |         34 |         84 |        653 |
+| ..                                                            |          4 |        -23 |          0 |         -3 |        -26 |
+| ../public                                                     |          4 |        -23 |          0 |         -3 |        -26 |
+| achievements                                                  |          6 |        220 |         28 |         35 |        283 |
+| api                                                           |          1 |         43 |          1 |          8 |         52 |
+| assets                                                        |          1 |          1 |          0 |          0 |          1 |
+| components                                                    |         12 |      2,865 |        146 |        340 |      3,351 |
+| hooks                                                         |          2 |        131 |          5 |         14 |        150 |
+| onesignal                                                     |          2 |        241 |         62 |         34 |        337 |
+| pages                                                         |         17 |      3,564 |        127 |        545 |      4,236 |
+| rules                                                         |          1 |         29 |          7 |          6 |         42 |
+| services                                                      |          5 |        270 |         76 |         53 |        399 |
+| utils                                                         |          5 |        210 |         35 |         51 |        296 |
++---------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------+----------------+------------+------------+------------+------------+
+| filename                                                      | language       | code       | comment    | blank      | total      |
++---------------------------------------------------------------+----------------+------------+------------+------------+------------+
+| /root/angelwetter-app/public/OneSignalSDKUpdaterWorker.js     | JavaScript     |         -1 |          0 |         -1 |         -2 |
+| /root/angelwetter-app/public/OneSignalSDKWorker.js            | JavaScript     |         -1 |          0 |         -1 |         -2 |
+| /root/angelwetter-app/public/manifest.json                    | JSON           |        -20 |          0 |         -1 |        -21 |
+| /root/angelwetter-app/public/vite.svg                         | XML            |         -1 |          0 |          0 |         -1 |
+| /root/angelwetter-app/src/App.css                             | PostCSS        |         37 |          0 |          6 |         43 |
+| /root/angelwetter-app/src/App.jsx                             | JavaScript JSX |        147 |          8 |         19 |        174 |
+| /root/angelwetter-app/src/AppRoutes.jsx                       | JavaScript JSX |        208 |          7 |         21 |        236 |
+| /root/angelwetter-app/src/AuthContext.jsx                     | JavaScript JSX |         31 |          0 |         10 |         41 |
+| /root/angelwetter-app/src/achievements/AchievementLayer.jsx   | JavaScript JSX |         16 |          2 |          4 |         22 |
+| /root/angelwetter-app/src/achievements/AchievementToast.jsx   | JavaScript JSX |         43 |          1 |          5 |         49 |
+| /root/angelwetter-app/src/achievements/achievementsConfig.js  | JavaScript     |        103 |         19 |         13 |        135 |
+| /root/angelwetter-app/src/achievements/confetti.js            | JavaScript     |          5 |          1 |          2 |          8 |
+| /root/angelwetter-app/src/achievements/localRemember.js       | JavaScript     |         18 |          1 |          3 |         22 |
+| /root/angelwetter-app/src/achievements/useAchievements.js     | JavaScript     |         35 |          4 |          8 |         47 |
+| /root/angelwetter-app/src/api/weather.js                      | JavaScript     |         43 |          1 |          8 |         52 |
+| /root/angelwetter-app/src/assets/react.svg                    | XML            |          1 |          0 |          0 |          1 |
+| /root/angelwetter-app/src/components/AuthForm.jsx             | JavaScript JSX |        197 |          1 |         27 |        225 |
+| /root/angelwetter-app/src/components/CatchList.jsx            | JavaScript JSX |        469 |         31 |         58 |        558 |
+| /root/angelwetter-app/src/components/CatchMap.jsx             | JavaScript JSX |        235 |          6 |         32 |        273 |
+| /root/angelwetter-app/src/components/FishCatchForm.jsx        | JavaScript JSX |        388 |         36 |         51 |        475 |
+| /root/angelwetter-app/src/components/ForecastDaily.jsx        | JavaScript JSX |         76 |          1 |          6 |         83 |
+| /root/angelwetter-app/src/components/ForecastHourly.jsx       | JavaScript JSX |         63 |          1 |          5 |         69 |
+| /root/angelwetter-app/src/components/Navbar.jsx               | JavaScript JSX |        641 |         27 |         67 |        735 |
+| /root/angelwetter-app/src/components/OneSignalHealthCheck.jsx | JavaScript JSX |        140 |          9 |         21 |        170 |
+| /root/angelwetter-app/src/components/PushInit.jsx             | JavaScript JSX |        107 |         16 |         18 |        141 |
+| /root/angelwetter-app/src/components/SpotAdmin.jsx            | JavaScript JSX |        160 |          2 |         18 |        180 |
+| /root/angelwetter-app/src/components/SubscribeBell.jsx        | JavaScript JSX |         20 |          1 |          4 |         25 |
+| /root/angelwetter-app/src/components/WeatherNow.jsx           | JavaScript JSX |        369 |         15 |         33 |        417 |
+| /root/angelwetter-app/src/hooks/useOneSignal.js               | JavaScript     |         24 |          0 |          3 |         27 |
+| /root/angelwetter-app/src/hooks/usePushStatus.js              | JavaScript     |        107 |          5 |         11 |        123 |
+| /root/angelwetter-app/src/index.css                           | PostCSS        |         48 |          2 |         10 |         60 |
+| /root/angelwetter-app/src/main.jsx                            | JavaScript JSX |         12 |          3 |          3 |         18 |
+| /root/angelwetter-app/src/onesignal/OneSignalLoader.js        | JavaScript     |        221 |         60 |         27 |        308 |
+| /root/angelwetter-app/src/onesignal/OneSignalSync.js          | JavaScript     |         20 |          2 |          7 |         29 |
+| /root/angelwetter-app/src/pages/AdminOverview.jsx             | JavaScript JSX |        230 |          2 |         33 |        265 |
+| /root/angelwetter-app/src/pages/Analysis.jsx                  | JavaScript JSX |        342 |         10 |         53 |        405 |
+| /root/angelwetter-app/src/pages/AuthVerified.jsx              | JavaScript JSX |         16 |          1 |          4 |         21 |
+| /root/angelwetter-app/src/pages/Calendar.jsx                  | JavaScript JSX |         91 |          0 |         19 |        110 |
+| /root/angelwetter-app/src/pages/Catches.jsx                   | JavaScript JSX |          8 |          1 |          2 |         11 |
+| /root/angelwetter-app/src/pages/Forecast.jsx                  | JavaScript JSX |        286 |          7 |         29 |        322 |
+| /root/angelwetter-app/src/pages/ForgotPassword.jsx            | JavaScript JSX |         39 |          0 |          4 |         43 |
+| /root/angelwetter-app/src/pages/FunFacts.jsx                  | JavaScript JSX |      1,795 |         91 |        286 |      2,172 |
+| /root/angelwetter-app/src/pages/Home.jsx                      | JavaScript JSX |         43 |          0 |          8 |         51 |
+| /root/angelwetter-app/src/pages/Leaderboard.jsx               | JavaScript JSX |        162 |          7 |         25 |        194 |
+| /root/angelwetter-app/src/pages/MapView.jsx                   | JavaScript JSX |          9 |          0 |          2 |         11 |
+| /root/angelwetter-app/src/pages/NewCatch.jsx                  | JavaScript JSX |         27 |          1 |          3 |         31 |
+| /root/angelwetter-app/src/pages/Regulations.jsx               | JavaScript JSX |         98 |          4 |         11 |        113 |
+| /root/angelwetter-app/src/pages/ResetDone.jsx                 | JavaScript JSX |         20 |          1 |          3 |         24 |
+| /root/angelwetter-app/src/pages/SettingsPage.jsx              | JavaScript JSX |        128 |          0 |         18 |        146 |
+| /root/angelwetter-app/src/pages/TopFishes.jsx                 | JavaScript JSX |        154 |          2 |         26 |        182 |
+| /root/angelwetter-app/src/pages/UpdatePassword.jsx            | JavaScript JSX |        116 |          0 |         19 |        135 |
+| /root/angelwetter-app/src/rules/ferkensbruch.js               | JavaScript     |         29 |          7 |          6 |         42 |
+| /root/angelwetter-app/src/services/blankService.js            | JavaScript     |         71 |         18 |         16 |        105 |
+| /root/angelwetter-app/src/services/catchService.js            | JavaScript     |         23 |         29 |          8 |         60 |
+| /root/angelwetter-app/src/services/imageProcessing.js         | JavaScript     |        104 |         15 |         15 |        134 |
+| /root/angelwetter-app/src/services/rulesService.js            | JavaScript     |         46 |         13 |          9 |         68 |
+| /root/angelwetter-app/src/services/weather.js                 | JavaScript     |         26 |          1 |          5 |         32 |
+| /root/angelwetter-app/src/supabaseClient.js                   | JavaScript     |          4 |          1 |          3 |          8 |
+| /root/angelwetter-app/src/sw.js                               | JavaScript     |         48 |         13 |         12 |         73 |
+| /root/angelwetter-app/src/utils/blankDay.js                   | JavaScript     |         62 |         12 |         12 |         86 |
+| /root/angelwetter-app/src/utils/geo.js                        | JavaScript     |         36 |         17 |         12 |         65 |
+| /root/angelwetter-app/src/utils/nameFormatter.js              | JavaScript     |         12 |          0 |          2 |         14 |
+| /root/angelwetter-app/src/utils/pdfExporter.js                | JavaScript     |         81 |          5 |         20 |        106 |
+| /root/angelwetter-app/src/utils/validation.js                 | JavaScript     |         19 |          1 |          5 |         25 |
+| Total                                                         |                |      8,086 |        521 |      1,167 |      9,774 |
++---------------------------------------------------------------+----------------+------------+------------+------------+------------+

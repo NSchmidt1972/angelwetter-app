@@ -1225,6 +1225,32 @@ const frostCatch = useMemo(() => {
   return { max, winners, ranking: entries };
 }, [validFishes]);
 
+// Ø Fische pro Angler-Tag (gesamt, über alle Angler & Fangtage)
+const overallAvgPerAnglerDay = useMemo(() => {
+  if (validFishes.length === 0) {
+    return { avg: 0, totalAnglerDays: 0, totalFishes: 0 };
+  }
+
+  // key = `${angler}|YYYY-MM-DD` (lokales Datum)
+  const perAnglerDay = new Map();
+
+  for (const f of validFishes) {
+    const d = new Date(f.timestamp);
+    const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const key = `${f.angler}|${dayKey}`;
+    perAnglerDay.set(key, (perAnglerDay.get(key) || 0) + 1);
+  }
+
+  let totalFishes = 0;
+  for (const cnt of perAnglerDay.values()) totalFishes += cnt;
+
+  const totalAnglerDays = perAnglerDay.size;
+  const avg = totalAnglerDays ? totalFishes / totalAnglerDays : 0;
+
+  return { avg, totalAnglerDays, totalFishes };
+}, [validFishes]);
+
+
 
   function monthLabel(ym) {
     const [y, m] = ym.split('-').map(Number);
@@ -2091,6 +2117,29 @@ const frostCatch = useMemo(() => {
   )}
 </Card>,
 
+<Card key="overallAvg" title="📊 Ø Fische pro Angler-Tag (gesamt)">
+  {overallAvgPerAnglerDay.totalAnglerDays > 0 ? (
+    <div className="flex items-baseline justify-between">
+      <div>
+        <div className="text-3xl font-bold text-green-700 dark:text-green-300">
+          {overallAvgPerAnglerDay.avg.toFixed(2)}
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          Ø Fische pro Angler-Tag
+        </div>
+      </div>
+      <div className="text-xs text-right text-gray-500 dark:text-gray-400">
+        Basis: {overallAvgPerAnglerDay.totalAnglerDays} Angler-Tage,<br />
+        {overallAvgPerAnglerDay.totalFishes} Fänge
+      </div>
+    </div>
+  ) : (
+    <p>Keine Daten</p>
+  )}
+</Card>
+
+
+
 
 
   ]), [
@@ -2099,7 +2148,7 @@ const frostCatch = useMemo(() => {
     mostSpeciesInOneHour, mostPlacesAngler, predatorKing, heaviestFish,
     mostEfficientAngler, mostRotaugen, mostAtFullMoon, nightOwls, earlyBird,
     mostInRain, sunshineOnly, topThreeSpecies, longestBreakBetweenCatchDays,
-    longestCatchStreak, fishPairs, eelWizard, grundelChampion, foreignAnglers, schneiderKoenig, worstBlankMonth, hottestCatch, frostCatch
+    longestCatchStreak, fishPairs, eelWizard, grundelChampion, foreignAnglers, schneiderKoenig, worstBlankMonth, hottestCatch, frostCatch, overallAvgPerAnglerDay
   ]);
 
   // ⬇️ Early-Returns JETZT – nachdem ALLE Hooks aufgerufen wurden
