@@ -1,0 +1,43 @@
+Date : 2025-09-10 06:31:16
+Directory : /root/angelwetter-app/src
+Total : 11 files,  -262 codes, -11 comments, -32 blanks, all -305 lines
+
+Languages
++----------------+------------+------------+------------+------------+------------+
+| language       | files      | code       | comment    | blank      | total      |
++----------------+------------+------------+------------+------------+------------+
+| JavaScript     |          1 |          9 |          0 |          1 |         10 |
+| JavaScript JSX |         10 |       -271 |        -11 |        -33 |       -315 |
++----------------+------------+------------+------------+------------+------------+
+
+Directories
++-----------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                            | files      | code       | comment    | blank      | total      |
++-----------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                               |         11 |       -262 |        -11 |        -32 |       -305 |
+| . (Files)                                                       |          1 |         -9 |         -4 |         -1 |        -14 |
+| components                                                      |          8 |       -262 |         -8 |        -32 |       -302 |
+| components (Files)                                              |          3 |       -591 |        -23 |        -55 |       -669 |
+| components/common                                               |          1 |         17 |          1 |          1 |         19 |
+| components/weather                                              |          4 |        312 |         14 |         22 |        348 |
+| pages                                                           |          1 |          0 |          1 |          0 |          1 |
+| utils                                                           |          1 |          9 |          0 |          1 |         10 |
++-----------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-----------------------------------------------------------------+----------------+------------+------------+------------+------------+
+| filename                                                        | language       | code       | comment    | blank      | total      |
++-----------------------------------------------------------------+----------------+------------+------------+------------+------------+
+| /root/angelwetter-app/src/App.jsx                               | JavaScript JSX |         -9 |         -4 |         -1 |        -14 |
+| /root/angelwetter-app/src/components/Navbar.jsx                 | JavaScript JSX |       -223 |         -9 |        -23 |       -255 |
+| /root/angelwetter-app/src/components/VersionInfo.jsx            | JavaScript JSX |          1 |          1 |          1 |          3 |
+| /root/angelwetter-app/src/components/WeatherNow.jsx             | JavaScript JSX |       -369 |        -15 |        -33 |       -417 |
+| /root/angelwetter-app/src/components/common/FishRating.jsx      | JavaScript JSX |         17 |          1 |          1 |         19 |
+| /root/angelwetter-app/src/components/weather/CurrentPanel.jsx   | JavaScript JSX |         37 |          1 |          4 |         42 |
+| /root/angelwetter-app/src/components/weather/DailyScroller.jsx  | JavaScript JSX |         44 |          1 |          2 |         47 |
+| /root/angelwetter-app/src/components/weather/HourlyScroller.jsx | JavaScript JSX |         46 |          1 |          2 |         49 |
+| /root/angelwetter-app/src/components/weather/WeatherNow.jsx     | JavaScript JSX |        185 |         11 |         14 |        210 |
+| /root/angelwetter-app/src/pages/Home.jsx                        | JavaScript JSX |          0 |          1 |          0 |          1 |
+| /root/angelwetter-app/src/utils/weatherFormat.js                | JavaScript     |          9 |          0 |          1 |         10 |
+| Total                                                           |                |       -262 |        -11 |        -32 |       -305 |
++-----------------------------------------------------------------+----------------+------------+------------+------------+------------+

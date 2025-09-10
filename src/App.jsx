@@ -1,15 +1,13 @@
 // src/App.jsx
 import { BrowserRouter as Router } from 'react-router-dom';
 import { useEffect, useState, Suspense } from 'react';
-import { useAuth } from './AuthContext';
-import { supabase } from './supabaseClient';
-import PushInit from './components/PushInit';
-import AppRoutes from './AppRoutes';
-import AchievementLayer from './achievements/AchievementLayer'; // ✅ NEU
-import Regulations from "./pages/Regulations";
-import './index.css';
+import { useAuth } from '@/AuthContext';
+import { supabase } from '@/supabaseClient';
+import PushInit from '@/components/PushInit';
+import AppRoutes from '@/AppRoutes';
+import '@/index.css';
 
-function AppContentInner({ showEffect }) {
+function AppContent() {
   const { user, loading: authLoading } = useAuth();
   const [anglerName, setAnglerName] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
@@ -18,13 +16,12 @@ function AppContentInner({ showEffect }) {
   const [imageLoaded, setImageLoaded] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
 
-  // ⏳ Splash (optional: 1000ms statt 3000ms)
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1000);
     return () => clearTimeout(timer);
   }, []);
 
-  // 👤 Profilname laden + Kurzname in localStorage
+  // Profilname laden
   useEffect(() => {
     if (user === undefined) return;
 
@@ -45,17 +42,18 @@ function AppContentInner({ showEffect }) {
       .select('name')
       .eq('id', user.id)
       .single()
-      .then(async ({ data, error }) => {
+      .then(({ data, error }) => {
         if (data?.name) {
           const fullName = data.name.trim();
           setAnglerName(fullName);
           localStorage.setItem('anglerName', fullName);
 
           const [first, last] = fullName.split(' ');
-          const { data: allProfiles } = await supabase.from('profiles').select('name');
-          const firstNameCount = (allProfiles || []).filter(p => p.name?.startsWith(first + ' ')).length;
-          const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
-          localStorage.setItem('shortAnglerName', shortName);
+          supabase.from('profiles').select('name').then(({ data: allProfiles }) => {
+            const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
+            const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
+            localStorage.setItem('shortAnglerName', shortName);
+          });
         } else {
           console.warn('⚠️ Kein Name im Profil gefunden oder Fehler:', error);
           setAnglerName(null);
@@ -66,7 +64,7 @@ function AppContentInner({ showEffect }) {
       });
   }, [user]);
 
-  // 🟢 Aktivität pingen
+  // Aktivität pingen
   useEffect(() => {
     if (!user) return;
     const updateActivity = async () => {
@@ -74,7 +72,7 @@ function AppContentInner({ showEffect }) {
         await supabase.from('user_activity').upsert({
           user_id: user.id,
           angler_name: user.email,
-          last_active: new Date().toISOString()
+          last_active: new Date().toISOString(),
         });
       } catch (err) {
         console.warn('⚠️ user_activity konnte nicht aktualisiert werden:', err.message);
@@ -85,7 +83,7 @@ function AppContentInner({ showEffect }) {
     return () => clearInterval(interval);
   }, [user]);
 
-  // ☁️ Wetter aus Supabase Cache
+  // Wetter aus Supabase Cache
   useEffect(() => {
     const fetchWeatherFromSupabase = async () => {
       const { data, error } = await supabase
@@ -101,7 +99,7 @@ function AppContentInner({ showEffect }) {
 
       setWeatherData({
         data: data.data,
-        savedAt: new Date(data.updated_at).getTime()
+        savedAt: new Date(data.updated_at).getTime(),
       });
     };
 
@@ -110,11 +108,10 @@ function AppContentInner({ showEffect }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Ladezustände + Splash
   if (authLoading || nameLoading || user === undefined || showSplash) {
     return (
       <>
-        <PushInit /> {/* ✅ OneSignal früh hochziehen, auch während Splash */}
+        <PushInit />
         <div className="flex flex-col justify-center items-center h-screen bg-white relative">
           <img
             src="logo.png"
@@ -131,7 +128,6 @@ function AppContentInner({ showEffect }) {
     );
   }
 
-  // Recovery-Flow
   const isRecoveryHash = window.location.hash.includes('type=recovery');
   const isPasswordResetFlow = window.location.pathname === '/update-password' || isRecoveryHash;
 
@@ -148,19 +144,9 @@ function AppContentInner({ showEffect }) {
           anglerName={anglerName}
           weatherData={weatherData}
           setWeatherData={setWeatherData}
-          showEffect={showEffect}          // ✅ NEU: weiterreichen
         />
       </Suspense>
     </>
-  );
-}
-
-function AppContent() {
-  // ⬅️ Hier wird der Layer einmal ganz oben eingeclipst.
-  return (
-    <AchievementLayer>
-      {(showEffect) => <AppContentInner showEffect={showEffect} />}
-    </AchievementLayer>
   );
 }
 

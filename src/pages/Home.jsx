@@ -1,6 +1,7 @@
+// src/pages/Home.jsx
 import { useEffect, useState, useCallback } from 'react';
-import WeatherNow from '../components/WeatherNow';
-import { supabase } from '../supabaseClient';
+import WeatherNow from '@/components/weather/WeatherNow';
+import { supabase } from '@/supabaseClient';
 
 export default function Home() {
   const [weatherData, setWeatherData] = useState(null);
@@ -21,7 +22,7 @@ export default function Home() {
 
     setWeatherData({
       data: data.data,
-      savedAt: new Date(data.updated_at).getTime()
+      savedAt: new Date(data.updated_at).getTime(),
     });
     setError(null);
   };
@@ -37,11 +38,11 @@ export default function Home() {
   return (
     <div className="p-4 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans">
       {!weatherData && !error && (
-        <p className="text-gray-500 dark:text-gray-400 text-center">Lade Wetterdaten…</p>
+        <p className="text-gray-500 dark:text-gray-400 text-center">
+          Lade Wetterdaten…
+        </p>
       )}
-      {error && (
-        <p className="text-red-600 text-center">{error}</p>
-      )}
+      {error && <p className="text-red-600 text-center">{error}</p>}
       {weatherData && (
         <WeatherNow data={weatherData} onRefresh={handleRefresh} />
       )}

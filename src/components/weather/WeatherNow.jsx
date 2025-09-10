@@ -1,72 +1,282 @@
 // src/components/weather/WeatherNow.jsx
-import { useWeatherNow } from "../../hooks/useWeatherNow";
-import { fmtC, fmtHpa, fmtPct, fmtWindMs, degToDir, fmtTime, owmIconUrl } from "../../utils/weatherFormat";
-import Stat from "./Stat";
-import WindArrow from "./WindArrow";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import CurrentPanel from '@/components/weather/CurrentPanel';
+import HourlyScroller from '@/components/weather/HourlyScroller';
+import DailyScroller from '@/components/weather/DailyScroller';
 
-export default function WeatherNow({ coords, title = "Aktuelles Wetter" }) {
-  const { data, isLoading, isError, error } = useWeatherNow({ coords });
+// --- prediction utils (unverändert gelassen) ---
+const PREDICTION_TTL_MS = 12 * 60 * 60 * 1000;
+const PREDICTION_CACHE_KEY = 'ai_pred_cache_v1';
+const MAX_CONCURRENCY = 3;
+const INITIAL_HOURS = 12;
+const CHUNK_HOURS = 6;
 
-  if (isLoading) {
+function idleCall(cb) {
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    const id = window.requestIdleCallback(cb, { timeout: 800 });
+    return () => window.cancelIdleCallback?.(id);
+  }
+  const t = setTimeout(cb, 200);
+  return () => clearTimeout(t);
+}
+function makeKey(w) {
+  return [
+    w.date, w.hour,
+    Math.round(w.temp), w.pressure, Math.round((w.wind || 0) * 10) / 10,
+    w.humidity, w.wind_deg, w.moon_phase
+  ].join('|');
+}
+function usePredictionCache() {
+  const ref = useRef(null);
+  if (!ref.current) {
+    try { ref.current = JSON.parse(localStorage.getItem(PREDICTION_CACHE_KEY) || '{}'); }
+    catch { ref.current = {}; }
+  }
+  const get = (k) => {
+    const e = ref.current[k];
+    if (!e) return null;
+    if (Date.now() - e.ts > PREDICTION_TTL_MS) return null;
+    return e.v;
+  };
+  const set = (k, v) => { ref.current[k] = { ts: Date.now(), v }; };
+  const persist = () => { try { localStorage.setItem(PREDICTION_CACHE_KEY, JSON.stringify(ref.current)); } catch {} };
+  return { get, set, persist };
+}
+async function fetchPrediction(weather, signal) {
+  const res = await fetch('https://ai.asv-rotauge.de/predict', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(weather),
+    signal
+  });
+  return res.json();
+}
+async function runBatched(tasks, limit = MAX_CONCURRENCY) {
+  const out = new Array(tasks.length);
+  let i = 0;
+  async function worker() {
+    while (i < tasks.length) {
+      const idx = i++;
+      try { out[idx] = await tasks[idx](); } catch { out[idx] = null; }
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return out;
+}
+
+export default function WeatherNow({ data, onRefresh }) {
+  const [autoUpdated, setAutoUpdated] = useState(false);
+
+  // Daily (inkl. AI)
+  const [dailyWithPrediction, setDailyWithPrediction] = useState([]);
+
+  // Hourly Basis + KI + Sichtbarkeit
+  const [hourlyBase, setHourlyBase] = useState([]);
+  const [hourPreds, setHourPreds] = useState({});
+  const [visibleCount, setVisibleCount] = useState(INITIAL_HOURS);
+
+  const [currentPrediction, setCurrentPrediction] = useState(null);
+
+  const cache = usePredictionCache();
+  const hourlyRef = useRef(null);
+
+  // ⏱ Auto-Refresh (nur sichtbar & online)
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      if ('onLine' in navigator && !navigator.onLine) return;
+      setAutoUpdated(true);
+      onRefresh?.();
+      setTimeout(() => setAutoUpdated(false), 1500);
+    };
+    const id = setInterval(tick, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [onRefresh]);
+
+  // Basisdaten ohne KI
+  useEffect(() => {
+    if (!data?.data?.daily || !data?.data?.current || !data?.data?.hourly) return;
+    setDailyWithPrediction(data.data.daily);
+    const slice = data.data.hourly.slice(0, 24);
+    setHourlyBase(slice);
+    setVisibleCount(Math.min(INITIAL_HOURS, slice.length));
+    setHourPreds({});
+    setCurrentPrediction(null);
+    if (hourlyRef.current) hourlyRef.current.scrollLeft = 0;
+  }, [data]);
+
+  // KI-Prognosen: DAILY (idle)
+  useEffect(() => {
+    if (!data?.data?.daily) return;
+    const cancelIdle = idleCall(() => {
+      const ac = new AbortController();
+      const { signal } = ac;
+      (async () => {
+        const enriched = await runBatched(
+          data.data.daily.map(day => {
+            const dayDate = new Date(day.dt * 1000);
+            const w = {
+              temp: day.temp.day,
+              pressure: day.pressure,
+              wind: day.wind_speed,
+              humidity: day.humidity,
+              wind_deg: day.wind_deg,
+              moon_phase: day.moon_phase,
+              hour: 12,
+              date: dayDate.toISOString().slice(0, 10)
+            };
+            const key = makeKey(w);
+            return async () => {
+              const c = cache.get(key);
+              if (c) return { ...day, aiPrediction: c };
+              const pred = await fetchPrediction(w, signal);
+              cache.set(key, pred);
+              return { ...day, aiPrediction: pred };
+            };
+          })
+        );
+        setDailyWithPrediction(enriched);
+        cache.persist();
+      })();
+      return () => ac.abort();
+    });
+    return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.data?.daily]);
+
+  // KI-Prognose: CURRENT (idle)
+  useEffect(() => {
+    if (!data?.data?.current || !data?.data?.daily) return;
+    const cancelIdle = idleCall(() => {
+      const ac = new AbortController();
+      const { signal } = ac;
+      (async () => {
+        const moonPhase = data.data.daily?.[0]?.moon_phase ?? null;
+        const cDate = new Date(data.data.current.dt * 1000);
+        const w = {
+          temp: data.data.current.temp,
+          pressure: data.data.current.pressure,
+          wind: data.data.current.wind_speed,
+          humidity: data.data.current.humidity,
+          wind_deg: data.data.current.wind_deg,
+          moon_phase: moonPhase,
+          hour: cDate.getHours(),
+          date: cDate.toISOString().slice(0, 10)
+        };
+        const key = makeKey(w);
+        const c = cache.get(key);
+        if (c) { setCurrentPrediction(c); return; }
+        try {
+          const pred = await fetchPrediction(w, signal);
+          cache.set(key, pred);
+          setCurrentPrediction(pred);
+          cache.persist();
+        } catch {}
+      })();
+      return () => ac.abort();
+    });
+    return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
+  }, [data]);
+
+  // KI-Prognosen: sichtbare Stunden
+  useEffect(() => {
+    if (!hourlyBase.length || visibleCount <= 0) return;
+
+    const cancelIdle = idleCall(() => {
+      const ac = new AbortController();
+      const { signal } = ac;
+
+      (async () => {
+        const moonPhase = data?.data?.daily?.[0]?.moon_phase ?? null;
+        const indices = [];
+        for (let i = 0; i < Math.min(visibleCount, hourlyBase.length); i++) {
+          if (hourPreds[i] == null) indices.push(i);
+        }
+        if (!indices.length) return;
+
+        const tasks = indices.map(i => {
+          const h = hourlyBase[i];
+          const hDate = new Date(h.dt * 1000);
+          const w = {
+            temp: h.temp,
+            pressure: h.pressure,
+            wind: h.wind_speed,
+            humidity: h.humidity,
+            wind_deg: h.wind_deg,
+            moon_phase: moonPhase,
+            hour: hDate.getHours(),
+            date: hDate.toISOString().slice(0, 10)
+          };
+          const key = makeKey(w);
+          return async () => {
+            const c = cache.get(key);
+            if (c) return { i, pred: c };
+            const pred = await fetchPrediction(w, signal);
+            cache.set(key, pred);
+            return { i, pred };
+          };
+        });
+
+        const results = await runBatched(tasks);
+        setHourPreds(prev => {
+          const next = { ...prev };
+          results.forEach(r => { if (r) next[r.i] = r.pred; });
+          return next;
+        });
+        cache.persist();
+      })();
+
+      return () => ac.abort();
+    });
+
+    return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleCount, hourlyBase]);
+
+  // Infinite-Scroll: sichtbare Stunden erhöhen
+  const onHourlyScroll = (e) => {
+    const el = e.currentTarget;
+    const nearEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 120;
+    if (!nearEnd) return;
+    setVisibleCount(vc => {
+      const next = Math.min(vc + CHUNK_HOURS, hourlyBase.length);
+      return next === vc ? vc : next;
+    });
+  };
+
+  if (!data?.data) {
     return (
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4 animate-pulse">
-        <div className="h-5 w-40 bg-zinc-200 dark:bg-zinc-700 rounded mb-4" />
-        <div className="flex items-center gap-4">
-          <div className="h-16 w-16 bg-zinc-200 dark:bg-zinc-700 rounded-xl" />
-          <div className="space-y-2 flex-1">
-            <div className="h-4 w-2/3 bg-zinc-200 dark:bg-zinc-700 rounded" />
-            <div className="h-4 w-1/2 bg-zinc-200 dark:bg-zinc-700 rounded" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-14 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
-          ))}
-        </div>
+      <div className="p-4 bg-white dark:bg-gray-900 text-center text-red-600 rounded-xl shadow max-w-xl mx-auto">
+        ⚠️ Keine Wetterdaten verfügbar.
+        <br />
+        Die Daten konnten nicht von Supabase geladen werden.
       </div>
     );
   }
 
-  if (isError) {
-    return (
-      <div className="rounded-2xl border border-red-300 dark:border-red-800 p-4 bg-red-50/50 dark:bg-red-900/10">
-        <div className="font-semibold text-red-700 dark:text-red-300">Wetter konnte nicht geladen werden</div>
-        <div className="text-sm text-red-600/80 dark:text-red-400/80 mt-1">
-          {error?.message ?? "Unbekannter Fehler"}
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  const { temp, feelsLike, humidity, pressure, windSpeed, windDeg, description, icon, dt } = data;
+  const now = data.data.current;
+  const days = dailyWithPrediction || [];
+  const hoursToRender = useMemo(
+    () => hourlyBase.slice(0, Math.min(visibleCount, hourlyBase.length)),
+    [hourlyBase, visibleCount]
+  );
 
   return (
-    <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4 bg-white/50 dark:bg-zinc-900/40 backdrop-blur">
-      <header className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <span className="text-xs text-zinc-500">Stand: {fmtTime(dt)}</span>
-      </header>
-
-      <div className="flex items-center gap-4">
-        <img src={owmIconUrl(icon)} alt={description} className="h-16 w-16 drop-shadow-sm" loading="lazy" />
-        <div className="flex-1">
-          <div className="text-3xl font-bold">{fmtC(temp)}</div>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">{description || "—"}</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-        <Stat label="Gefühlt" value={fmtC(feelsLike)} />
-        <Stat label="Luftfeuchte" value={fmtPct(humidity)} />
-        <Stat label="Luftdruck" value={fmtHpa(pressure)} />
-        <Stat
-          label={`Wind (${degToDir(windDeg)})`}
-          value={fmtWindMs(windSpeed)}
-          icon={<WindArrow deg={windDeg ?? 0} />}
-        />
-      </div>
-    </section>
+    <div className="p-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow-md rounded-xl max-w-6xl mx-auto">
+      <CurrentPanel
+        now={now}
+        daily={data.data.daily}
+        savedAt={data.savedAt}
+        currentPrediction={currentPrediction}
+      />
+      <HourlyScroller
+        hours={hoursToRender}
+        hourPreds={hourPreds}
+        onScroll={onHourlyScroll}
+        scrollRef={hourlyRef}
+      />
+      <DailyScroller days={days} />
+    </div>
   );
 }

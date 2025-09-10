@@ -1,7 +1,7 @@
 // src/AppRoutes.jsx
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy } from 'react';
-import AppLayout from './AppLayout';
+import AppLayout from '@/AppLayout';
 
 // 🔐 Sicherer Lazy-Helper
 function safeLazy(importer, FallbackName) {
@@ -19,31 +19,31 @@ function safeLazy(importer, FallbackName) {
 }
 
 // Public/Static
-const UpdatePassword = lazy(() => import('./pages/UpdatePassword'));
-const ResetDone      = lazy(() => import('./pages/ResetDone'));
-const AuthVerified   = lazy(() => import('./pages/AuthVerified'));
-const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
-const AuthForm       = lazy(() => import('./components/AuthForm'));
+const UpdatePassword = lazy(() => import('@/pages/UpdatePassword'));
+const ResetDone      = lazy(() => import('@/pages/ResetDone'));
+const AuthVerified   = lazy(() => import('@/pages/AuthVerified'));
+const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'));
+const AuthForm       = lazy(() => import('@/components/AuthForm'));
 
 // App Pages
-const Home          = lazy(() => import('./pages/Home'));
-const Analysis      = lazy(() => import('./pages/Analysis'));
-const Leaderboard   = lazy(() => import('./pages/Leaderboard'));
-const TopFishes     = lazy(() => import('./pages/TopFishes'));
-const Forecast      = lazy(() => import('./pages/Forecast'));
-const AdminOverview = lazy(() => import('./pages/AdminOverview'));
-const Calendar      = lazy(() => import('./pages/Calendar'));
-const MapView       = lazy(() => import('./pages/MapView'));
-const Regulations   = lazy(() => import('./pages/Regulations'));
+const Home          = lazy(() => import('@/pages/Home'));
+const Analysis      = lazy(() => import('@/pages/Analysis'));
+const Leaderboard   = lazy(() => import('@/pages/Leaderboard'));
+const TopFishes     = lazy(() => import('@/pages/TopFishes'));
+const Forecast      = lazy(() => import('@/pages/Forecast'));
+const AdminOverview = lazy(() => import('@/pages/AdminOverview'));
+const Calendar      = lazy(() => import('@/pages/Calendar'));
+const MapView       = lazy(() => import('@/pages/MapView'));
+const Regulations   = lazy(() => import('@/pages/Regulations'));
 
 // Optional
-const SpotAdmin     = safeLazy(() => import('./components/SpotAdmin'), 'SpotAdmin');
-const SettingsPage  = safeLazy(() => import('./pages/SettingsPage'), 'SettingsPage');
-const FunFacts      = safeLazy(() => import('./pages/FunFacts'), 'FunFacts');
+const SpotAdmin     = safeLazy(() => import('@/components/SpotAdmin'), 'SpotAdmin');
+const SettingsPage  = safeLazy(() => import('@/pages/SettingsPage'), 'SettingsPage');
+const FunFacts      = safeLazy(() => import('@/pages/FunFacts'), 'FunFacts');
 
 // Neue Komponenten
-const CatchList     = lazy(() => import('./components/catchlist/CatchList'));
-const FishCatchForm = lazy(() => import('./components/FishCatchForm'));
+const CatchList     = lazy(() => import('@/components/catchlist/CatchList'));
+const FishCatchForm = lazy(() => import('@/components/FishCatchForm'));
 
 // Admin-Guard
 function RequireAdmin({ isAdmin, children }) {
@@ -71,9 +71,9 @@ export default function AppRoutes({
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {isLoggedIn ? (
-        // 🔸 Eingeloggt: zentrales Layout mit Navbar
+        // Eingeloggt: zentrales Layout mit Navbar
         <Route element={<AppLayout name={anglerName} isAdmin={isAdmin} />}>
-          <Route index element={<Home weatherData={weatherData} />} />
+          <Route index element={<Home />} />
 
           <Route
             path="new-catch"
@@ -116,7 +116,7 @@ export default function AppRoutes({
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       ) : (
-        // 🔸 Nicht eingeloggt
+        // Nicht eingeloggt
         <>
           <Route path="/auth" element={<AuthForm />} />
           <Route

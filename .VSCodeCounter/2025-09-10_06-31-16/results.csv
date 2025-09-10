@@ -1,0 +1,114 @@
+"filename", "language", "PostCSS", "JavaScript JSX", "JavaScript", "XML", "comment", "blank", "total"
+"/root/angelwetter-app/src/App.css", "PostCSS", 37, 0, 0, 0, 0, 6, 43
+"/root/angelwetter-app/src/App.jsx", "JavaScript JSX", 0, 138, 0, 0, 4, 18, 160
+"/root/angelwetter-app/src/AppLayout.jsx", "JavaScript JSX", 0, 12, 0, 0, 1, 2, 15
+"/root/angelwetter-app/src/AppRoutes.jsx", "JavaScript JSX", 0, 108, 0, 0, 11, 12, 131
+"/root/angelwetter-app/src/AuthContext.jsx", "JavaScript JSX", 0, 31, 0, 0, 0, 10, 41
+"/root/angelwetter-app/src/achievements/AchievementLayer.jsx", "JavaScript JSX", 0, 16, 0, 0, 2, 4, 22
+"/root/angelwetter-app/src/achievements/AchievementToast.jsx", "JavaScript JSX", 0, 43, 0, 0, 1, 5, 49
+"/root/angelwetter-app/src/achievements/achievementsConfig.js", "JavaScript", 0, 0, 103, 0, 19, 13, 135
+"/root/angelwetter-app/src/achievements/confetti.js", "JavaScript", 0, 0, 5, 0, 1, 2, 8
+"/root/angelwetter-app/src/achievements/localRemember.js", "JavaScript", 0, 0, 18, 0, 1, 3, 22
+"/root/angelwetter-app/src/achievements/useAchievements.js", "JavaScript", 0, 0, 35, 0, 4, 8, 47
+"/root/angelwetter-app/src/api/weather.js", "JavaScript", 0, 0, 43, 0, 1, 8, 52
+"/root/angelwetter-app/src/assets/react.svg", "XML", 0, 0, 0, 1, 0, 0, 1
+"/root/angelwetter-app/src/components/AuthForm.jsx", "JavaScript JSX", 0, 197, 0, 0, 1, 27, 225
+"/root/angelwetter-app/src/components/CatchMap.jsx", "JavaScript JSX", 0, 235, 0, 0, 6, 32, 273
+"/root/angelwetter-app/src/components/Dropdown.jsx", "JavaScript JSX", 0, 11, 0, 0, 0, 1, 12
+"/root/angelwetter-app/src/components/FishCatchForm.jsx", "JavaScript JSX", 0, 210, 0, 0, 33, 38, 281
+"/root/angelwetter-app/src/components/ForecastDaily.jsx", "JavaScript JSX", 0, 76, 0, 0, 1, 6, 83
+"/root/angelwetter-app/src/components/ForecastHourly.jsx", "JavaScript JSX", 0, 63, 0, 0, 1, 5, 69
+"/root/angelwetter-app/src/components/NavLink.jsx", "JavaScript JSX", 0, 16, 0, 0, 0, 2, 18
+"/root/angelwetter-app/src/components/Navbar.jsx", "JavaScript JSX", 0, 308, 0, 0, 15, 36, 359
+"/root/angelwetter-app/src/components/OneSignalHealthCheck.jsx", "JavaScript JSX", 0, 140, 0, 0, 9, 21, 170
+"/root/angelwetter-app/src/components/PushInit.jsx", "JavaScript JSX", 0, 107, 0, 0, 16, 18, 141
+"/root/angelwetter-app/src/components/PushMenuCard.jsx", "JavaScript JSX", 0, 8, 0, 0, 0, 2, 10
+"/root/angelwetter-app/src/components/SpotAdmin.jsx", "JavaScript JSX", 0, 160, 0, 0, 2, 18, 180
+"/root/angelwetter-app/src/components/SubscribeBell.jsx", "JavaScript JSX", 0, 20, 0, 0, 1, 4, 25
+"/root/angelwetter-app/src/components/VersionInfo.jsx", "JavaScript JSX", 0, 20, 0, 0, 1, 3, 24
+"/root/angelwetter-app/src/components/catchlist/CatchList.jsx", "JavaScript JSX", 0, 225, 0, 0, 1, 22, 248
+"/root/angelwetter-app/src/components/catchlist/CommentSection.jsx", "JavaScript JSX", 0, 65, 0, 0, 0, 7, 72
+"/root/angelwetter-app/src/components/catchlist/EditCatchModal.jsx", "JavaScript JSX", 0, 37, 0, 0, 0, 4, 41
+"/root/angelwetter-app/src/components/catchlist/PhotoLightbox.jsx", "JavaScript JSX", 0, 8, 0, 0, 0, 1, 9
+"/root/angelwetter-app/src/components/catchlist/SkeletonCard.jsx", "JavaScript JSX", 0, 9, 0, 0, 0, 1, 10
+"/root/angelwetter-app/src/components/common/FishRating.jsx", "JavaScript JSX", 0, 17, 0, 0, 1, 1, 19
+"/root/angelwetter-app/src/components/dialogs/HourDialog.jsx", "JavaScript JSX", 0, 42, 0, 0, 1, 4, 47
+"/root/angelwetter-app/src/components/dialogs/TakenDialog.jsx", "JavaScript JSX", 0, 14, 0, 0, 1, 0, 15
+"/root/angelwetter-app/src/components/form/FishSelect.jsx", "JavaScript JSX", 0, 14, 0, 0, 1, 0, 15
+"/root/angelwetter-app/src/components/form/PhotoPicker.jsx", "JavaScript JSX", 0, 39, 0, 0, 1, 4, 44
+"/root/angelwetter-app/src/components/form/RegionSelect.jsx", "JavaScript JSX", 0, 17, 0, 0, 1, 1, 19
+"/root/angelwetter-app/src/components/weather/CurrentPanel.jsx", "JavaScript JSX", 0, 37, 0, 0, 1, 4, 42
+"/root/angelwetter-app/src/components/weather/DailyScroller.jsx", "JavaScript JSX", 0, 44, 0, 0, 1, 2, 47
+"/root/angelwetter-app/src/components/weather/HourlyScroller.jsx", "JavaScript JSX", 0, 46, 0, 0, 1, 2, 49
+"/root/angelwetter-app/src/components/weather/Stat.jsx", "JavaScript JSX", 0, 11, 0, 0, 1, 1, 13
+"/root/angelwetter-app/src/components/weather/WeatherNow.jsx", "JavaScript JSX", 0, 248, 0, 0, 12, 23, 283
+"/root/angelwetter-app/src/components/weather/WindArrow.jsx", "JavaScript JSX", 0, 14, 0, 0, 1, 1, 16
+"/root/angelwetter-app/src/config/navItems.js", "JavaScript", 0, 0, 21, 0, 0, 2, 23
+"/root/angelwetter-app/src/constants/fishRegions.js", "JavaScript", 0, 0, 46, 0, 2, 8, 56
+"/root/angelwetter-app/src/constants/index.js", "JavaScript", 0, 0, 7, 0, 1, 1, 9
+"/root/angelwetter-app/src/hooks/useAnchoredPosition.js", "JavaScript", 0, 0, 21, 0, 0, 4, 25
+"/root/angelwetter-app/src/hooks/useCatches.js", "JavaScript", 0, 0, 63, 0, 5, 18, 86
+"/root/angelwetter-app/src/hooks/useDarkMode.js", "JavaScript", 0, 0, 18, 0, 0, 5, 23
+"/root/angelwetter-app/src/hooks/useForecast.js", "JavaScript", 0, 0, 48, 0, 3, 11, 62
+"/root/angelwetter-app/src/hooks/useGeoPosition.js", "JavaScript", 0, 0, 16, 0, 2, 3, 21
+"/root/angelwetter-app/src/hooks/useInfiniteScroll.js", "JavaScript", 0, 0, 9, 0, 1, 2, 12
+"/root/angelwetter-app/src/hooks/useLikes.js", "JavaScript", 0, 0, 61, 0, 2, 6, 69
+"/root/angelwetter-app/src/hooks/useLocalStorage.js", "JavaScript", 0, 0, 17, 0, 2, 3, 22
+"/root/angelwetter-app/src/hooks/useOnClickOutside.js", "JavaScript", 0, 0, 12, 0, 0, 2, 14
+"/root/angelwetter-app/src/hooks/useOneSignal.js", "JavaScript", 0, 0, 24, 0, 0, 3, 27
+"/root/angelwetter-app/src/hooks/usePushStatus.js", "JavaScript", 0, 0, 107, 0, 5, 11, 123
+"/root/angelwetter-app/src/hooks/useResponsiveMenu.js", "JavaScript", 0, 0, 22, 0, 0, 4, 26
+"/root/angelwetter-app/src/hooks/useServiceWorkerUpdate.js", "JavaScript", 0, 0, 65, 0, 0, 15, 80
+"/root/angelwetter-app/src/hooks/useValidFishes.js", "JavaScript", 0, 0, 90, 0, 12, 14, 116
+"/root/angelwetter-app/src/hooks/useWeatherNow.js", "JavaScript", 0, 0, 56, 0, 2, 8, 66
+"/root/angelwetter-app/src/index.css", "PostCSS", 48, 0, 0, 0, 2, 10, 60
+"/root/angelwetter-app/src/main.jsx", "JavaScript JSX", 0, 12, 0, 0, 3, 3, 18
+"/root/angelwetter-app/src/onesignal/OneSignalLoader.js", "JavaScript", 0, 0, 221, 0, 60, 27, 308
+"/root/angelwetter-app/src/onesignal/OneSignalSync.js", "JavaScript", 0, 0, 20, 0, 2, 7, 29
+"/root/angelwetter-app/src/pages/AdminOverview.jsx", "JavaScript JSX", 0, 230, 0, 0, 2, 33, 265
+"/root/angelwetter-app/src/pages/Analysis.jsx", "JavaScript JSX", 0, 342, 0, 0, 10, 53, 405
+"/root/angelwetter-app/src/pages/AuthVerified.jsx", "JavaScript JSX", 0, 16, 0, 0, 1, 4, 21
+"/root/angelwetter-app/src/pages/Calendar.jsx", "JavaScript JSX", 0, 91, 0, 0, 0, 19, 110
+"/root/angelwetter-app/src/pages/Catches.jsx", "JavaScript JSX", 0, 8, 0, 0, 1, 2, 11
+"/root/angelwetter-app/src/pages/Forecast.jsx", "JavaScript JSX", 0, 179, 0, 0, 3, 16, 198
+"/root/angelwetter-app/src/pages/ForgotPassword.jsx", "JavaScript JSX", 0, 39, 0, 0, 0, 4, 43
+"/root/angelwetter-app/src/pages/FunFacts.jsx", "JavaScript JSX", 0, 1697, 0, 0, 78, 177, 1952
+"/root/angelwetter-app/src/pages/Home.jsx", "JavaScript JSX", 0, 43, 0, 0, 1, 8, 52
+"/root/angelwetter-app/src/pages/Leaderboard.jsx", "JavaScript JSX", 0, 162, 0, 0, 7, 25, 194
+"/root/angelwetter-app/src/pages/MapView.jsx", "JavaScript JSX", 0, 9, 0, 0, 0, 2, 11
+"/root/angelwetter-app/src/pages/Regulations.jsx", "JavaScript JSX", 0, 98, 0, 0, 4, 11, 113
+"/root/angelwetter-app/src/pages/ResetDone.jsx", "JavaScript JSX", 0, 20, 0, 0, 1, 3, 24
+"/root/angelwetter-app/src/pages/SettingsPage.jsx", "JavaScript JSX", 0, 128, 0, 0, 0, 18, 146
+"/root/angelwetter-app/src/pages/TopFishes.jsx", "JavaScript JSX", 0, 154, 0, 0, 2, 26, 182
+"/root/angelwetter-app/src/pages/UpdatePassword.jsx", "JavaScript JSX", 0, 116, 0, 0, 0, 19, 135
+"/root/angelwetter-app/src/rules/ferkensbruch.js", "JavaScript", 0, 0, 29, 0, 7, 6, 42
+"/root/angelwetter-app/src/services/aiService.js", "JavaScript", 0, 0, 22, 0, 4, 4, 30
+"/root/angelwetter-app/src/services/blankService.js", "JavaScript", 0, 0, 71, 0, 18, 16, 105
+"/root/angelwetter-app/src/services/catchService.js", "JavaScript", 0, 0, 23, 0, 29, 8, 60
+"/root/angelwetter-app/src/services/comments.js", "JavaScript", 0, 0, 10, 0, 1, 2, 13
+"/root/angelwetter-app/src/services/fishes.js", "JavaScript", 0, 0, 34, 0, 1, 8, 43
+"/root/angelwetter-app/src/services/imageProcessing.js", "JavaScript", 0, 0, 104, 0, 15, 15, 134
+"/root/angelwetter-app/src/services/likes.js", "JavaScript", 0, 0, 19, 0, 1, 4, 24
+"/root/angelwetter-app/src/services/rulesService.js", "JavaScript", 0, 0, 46, 0, 13, 9, 68
+"/root/angelwetter-app/src/services/storage.js", "JavaScript", 0, 0, 9, 0, 1, 2, 12
+"/root/angelwetter-app/src/services/weather.js", "JavaScript", 0, 0, 26, 0, 1, 5, 32
+"/root/angelwetter-app/src/services/weatherService.js", "JavaScript", 0, 0, 12, 0, 1, 3, 16
+"/root/angelwetter-app/src/supabaseClient.js", "JavaScript", 0, 0, 4, 0, 1, 3, 8
+"/root/angelwetter-app/src/sw.js", "JavaScript", 0, 0, 48, 0, 13, 12, 73
+"/root/angelwetter-app/src/utils/blankDay.js", "JavaScript", 0, 0, 62, 0, 12, 12, 86
+"/root/angelwetter-app/src/utils/buildInfo.js", "JavaScript", 0, 0, 9, 0, 1, 3, 13
+"/root/angelwetter-app/src/utils/cache.js", "JavaScript", 0, 0, 6, 0, 1, 1, 8
+"/root/angelwetter-app/src/utils/dateUtils.js", "JavaScript", 0, 0, 19, 0, 1, 7, 27
+"/root/angelwetter-app/src/utils/filters.js", "JavaScript", 0, 0, 13, 0, 1, 5, 19
+"/root/angelwetter-app/src/utils/formatters.js", "JavaScript", 0, 0, 24, 0, 1, 4, 29
+"/root/angelwetter-app/src/utils/geo.js", "JavaScript", 0, 0, 36, 0, 17, 12, 65
+"/root/angelwetter-app/src/utils/nameFormatter.js", "JavaScript", 0, 0, 12, 0, 0, 2, 14
+"/root/angelwetter-app/src/utils/number.js", "JavaScript", 0, 0, 4, 0, 1, 0, 5
+"/root/angelwetter-app/src/utils/pdfExporter.js", "JavaScript", 0, 0, 81, 0, 5, 20, 106
+"/root/angelwetter-app/src/utils/share.js", "JavaScript", 0, 0, 30, 0, 1, 5, 36
+"/root/angelwetter-app/src/utils/sw.js", "JavaScript", 0, 0, 17, 0, 0, 1, 18
+"/root/angelwetter-app/src/utils/validation.js", "JavaScript", 0, 0, 19, 0, 1, 5, 25
+"/root/angelwetter-app/src/utils/weather.js", "JavaScript", 0, 0, 14, 0, 1, 1, 16
+"/root/angelwetter-app/src/utils/weatherFormat.js", "JavaScript", 0, 0, 23, 0, 1, 5, 29
+"/root/angelwetter-app/src/utils/weatherParsing.js", "JavaScript", 0, 0, 60, 0, 11, 15, 86
+"Total", "-", 85, 6150, 2034, 1, 530, 1164, 9964

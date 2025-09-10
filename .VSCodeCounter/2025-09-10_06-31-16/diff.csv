@@ -1,0 +1,13 @@
+"filename", "language", "JavaScript JSX", "JavaScript", "comment", "blank", "total"
+"/root/angelwetter-app/src/App.jsx", "JavaScript JSX", -9, 0, -4, -1, -14
+"/root/angelwetter-app/src/components/Navbar.jsx", "JavaScript JSX", -223, 0, -9, -23, -255
+"/root/angelwetter-app/src/components/VersionInfo.jsx", "JavaScript JSX", 1, 0, 1, 1, 3
+"/root/angelwetter-app/src/components/WeatherNow.jsx", "JavaScript JSX", -369, 0, -15, -33, -417
+"/root/angelwetter-app/src/components/common/FishRating.jsx", "JavaScript JSX", 17, 0, 1, 1, 19
+"/root/angelwetter-app/src/components/weather/CurrentPanel.jsx", "JavaScript JSX", 37, 0, 1, 4, 42
+"/root/angelwetter-app/src/components/weather/DailyScroller.jsx", "JavaScript JSX", 44, 0, 1, 2, 47
+"/root/angelwetter-app/src/components/weather/HourlyScroller.jsx", "JavaScript JSX", 46, 0, 1, 2, 49
+"/root/angelwetter-app/src/components/weather/WeatherNow.jsx", "JavaScript JSX", 185, 0, 11, 14, 210
+"/root/angelwetter-app/src/pages/Home.jsx", "JavaScript JSX", 0, 0, 1, 0, 1
+"/root/angelwetter-app/src/utils/weatherFormat.js", "JavaScript", 0, 9, 0, 1, 10
+"Total", "-", -271, 9, -11, -32, -305
