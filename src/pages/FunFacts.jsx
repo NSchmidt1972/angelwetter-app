@@ -3,18 +3,15 @@ import React, { useMemo, useState } from 'react';
 
 // Daten/Hooks & Utils
 import { useValidFishes } from '../hooks/useValidFishes';
+import { localDayKey, monthKey, monthLabel } from '../utils/dateUtils';
+import { isRainyCatch, isSunnyCatch, extractTempC, extractMoonPhase } from '../utils/weatherParsing';
 import {
-  localDayKey,
-  monthKey,
-  formatDateTime,
-  monthLabel,
-} from '../utils/dateUtils';
-import {
-  isRainyCatch,
-  isSunnyCatch,
-  extractTempC,
-  extractMoonPhase,
-} from '../utils/weatherParsing';
+  formatDateDE,
+  formatDateTimeDE,
+  formatDayLabelDE,
+  formatTimeDE,
+  formatDayShortDE,
+} from "../utils/formatters";
 
 // ------------------ Konstanten ------------------
 const PUBLIC_FROM = new Date('2025-06-01');
@@ -30,11 +27,6 @@ const PREDATOR_LABELS = {
 };
 
 // ------------------ Helpers (lokal) ------------------
-function formatDayShort(k) {
-  const d = new Date(`${k}T00:00:00`);
-  return d.toLocaleDateString('de-DE', { year: '2-digit', month: '2-digit', day: '2-digit' });
-}
-
 const PLACE_ALIASES = [
   [/lob+er+ich/i, 'Ferkensbruch'],
   [/ferkens?bruch/i, 'Ferkensbruch'],
@@ -48,6 +40,8 @@ function normalizePlace(f) {
   }
   return raw.replace(/\s+/g, ' ');
 }
+
+
 
 // Stabile „Shuffle“-Reihenfolge pro Mount
 function useStableShuffleSeed() {
@@ -86,7 +80,21 @@ const Pill = ({ children }) => (
 // ===================================================
 export default function FunFacts() {
   // 1) Immer zuerst: Daten holen
+  // useValidFishes liefert:
+  // - fishes: alle sichtbaren Roh-Fänge (inkl. z. B. für „Blank“-Auswertungen)
+  // - validFishes: nur Fänge, die in Statistiken zählen (z. B. count_in_stats = true)
   const { fishes, validFishes, loading, loadError } = useValidFishes({ PUBLIC_FROM, vertraute });
+
+
+ // 1.5) Nur Fänge, die wirklich in die Statistiken sollen
+ //     (DB-Flag bevorzugt; Fallback für ältere Datensätze)
+ const statsFishes = useMemo(() => {
+ return (validFishes || []).filter((f) => {
+   if (typeof f.count_in_stats === 'boolean') return f.count_in_stats;
+    if (f.under_min_size === true || f.out_of_season === true) return false;
+     return true;
+   });
+ }, [validFishes]);
 
   // 2) Seed *immer* oben, niemals nach einem Early-Return!
   const seed = useStableShuffleSeed();
@@ -94,7 +102,7 @@ export default function FunFacts() {
   // ---------- 1) Meiste Fische an einem Tag (pro Angler & Tag)
   const mostInOneDay = useMemo(() => {
     const byAnglerDay = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const key = `${f.angler || 'Unbekannt'}__${localDayKey(new Date(f.timestamp))}`;
       (byAnglerDay[key] ||= []).push(f);
     });
@@ -124,83 +132,94 @@ export default function FunFacts() {
         };
       }),
     };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 2) Größter Fisch
   const biggest = useMemo(() => {
-    if (validFishes.length === 0) return null;
+    if (statsFishes.length === 0) return null;
     let max = -Infinity;
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const s = parseFloat(f.size);
       if (!Number.isNaN(s) && s > max) max = s;
     });
-    const top = validFishes.filter((f) => parseFloat(f.size) === max);
+    const top = statsFishes.filter((f) => parseFloat(f.size) === max);
     return { size: max, items: top };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 3) Kleinster Fisch (> 0)
   const smallest = useMemo(() => {
-    if (validFishes.length === 0) return null;
+    if (statsFishes.length === 0) return null;
     let min = Infinity;
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const s = parseFloat(f.size);
       if (!Number.isNaN(s) && s > 0 && s < min) min = s;
     });
-    const bottom = validFishes.filter((f) => parseFloat(f.size) === min);
+    const bottom = statsFishes.filter((f) => parseFloat(f.size) === min);
     return { size: min, items: bottom };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 4) Meiste Fische in einer Stunde (pro Angler & Stunden-Bucket)
   const mostInOneHour = useMemo(() => {
     const byAnglerHour = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const dt = new Date(f.timestamp);
-      const hourLabel = `${localDayKey(dt)} ${String(dt.getHours()).padStart(2, '0')}:00`;
-      const key = `${f.angler || 'Unbekannt'}__${hourLabel}`;
-      (byAnglerHour[key] ||= []).push(f);
+      // Stunde auf :00 trimmen
+      const hourStart = new Date(
+        dt.getFullYear(),
+        dt.getMonth(),
+        dt.getDate(),
+        dt.getHours(),
+        0, 0, 0
+      );
+      // Stabiler, technischer Key (ohne Locale, ohne Leerzeichen)
+      const hourKey = `${localDayKey(hourStart)}T${String(hourStart.getHours()).padStart(2, '0')}`;
+      const key = `${f.angler || 'Unbekannt'}__${hourKey}`;
+
+      (byAnglerHour[key] ||= { entries: [], hourStart }).entries.push(f);
     });
 
     let best = 0;
     let winners = [];
-    Object.entries(byAnglerHour).forEach(([key, entries]) => {
-      const count = entries.length;
+    Object.entries(byAnglerHour).forEach(([key, obj]) => {
+      const count = obj.entries.length;
       if (count > best) {
         best = count;
-        winners = [{ key, entries }];
+        winners = [{ key, entries: obj.entries, hourStart: obj.hourStart }];
       } else if (count === best) {
-        winners.push({ key, entries });
+        winners.push({ key, entries: obj.entries, hourStart: obj.hourStart });
       }
     });
 
     return {
       count: best,
-      items: winners.map(({ key, entries }) => {
-        const [angler, hourLabel] = key.split('__');
+      items: winners.map(({ key, entries, hourStart }) => {
+        const [angler] = key.split('__');
         return {
           angler,
-          hourLabel,
+          // Für die UI: „dd.mm.yyyy HH:MM“
+          hourLabel: `${formatDateDE(hourStart)} ${formatTimeDE(hourStart)}`,
           examples: entries
             .slice()
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)),
         };
       }),
     };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // Hilfs-Map Gesamtanzahl pro (Angler, Tag)
   const totalPerAnglerDay = useMemo(() => {
     const map = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const key = `${f.angler || 'Unbekannt'}__${localDayKey(new Date(f.timestamp))}`;
       map[key] = (map[key] || 0) + 1;
     });
     return map;
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 5) Meiste verschiedene Fischarten an einem Tag
   const mostSpeciesInOneDay = useMemo(() => {
     const speciesMap = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const key = `${f.angler || 'Unbekannt'}__${localDayKey(new Date(f.timestamp))}`;
       const fishType = (f.fish || '').trim();
       if (!fishType) return;
@@ -227,12 +246,12 @@ export default function FunFacts() {
         return { angler, day, species: species.sort(), totalThatDay };
       }),
     };
-  }, [validFishes, totalPerAnglerDay]);
+  }, [statsFishes, totalPerAnglerDay]);
 
   // ---------- 6) Meiste Monsterfische (> 80 cm) pro Angler
   const mostMonsterFishes = useMemo(() => {
     const counts = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const size = parseFloat(f.size);
       if (!Number.isNaN(size) && size > 80) {
         const who = f.angler || 'Unbekannt';
@@ -252,14 +271,14 @@ export default function FunFacts() {
     });
 
     return { count: best, items: winners };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 7) Tag mit den meisten Fischen (gesamt)
   const mostFishesDay = useMemo(() => {
-    if (validFishes.length === 0) return { count: 0, days: [] };
+    if (statsFishes.length === 0) return { count: 0, days: [] };
 
     const byDay = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const key = localDayKey(new Date(f.timestamp));
       if (!byDay[key]) byDay[key] = { count: 0, anglers: new Set() };
       byDay[key].count += 1;
@@ -277,22 +296,14 @@ export default function FunFacts() {
       }
     });
 
-    const DTDAY = new Intl.DateTimeFormat('de-DE', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-
-    winners = winners.map((w) => ({ ...w, dayLabel: DTDAY.format(new Date(w.day)) }));
     return { count: best, days: winners };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 8) Monat mit den meisten Fischen (gesamt)
   const mostFishesMonth = useMemo(() => {
-    if (validFishes.length === 0) return { count: 0, months: [] };
+    if (statsFishes.length === 0) return { count: 0, months: [] };
     const byMonth = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const key = monthKey(new Date(f.timestamp));
       byMonth[key] = (byMonth[key] || 0) + 1;
     });
@@ -309,16 +320,16 @@ export default function FunFacts() {
     });
 
     return { count: best, months: winners };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 9) Bester Wochentag (gesamt)
   const mostFishesWeekday = useMemo(() => {
-    if (validFishes.length === 0) return { max: 0, items: [] };
+    if (statsFishes.length === 0) return { max: 0, items: [] };
 
     const counts = new Array(7).fill(0); // 0=Mo … 6=So
     const toMon0 = (jsDay) => (jsDay + 6) % 7; // JS: 0=So → 0=Mo
 
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const d = new Date(f.timestamp);
       counts[toMon0(d.getDay())] += 1;
     });
@@ -332,13 +343,13 @@ export default function FunFacts() {
       .map((it) => ({ ...it, isBest: it.count === max && max > 0 }));
 
     return { max, items };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 10) Meiste verschiedene Fischarten in 1 Stunde
   const mostSpeciesInOneHour = useMemo(() => {
     const speciesByKey = {};
     const listByKey = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const dt = new Date(f.timestamp);
       const hourLabel = `${localDayKey(dt)} ${String(dt.getHours()).padStart(2, '0')}:00`;
       const key = `${f.angler || 'Unbekannt'}__${hourLabel}`;
@@ -368,12 +379,12 @@ export default function FunFacts() {
     });
 
     return { count: best, items };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 11) Meiste unterschiedlichen Orte pro Angler (ohne „nur Ferkensbruch“)
   const mostPlacesAngler = useMemo(() => {
     const placesByAngler = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       const place = normalizePlace(f);
@@ -397,13 +408,13 @@ export default function FunFacts() {
     const ranking = [...entries].sort((a, b) => (b.count - a.count) || a.angler.localeCompare(b.angler));
 
     return { count: best, winners, ranking };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 12) Raubfisch-König: Summe Längen Prädatoren
   const predatorKing = useMemo(() => {
     const totals = {};
     const perSpecies = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const type = (f.fish || '').toLowerCase().trim();
       if (!PREDATOR_SET.has(type)) return;
       const size = parseFloat(f.size);
@@ -426,7 +437,7 @@ export default function FunFacts() {
     const max = entries[0].sum;
     const winners = entries.filter((e) => Math.abs(e.sum - max) < 1e-9);
     return { max, winners, ranking: entries };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 13) Schwerster Fisch (Gewicht)
   const heaviestFish = useMemo(() => {
@@ -458,7 +469,7 @@ export default function FunFacts() {
     });
 
     const fishByAngler = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       fishByAngler[who] = (fishByAngler[who] || 0) + 1;
     });
@@ -483,7 +494,7 @@ export default function FunFacts() {
     const max = entries[0].ratio;
     const winners = entries.filter((e) => Math.abs(e.ratio - max) < 1e-9);
     return { max, winners, ranking: entries };
-  }, [fishes, validFishes]);
+  }, [fishes, statsFishes]);
 
   // ---------- 15) Meiste Rotaugen
   const mostRotaugen = useMemo(() => {
@@ -492,7 +503,7 @@ export default function FunFacts() {
       return s === 'rotauge' || s === 'rotaugen' || s === 'plötze' || s === 'ploetze' || s.includes('rotauge');
     };
     const counts = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       if (!isRotauge(f.fish)) return;
       const who = (f.angler || 'Unbekannt').trim();
       counts[who] = (counts[who] || 0) + 1;
@@ -505,14 +516,14 @@ export default function FunFacts() {
     const max = entries[0].count;
     const winners = entries.filter((e) => e.count === max);
     return { max, winners, ranking: entries };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 16) Vollmond – wer fängt am meisten?
   const mostAtFullMoon = useMemo(() => {
     const counts = {};
     const isFullMoon = (phase, eps = 0.06) => phase != null && Math.abs(phase - 0.5) <= eps;
 
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const phase = extractMoonPhase(f);
       if (!isFullMoon(phase)) return;
       const who = (f.angler || 'Unbekannt').trim();
@@ -525,22 +536,20 @@ export default function FunFacts() {
     const max = entries[0].count;
     const winners = entries.filter((e) => e.count === max);
     return { max, winners, ranking: entries };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 17) Nachteulen: 22–04 Uhr
   const nightOwls = useMemo(() => {
-    if (validFishes.length === 0) return { winners: [], ranking: [], total: 0 };
+    if (statsFishes.length === 0) return { winners: [], ranking: [], total: 0 };
 
     const counts = {};
     const lastMinutes = {};
     const samples = {};
-    const toTimeLabel = (mins) =>
-      new Date(1970, 0, 1, Math.floor(mins / 60), mins % 60).toLocaleTimeString('de-DE', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
 
-    validFishes.forEach((f) => {
+    const toTimeLabel = (mins) =>
+      formatTimeDE(new Date(1970, 0, 1, Math.floor(mins / 60), mins % 60));
+
+    statsFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       const dt = new Date(f.timestamp);
@@ -572,11 +581,11 @@ export default function FunFacts() {
     const winners = entries.length ? entries.filter((e) => e.count === entries[0].count) : [];
     const total = entries.reduce((s, e) => s + e.count, 0);
     return { winners, ranking: entries, total };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 18) Early Bird: 04–09 Uhr
   const earlyBird = useMemo(() => {
-    if (validFishes.length === 0)
+    if (statsFishes.length === 0)
       return { minMin: null, winners: [], ranking: [], window: { start: '04:00', end: '09:00' } };
 
     const START_MIN = 4 * 60;
@@ -584,7 +593,7 @@ export default function FunFacts() {
     const bestByAngler = {};
     const earlyCounts = {};
 
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       const dt = new Date(f.timestamp);
@@ -597,10 +606,7 @@ export default function FunFacts() {
     });
 
     const toTimeLabel = (mins) =>
-      new Date(1970, 0, 1, Math.floor(mins / 60), mins % 60).toLocaleTimeString('de-DE', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      formatTimeDE(new Date(1970, 0, 1, Math.floor(mins / 60), mins % 60));
 
     const entries = Object.entries(bestByAngler).map(([angler, { minutes, entry }]) => ({
       angler,
@@ -621,13 +627,13 @@ export default function FunFacts() {
     const minMin = entries[0].minutes;
     const winners = entries.filter((e) => e.minutes === minMin);
     return { minMin, winners, ranking: entries, window: { start: '04:00', end: '09:00' } };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 19) Wer fängt am meisten bei Regen?
   const mostInRain = useMemo(() => {
     const counts = {};
     const examples = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       if (!isRainyCatch(f)) return;
       const who = (f.angler || 'Unbekannt').trim();
       counts[who] = (counts[who] || 0) + 1;
@@ -648,14 +654,14 @@ export default function FunFacts() {
     const max = entries[0].count;
     const winners = entries.filter((e) => e.count === max);
     return { max, winners, ranking: entries };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 20) Wer angelt ausschließlich bei Sonnenschein?
   const sunshineOnly = useMemo(() => {
-    if (validFishes.length === 0) return { winners: [], ranking: [] };
+    if (statsFishes.length === 0) return { winners: [], ranking: [] };
     const totalBy = {};
     const sunnyBy = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       totalBy[who] = (totalBy[who] || 0) + 1;
@@ -672,12 +678,12 @@ export default function FunFacts() {
 
     entries.sort((a, b) => b.total - a.total || a.angler.localeCompare(b.angler));
     return { winners: entries, ranking: entries };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 21) Top 3 Fischarten
   const topThreeSpecies = useMemo(() => {
     const counts = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const s = (f.fish || '').trim();
       if (!s) return;
       counts[s] = (counts[s] || 0) + 1;
@@ -690,14 +696,14 @@ export default function FunFacts() {
     const top3 = list.slice(0, 3);
     const max = top3[0]?.count || 0;
     return { max, items: top3 };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 22) Längste Pause zwischen Fangtagen
   const longestBreakBetweenCatchDays = useMemo(() => {
-    if (validFishes.length === 0) return { gap: 0, winners: [], ranking: [] };
+    if (statsFishes.length === 0) return { gap: 0, winners: [], ranking: [] };
 
     const daysByAngler = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       const day = localDayKey(new Date(f.timestamp));
@@ -713,7 +719,7 @@ export default function FunFacts() {
       if (days.length < 2) return;
       let maxGap = 0;
       let from = days[0],
-        to = days[0];
+          to = days[0];
       for (let i = 0; i < days.length - 1; i++) {
         const gap = diffDays(days[i], days[i + 1]);
         if (gap > maxGap) {
@@ -730,14 +736,14 @@ export default function FunFacts() {
     const best = entries[0].gap;
     const winners = entries.filter((e) => e.gap === best);
     return { gap: best, winners, ranking: entries };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 23) Längste Fangserie
   const longestCatchStreak = useMemo(() => {
-    if (validFishes.length === 0) return { len: 0, winners: [], ranking: [] };
+    if (statsFishes.length === 0) return { len: 0, winners: [], ranking: [] };
 
     const daysByAngler = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       const day = localDayKey(new Date(f.timestamp));
@@ -753,11 +759,11 @@ export default function FunFacts() {
       if (days.length === 0) return;
 
       let maxLen = 1,
-        bestStart = days[0],
-        bestEnd = days[0];
+          bestStart = days[0],
+          bestEnd = days[0];
       let curLen = 1,
-        curStart = days[0],
-        curEnd = days[0];
+          curStart = days[0],
+          curEnd = days[0];
 
       for (let i = 1; i < days.length; i++) {
         if (diffDays(days[i - 1], days[i]) === 1) {
@@ -788,14 +794,14 @@ export default function FunFacts() {
     const best = entries[0].length;
     const winners = entries.filter((e) => e.length === best);
     return { len: best, winners, ranking: entries };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 24) Paare (gemeinsame Sessions)
   const fishPairs = useMemo(() => {
-    if (validFishes.length === 0) return { winners: [], top3: [], lauraNicol: null };
+    if (statsFishes.length === 0) return { winners: [], top3: [], lauraNicol: null };
 
     const sessions = {};
-    validFishes.forEach((f) => {
+    statsFishes.forEach((f) => {
       const key = `${localDayKey(new Date(f.timestamp))}__${f.lat?.toFixed(3)}_${f.lon?.toFixed(3)}`;
       (sessions[key] ||= []).push(f);
     });
@@ -806,8 +812,7 @@ export default function FunFacts() {
       if (anglers.length < 2) return;
       for (let i = 0; i < anglers.length; i++) {
         for (let j = i + 1; j < anglers.length; j++) {
-          const a = anglers[i],
-            b = anglers[j];
+          const a = anglers[i], b = anglers[j];
           const key = [a, b].sort().join(' & ');
           pairCounts[key] = (pairCounts[key] || 0) + sessionFishes.length;
         }
@@ -833,11 +838,11 @@ export default function FunFacts() {
       top3,
       lauraNicol,
     };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 25) Aal-Magier
   const eelWizard = useMemo(() => {
-    const onlyEels = validFishes.filter((f) => f.fish?.trim().toLowerCase() === 'aal');
+    const onlyEels = statsFishes.filter((f) => f.fish?.trim().toLowerCase() === 'aal');
     if (onlyEels.length === 0) return null;
 
     const byAngler = {};
@@ -851,7 +856,7 @@ export default function FunFacts() {
       .sort((a, b) => b.count - a.count);
 
     return sorted[0];
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- 26) Grundel-Champion
   const grundelChampion = useMemo(() => {
@@ -986,13 +991,13 @@ export default function FunFacts() {
     return { max, winners, ranking: entries };
   }, [validFishes]);
 
-   // ---------- 32) Ø Fische pro Angler-Tag (gesamt)
+  // ---------- 32) Ø Fische pro Angler-Tag (gesamt)
   const overallAvgPerAnglerDay = useMemo(() => {
-    if (validFishes.length === 0) {
+    if (statsFishes.length === 0) {
       return { avg: 0, totalAnglerDays: 0, totalFishes: 0 };
     }
     const perAnglerDay = new Map();
-    for (const f of validFishes) {
+    for (const f of statsFishes) {
       const dayKey = localDayKey(new Date(f.timestamp));
       const key = `${f.angler}|${dayKey}`;
       perAnglerDay.set(key, (perAnglerDay.get(key) || 0) + 1);
@@ -1002,7 +1007,7 @@ export default function FunFacts() {
     const totalAnglerDays = perAnglerDay.size;
     const avg = totalAnglerDays ? totalFishes / totalAnglerDays : 0;
     return { avg, totalAnglerDays, totalFishes };
-  }, [validFishes]);
+  }, [statsFishes]);
 
   // ---------- Karten zusammenstellen (Seed wird IMMER verwendet) ----------
   const cards = useMemo(
@@ -1021,16 +1026,13 @@ export default function FunFacts() {
                     <div className="font-medium text-green-700 dark:text-green-300">
                       {it.angler}
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-300">{it.day}</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300">
+                      {formatDateDE(`${it.day}T00:00:00`)}
+                    </div>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {it.examples.map((e) => (
                         <Pill key={e.id}>
-                          {e.fish} • {parseFloat(e.size).toFixed(0)} cm •{' '}
-                          {new Date(e.timestamp).toLocaleTimeString('de-DE', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}{' '}
-                          Uhr
+                          {e.fish} • {parseFloat(e.size).toFixed(0)} cm • {formatTimeDE(e.timestamp)} Uhr
                         </Pill>
                       ))}
                     </div>
@@ -1053,7 +1055,7 @@ export default function FunFacts() {
                       <div>
                         <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
                         <div className="text-sm text-gray-600 dark:text-gray-300">
-                          {f.fish} • {formatDateTime(f.timestamp)}
+                          {f.fish} • {formatDateTimeDE(f.timestamp)}
                         </div>
                       </div>
                     </li>
@@ -1078,7 +1080,7 @@ export default function FunFacts() {
                       <div>
                         <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
                         <div className="text-sm text-gray-600 dark:text-gray-300">
-                          {f.fish} • {formatDateTime(f.timestamp)}
+                          {f.fish} • {formatDateTimeDE(f.timestamp)}
                         </div>
                       </div>
                     </li>
@@ -1126,7 +1128,9 @@ export default function FunFacts() {
                     <li key={idx} className="flex items-start justify-between gap-3">
                       <div>
                         <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">{it.day}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          {formatDateDE(`${it.day}T00:00:00`)}
+                        </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
                           Insgesamt an diesem Tag: <b>{it.totalThatDay}</b> Fänge
                         </div>
@@ -1174,7 +1178,7 @@ export default function FunFacts() {
                   {mostFishesDay.days.map((d, i) => (
                     <li key={i} className="p-2 rounded bg-gray-50 dark:bg-gray-800 flex flex-col">
                       <div className="flex justify-between items-center">
-                        <span className="font-medium">{d.dayLabel}</span>
+                        <span className="font-medium">{formatDayLabelDE(d.day)}</span>
                         <span className="font-bold text-green-700 dark:text-green-300">{d.count}x</span>
                       </div>
                       {d.anglers && d.anglers.length > 0 && (
@@ -1274,9 +1278,6 @@ export default function FunFacts() {
             )}
           </Card>,
 
-
-          
-
           // 11) Orte
           <Card key="places" title="🧭 Wer hat an den meisten unterschiedlichen Orten geangelt?">
             {mostPlacesAngler.count > 0 ? (
@@ -1310,7 +1311,7 @@ export default function FunFacts() {
             )}
           </Card>,
 
-                    // 12) Raubfisch-König
+          // 12) Raubfisch-König
           <Card
             key="predator"
             title="👑 Wer ist der Raubfisch-König? (Gesamtlänge: Barsch, Aal, Hecht, Zander, Wels)"
@@ -1360,7 +1361,7 @@ export default function FunFacts() {
                         <div className="text-sm text-gray-600 dark:text-gray-300">
                           {f.fish}
                           {parseFloat(f.size) > 0 ? ` • ${parseFloat(f.size).toFixed(0)} cm` : ''} •{' '}
-                          {formatDateTime(f.timestamp)}
+                          {formatDateTimeDE(f.timestamp)}
                         </div>
                       </div>
                       <div className="text-xl font-bold text-green-700 dark:text-green-300">
@@ -1376,27 +1377,27 @@ export default function FunFacts() {
           </Card>,
 
           // 14) Effizienz
-          <Card key="efficiency" title="🏅 Wer angelt am effizientesten? (Fische pro Fangtag)">
-            {mostEfficientAngler.winners.length > 0 ? (
-              <ul className="space-y-2">
-                {mostEfficientAngler.winners.map((it, idx) => (
-                  <li key={idx} className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">
-                        {it.fish} Fische auf {it.days} Fangtage
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {it.ratio.toLocaleString('de-DE', { maximumFractionDigits: 2 })} / Tag
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>Keine Daten</p>
-            )}
-          </Card>,
+  <Card key="efficiency" title="🏅 Wer angelt am effizientesten? (Fische pro Fangtag)">
+    {mostEfficientAngler.winners.length > 0 ? (
+      <ul className="space-y-2">
+        {mostEfficientAngler.winners.map((it, idx) => (
+          <li key={idx} className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                {it.fish} Fische auf {it.days} Fangtage
+              </div>
+            </div>
+            <div className="text-xl font-bold text-green-700 dark:text-green-300">
+              {it.ratio.toLocaleString('de-DE', { maximumFractionDigits: 2 })} / Tag
+            </div>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p>Keine Daten</p>
+    )}
+  </Card>,
 
           // 15) Rotaugen
           <Card key="rotauge" title="🐟 Wer fängt beim ASV Rotauge die meisten Rotaugen?">
@@ -1494,6 +1495,7 @@ export default function FunFacts() {
                     <div className="max-w-[70%]">
                       <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
                       <div className="text-sm text-gray-600 dark:text-gray-300">
+                        {/* timeLabel wird im Memo bereits erzeugt – dort auf formatTimeDE umgestellt */}
                         Frühester Fang um {it.timeLabel} Uhr
                       </div>
                     </div>
@@ -1519,11 +1521,7 @@ export default function FunFacts() {
                       <div className="flex flex-wrap gap-1 mt-1">
                         {it.examples.map((e) => (
                           <Pill key={e.id}>
-                            {new Date(e.timestamp).toLocaleTimeString('de-DE', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}{' '}
-                            • {e.fish}
+                            {formatTimeDE(e.timestamp)} • {e.fish}
                           </Pill>
                         ))}
                       </div>
@@ -1596,7 +1594,7 @@ export default function FunFacts() {
                     <div className="max-w-[70%]">
                       <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
                       <div className="text-sm text-gray-600 dark:text-gray-300">
-                        Pause von {formatDayShort(it.from)} bis {formatDayShort(it.to)}
+                        Pause von {formatDayShortDE(`${it.from}T00:00:00`)} bis {formatDayShortDE(`${it.to}T00:00:00`)}
                       </div>
                     </div>
                     <div className="text-xl font-bold text-green-700 dark:text-green-300">
@@ -1619,7 +1617,7 @@ export default function FunFacts() {
                     <div className="max-w-[70%]">
                       <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
                       <div className="text-sm text-gray-600 dark:text-gray-300">
-                        Serie von {it.length} Tag{it.length === 1 ? '' : 'en'}: {formatDayShort(it.from)} – {formatDayShort(it.to)}
+                        Serie von {it.length} Tag{it.length === 1 ? '' : 'en'}: {formatDayShortDE(`${it.from}T00:00:00`)} – {formatDayShortDE(`${it.to}T00:00:00`)}
                       </div>
                     </div>
                     <div className="text-xl font-bold text-green-700 dark:text-green-300">
@@ -1823,7 +1821,7 @@ export default function FunFacts() {
                           {f.angler}
                         </div>
                         <div className="text-sm text-gray-600 dark:text-gray-300">
-                          {f.fish} • {formatDateTime(f.timestamp)}
+                          {f.fish} • {formatDateTimeDE(f.timestamp)}
                         </div>
                       </div>
                       <div className="text-xl font-bold text-green-700 dark:text-green-300">
@@ -1851,7 +1849,7 @@ export default function FunFacts() {
                         </div>
                         {it.sample && (
                           <div className="text-xs text-gray-600 dark:text-gray-300">
-                            Beispiel: {it.sample.fish} • {parseFloat(it.bestSize).toFixed(0)} cm • {formatDateTime(it.sample.timestamp)}
+                            Beispiel: {it.sample.fish} • {parseFloat(it.bestSize).toFixed(0)} cm • {formatDateTimeDE(it.sample.timestamp)}
                           </div>
                         )}
                       </div>
@@ -1908,14 +1906,43 @@ export default function FunFacts() {
               <p>Keine Daten</p>
             )}
           </Card>
-
-
-  ],
+        ],
         seed
       ),
     [
       seed,
-      mostInOneDay, /* … alle abhängigen Werte wie in deiner Vorlage … */ overallAvgPerAnglerDay
+      mostInOneDay,
+      biggest,
+      smallest,
+      mostInOneHour,
+      mostSpeciesInOneDay,
+      mostMonsterFishes,
+      mostFishesDay,
+      mostFishesMonth,
+      mostFishesWeekday,
+      mostSpeciesInOneHour,
+      mostPlacesAngler,
+      predatorKing,
+      heaviestFish,
+      mostEfficientAngler,
+      mostRotaugen,
+      mostAtFullMoon,
+      nightOwls,
+      earlyBird,
+      mostInRain,
+      sunshineOnly,
+      topThreeSpecies,
+      longestBreakBetweenCatchDays,
+      longestCatchStreak,
+      fishPairs,
+      eelWizard,
+      grundelChampion,
+      foreignAnglers,
+      schneiderKoenig,
+      worstBlankMonth,
+      hottestCatch,
+      frostCatch,
+      overallAvgPerAnglerDay,
     ]
   );
 
@@ -1950,3 +1977,4 @@ export default function FunFacts() {
     </div>
   );
 }
+

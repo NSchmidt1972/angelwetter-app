@@ -108,15 +108,7 @@ export default function SettingsPage() {
               </label>
             </div>
 
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2">🛠 Angelplätze</span>
-              <Link
-                to="/spots"
-                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
-              >
-                Öffnen
-              </Link>
-            </div>
+            
           </>
         )}
 

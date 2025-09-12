@@ -37,7 +37,6 @@ const MapView       = lazy(() => import('@/pages/MapView'));
 const Regulations   = lazy(() => import('@/pages/Regulations'));
 
 // Optional
-const SpotAdmin     = safeLazy(() => import('@/components/SpotAdmin'), 'SpotAdmin');
 const SettingsPage  = safeLazy(() => import('@/pages/SettingsPage'), 'SettingsPage');
 const FunFacts      = safeLazy(() => import('@/pages/FunFacts'), 'FunFacts');
 
@@ -102,14 +101,7 @@ export default function AppRoutes({
               </RequireAdmin>
             }
           />
-          <Route
-            path="spots"
-            element={
-              <RequireAdmin isAdmin={isAdmin}>
-                <SpotAdmin />
-              </RequireAdmin>
-            }
-          />
+         
           <Route path="settings" element={<SettingsPage />} />
 
           {/* Fallback */}

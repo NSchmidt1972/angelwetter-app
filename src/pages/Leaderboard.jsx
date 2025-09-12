@@ -18,10 +18,22 @@ export default function Leaderboard() {
     MARILOU_ALIASES.includes((name || '').trim().toLowerCase());
   const isCurrentUserMarilou = isMarilouName(rawName);
 
+  // ⬇️ Nur zählbare Fänge laden
   useEffect(() => {
     async function loadData() {
-      const { data, error } = await supabase.from('fishes').select('*');
-      if (!error) setFishes(data || []);
+      // lade nur die Felder, die wir hier brauchen
+      const { data, error } = await supabase
+        .from('fishes')
+        .select('fish,size,angler,timestamp,count_in_stats,under_min_size,out_of_season')
+        .eq('count_in_stats', true); // <— Hauptfilter
+
+      if (error) {
+        console.error('Fehler beim Laden der Fänge:', error);
+        setFishes([]);
+        return;
+      }
+
+      setFishes(data || []);
     }
     loadData();
   }, []);
@@ -47,7 +59,12 @@ export default function Leaderboard() {
     prepareFormattedNames();
   }, []);
 
+  // 🔒 Clientseitige Zusatzsicherheit (falls mal alte Zeilen ohne Flag dabei sind)
   const filteredFishes = fishes.filter((f) => {
+    // 0) Falls Flag vorhanden: harte Schranke
+    if (typeof f.count_in_stats === 'boolean' && f.count_in_stats === false) return false;
+
+    // 1) Basis-Sichtbarkeit (wie gehabt)
     const fangDatum = new Date(f.timestamp);
     const istAbNeu = fangDatum >= PUBLIC_FROM;
 
@@ -56,24 +73,26 @@ export default function Leaderboard() {
     );
     const eingeloggtVertraut = vertraute.includes(anglerNameLC);
 
-    // Basis-Sichtbarkeit (wie gehabt)
     const darfSehenBasis = showIntern
       ? (eingeloggtVertraut && fangVonVertrautem)
       : istAbNeu;
 
+    // 2) verwertbar (Größe vorhanden > 0)
     const size = parseFloat(f.size);
     const istVerwertbar =
       f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
 
-    // 🔒 Marilou-Regel:
-    // - Wenn der Fang von Marilou ist, nur anzeigen, wenn *Marilou selbst eingeloggt* ist.
-    // - Für alle anderen Nutzer sind Marilou-Fänge unsichtbar.
+    // 3) Marilou-Regel
     const istFangVonMarilou = isMarilouName(f.angler);
     if (istFangVonMarilou) {
       return isCurrentUserMarilou && istVerwertbar;
     }
 
-    // Standard für alle anderen
+    // 4) Optionaler Fallback auf Roh-Flags, falls count_in_stats fehlt
+    if (typeof f.count_in_stats !== 'boolean') {
+      if (f.under_min_size === true || f.out_of_season === true) return false;
+    }
+
     return darfSehenBasis && istVerwertbar;
   });
 
@@ -145,7 +164,7 @@ export default function Leaderboard() {
 
             <p className="text-sm text-gray-600 dark:text-gray-300">
               🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt:{' '}
-              {(a.sizeSum / a.total).toFixed(1)} cm
+              {(a.sizeSum / a.total).toFixed(1)} cm
             </p>
 
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
@@ -159,7 +178,7 @@ export default function Leaderboard() {
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
                   <th className="text-left py-1 font-sans">Fischart</th>
-                  <th className="text-right py-1">Ø Größe</th>
+                  <th className="text-right py-1">Ø Größe</th>
                   <th className="text-right pr-2 py-1">Punkte</th>
                 </tr>
               </thead>
@@ -178,8 +197,8 @@ export default function Leaderboard() {
                         className="border-b border-gray-100 dark:border-gray-700"
                       >
                         <td className="font-sans py-1">{f}</td>
-                        <td className="text-right py-1">{avg} cm</td>
-                        <td className="text-right pr-2 py-1">{p.toFixed(0)} Pkt.</td>
+                        <td className="text-right py-1">{avg} cm</td>
+                        <td className="text-right pr-2 py-1">{p.toFixed(0)} Pkt.</td>
                       </tr>
                     );
                   })}
