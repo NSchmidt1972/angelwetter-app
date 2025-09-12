@@ -1009,6 +1009,119 @@ export default function FunFacts() {
     return { avg, totalAnglerDays, totalFishes };
   }, [statsFishes]);
 
+  // ---------- 33) Angel-Queen – welche Frau fängt die meisten Fische?
+const angelQueen = useMemo(() => {
+  if (statsFishes.length === 0) return { winners: [], ranking: [] };
+
+  // Vergleich robust nur über den Vornamen (Volllname → erster Token)
+  const FEMALE_FIRSTNAMES = new Set(["laura", "marilou", "julia"]);
+  const strip = (s) =>
+    (s || "")
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .trim();
+
+  const counts = {};          // key: Vorname (normalized) → { label, count }
+  statsFishes.forEach((f) => {
+    const who = (f.angler || "Unbekannt").trim();
+    if (!who) return;
+    const first = strip(who).split(/\s+/)[0];       // “Laura Rittlinger” → “Laura”
+    const key = first.toLowerCase();
+    if (!FEMALE_FIRSTNAMES.has(key)) return;        // nur Laura / Marilou / Julia
+
+    if (!counts[key]) counts[key] = { label: first, count: 0 };
+    counts[key].count += 1;
+  });
+
+  // Ranking bauen
+  const ranking = Object.values(counts).sort(
+    (a, b) => b.count - a.count || a.label.localeCompare(b.label, "de")
+  );
+
+  if (ranking.length === 0) return { winners: [], ranking: [] };
+
+  const best = ranking[0].count;
+  const winners = ranking.filter((e) => e.count === best);
+
+  // Für Konsistenz der Rückgabe wie bei anderen Karten:
+  // mapping auf { angler, total } (analog zu deinen Strukturen)
+  return {
+    winners: winners.map((e) => ({ angler: e.label, total: e.count })),
+    ranking: ranking.map((e) => ({ angler: e.label, total: e.count })),
+  };
+}, [statsFishes]);
+
+// ---------- 34) Foto-Künstler – wer hat die meisten Fangfotos?
+const photoArtist = useMemo(() => {
+  if (statsFishes.length === 0) return { winners: [], ranking: [] };
+
+  const counts = {}; // angler -> { angler, total }
+  statsFishes.forEach((f) => {
+    const who = (f.angler || 'Unbekannt').trim();
+    const hasPhoto = typeof f.photo_url === 'string' && f.photo_url.trim().length > 0;
+    if (!who || !hasPhoto) return;
+    if (!counts[who]) counts[who] = { angler: who, total: 0 };
+    counts[who].total += 1;
+  });
+
+  const ranking = Object.values(counts).sort(
+    (a, b) => b.total - a.total || a.angler.localeCompare(b.angler, 'de')
+  );
+  if (ranking.length === 0) return { winners: [], ranking: [] };
+
+  const best = ranking[0].total;
+  const winners = ranking.filter((e) => e.total === best);
+
+  return { winners, ranking };
+}, [statsFishes]);
+
+// ---------- 35) Rekordjäger – wer hält die meisten Vereinsrekorde (größte Fische pro Art)?
+const recordHunter = useMemo(() => {
+  if (statsFishes.length === 0) return { winners: [], ranking: [] };
+
+  // pro Art die Maximalgröße finden
+  const bySpecies = {}; // species -> { max: number, holders: Set(angler) }
+  statsFishes.forEach((f) => {
+    const species = (f.fish || '').trim();
+    const who = (f.angler || 'Unbekannt').trim();
+    const size = typeof f.size === 'number' ? f.size : parseFloat(String(f.size || '').replace(',', '.'));
+    if (!species || !who || !isFinite(size)) return;
+
+    if (!bySpecies[species]) {
+      bySpecies[species] = { max: size, holders: new Set([who]) };
+    } else {
+      if (size > bySpecies[species].max) {
+        bySpecies[species].max = size;
+        bySpecies[species].holders = new Set([who]);
+      } else if (size === bySpecies[species].max) {
+        bySpecies[species].holders.add(who);
+      }
+    }
+  });
+
+  // Rekorde je Angler zählen + Liste der gehaltenen Arten mit Maxwert
+  const counts = {}; // angler -> { angler, total, species: Array<{name, max}> }
+  Object.entries(bySpecies).forEach(([species, info]) => {
+    const max = info.max;
+    info.holders.forEach((who) => {
+      if (!counts[who]) counts[who] = { angler: who, total: 0, species: [] };
+      counts[who].total += 1;
+      counts[who].species.push({ name: species, max });
+    });
+  });
+
+  const ranking = Object.values(counts).sort(
+    (a, b) => b.total - a.total || a.angler.localeCompare(b.angler, 'de')
+  );
+  if (ranking.length === 0) return { winners: [], ranking: [] };
+
+  const best = ranking[0].total;
+  const winners = ranking.filter((e) => e.total === best);
+
+  return { winners, ranking };
+}, [statsFishes]);
+
+
   // ---------- Karten zusammenstellen (Seed wird IMMER verwendet) ----------
   const cards = useMemo(
     () =>
@@ -1256,7 +1369,7 @@ export default function FunFacts() {
                     <li key={idx} className="flex items-start justify-between gap-3">
                       <div>
                         <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">{it.hourLabel} Uhr</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">{formatDateTimeDE(it.hourLabel)} Uhr</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
                           Insgesamt in dieser Stunde: <b>{it.totalThatHour}</b> Fänge
                         </div>
@@ -1905,7 +2018,145 @@ export default function FunFacts() {
             ) : (
               <p>Keine Daten</p>
             )}
-          </Card>
+          </Card>,
+
+          // ---------- Card: Angel-Queen
+<Card key="queen" title="Wer ist unsere Angel-Queen?">
+  {angelQueen.ranking.length === 0 ? (
+    <p className="text-gray-600 dark:text-gray-300">
+      Noch keine Fänge von Laura, Marilou oder Julia erfasst.
+    </p>
+  ) : (
+    <>
+      <p className="mb-2">
+        <strong>{angelQueen.winners[0].total}</strong> Fänge – Queen
+        {angelQueen.winners.length > 1 ? "s:" : ":"}{" "}
+        {angelQueen.winners.map((w) => w.angler).join(" & ")} 👑
+      </p>
+
+      <ul className="space-y-2">
+        {angelQueen.ranking.map((it, idx) => {
+          const isWinner =
+            angelQueen.winners.length > 0 &&
+            it.total === angelQueen.winners[0].total;
+          return (
+            <li key={idx} className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <div
+                  className={`font-medium ${
+                    isWinner
+                      ? "text-pink-700 dark:text-pink-300"
+                      : "text-green-700 dark:text-green-300"
+                  }`}
+                >
+                  {it.angler} {isWinner ? "👑" : ""}
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {/* optionaler Badge im gleichen Stil wie deine Pills */}
+                  <Pill>{it.total} {it.total === 1 ? "Fang" : "Fänge"}</Pill>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  )}
+</Card>,
+
+//--------34--Card:Record-Hunter--
+<Card key="record-hunter" title="Wer ist unser Rekordjäger?">
+  {recordHunter.ranking.length === 0 ? (
+    <p className="text-gray-600 dark:text-gray-300">
+      Noch keine Rekorde ermittelt (größte Fische pro Art).
+    </p>
+  ) : (
+    <>
+      <p className="mb-2">
+        <strong>{recordHunter.winners[0].total}</strong> Rekorde – Spitze:{' '}
+        {recordHunter.winners.map((w) => w.angler).join(' & ')} 🏆
+      </p>
+
+      <ul className="space-y-2">
+        {recordHunter.ranking.map((it, idx) => {
+          const isWinner = it.total === recordHunter.winners[0].total;
+          const shown = it.species.slice(0, 6);
+          const more = Math.max(it.species.length - shown.length, 0);
+          return (
+            <li key={idx} className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <div
+                  className={`font-medium ${
+                    isWinner
+                      ? 'text-pink-700 dark:text-pink-300'
+                      : 'text-green-700 dark:text-green-300'
+                  }`}
+                >
+                  {it.angler} {isWinner ? '👑' : ''}
+                </div>
+
+                <div className="flex flex-wrap gap-1 mt-1">
+                  <Pill>{it.total} {it.total === 1 ? 'Rekord' : 'Rekorde'}</Pill>
+                  {shown.map((s, i) => (
+                    <Pill key={i}>
+                      {s.name} • {Number.isFinite(s.max) ? `${Math.round(s.max)} cm` : '—'}
+                    </Pill>
+                  ))}
+                  {more > 0 && <Pill>+{more} mehr</Pill>}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-xs opacity-70">
+        Grundlage: größte gemessene Länge pro Fischart; Gleichstand → geteilte Rekorde.
+      </p>
+    </>
+  )}
+</Card>,
+
+// ---------- Card: Foto-Künstler
+<Card key="photo-artist" title="Wer ist unser Foto-Künstler?">
+  {photoArtist.ranking.length === 0 ? (
+    <p className="text-gray-600 dark:text-gray-300">Noch keine Fangfotos vorhanden.</p>
+  ) : (
+    <>
+      <p className="mb-2">
+        <strong>{photoArtist.winners[0].total}</strong> Fotos – Sieger
+        {photoArtist.winners.length > 1 ? "innen" : ""}:{' '}
+        {photoArtist.winners.map((w) => w.angler).join(' & ')} 📸
+      </p>
+
+      <ul className="space-y-2">
+        {photoArtist.ranking.map((it, idx) => {
+          const isWinner = it.total === photoArtist.winners[0].total;
+          return (
+            <li key={idx} className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <div
+                  className={`font-medium ${
+                    isWinner
+                      ? 'text-pink-700 dark:text-pink-300'
+                      : 'text-green-700 dark:text-green-300'
+                  }`}
+                >
+                  {it.angler} {isWinner ? '👑' : ''}
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  <Pill>{it.total} {it.total === 1 ? 'Foto' : 'Fotos'}</Pill>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  )}
+</Card>,
+
+
+
         ],
         seed
       ),
@@ -1943,6 +2194,9 @@ export default function FunFacts() {
       hottestCatch,
       frostCatch,
       overallAvgPerAnglerDay,
+      angelQueen,
+      recordHunter,
+      photoArtist
     ]
   );
 
