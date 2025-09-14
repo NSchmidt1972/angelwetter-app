@@ -16,19 +16,32 @@ import VersionInfo from "@/components/VersionInfo";
 
 function PushMenuButton() {
   const {
-    sdk,            // <— korrekt
+  sdk,
     supported,
-    permission,
+    // aus deinem aktuellen Hook:
+    permission,   // boolean | null
     optedIn,
-    subId,          // <— korrekt
-    loading,        // <— korrekt
+    subId,
+    loading,
     subscribe,
     unsubscribe,
   } = usePushStatus();
 
-  if (!sdk || supported === false) return null;
-  const enabled = !!(permission && optedIn && subId);
+  // robustes Mapping
+ const permissionState =
+   typeof permission === 'string'
+     ? permission
+     : permission === true
+     ? 'granted'
+     : permission === false
+     ? 'denied'
+     : 'default';
 
+ const blocked = permissionState === 'denied';
+
+
+  if (!sdk || supported === false) return null;
+  const enabled = !!(optedIn && subId);
   const copyId = async () => {
     try { await navigator.clipboard.writeText(subId || ""); } catch {}
   };
@@ -36,6 +49,7 @@ function PushMenuButton() {
   return (
     <div className="w-full">
       {enabled ? (
+
         <button
           type="button"
           onClick={unsubscribe}
@@ -47,15 +61,20 @@ function PushMenuButton() {
         </button>
       ) : (
         <button
-          type="button"
+         type="button"
           onClick={subscribe}
-          disabled={loading || permission === false}
+          disabled={loading || blocked}
           className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60 w-full text-left"
-          title={permission === false ? "Im Browser blockiert" : "Benachrichtigungen aktivieren"}
+          title={blocked ? "Im Browser blockiert" : "Benachrichtigungen aktivieren"}
         >
           🔔 Push-Aktivieren
         </button>
+
+        
       )}
+
+    
+
 
       <div className="mt-2 text-[11px] leading-snug text-gray-600 dark:text-gray-400">
         <div className="font-semibold">Subscription-ID:</div>
@@ -276,6 +295,8 @@ export default function Navbar({ name, isAdmin }) {
                 >
                   Abmelden
                 </button>
+
+                
 
                 {/* ⭐ Build/Commit + Update */}
                 <div className="border-t border-gray-200 dark:border-gray-700 mt-1 px-4 py-2">

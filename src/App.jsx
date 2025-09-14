@@ -16,6 +16,7 @@ function AppContent() {
   const [imageLoaded, setImageLoaded] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
 
+  // Splash kurz anzeigen
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1000);
     return () => clearTimeout(timer);
@@ -34,50 +35,73 @@ function AppContent() {
       return;
     }
 
-    setNameLoading(true);
-    setUserEmail(user.email);
+    (async () => {
+      try {
+        setNameLoading(true);
+        setUserEmail(user.email);
 
-    supabase
-      .from('profiles')
-      .select('name')
-      .eq('id', user.id)
-      .single()
-      .then(({ data, error }) => {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.warn('⚠️ Profil konnte nicht geladen werden:', error.message);
+        }
+
         if (data?.name) {
-          const fullName = data.name.trim();
+          const fullName = (data.name || '').trim();
           setAnglerName(fullName);
           localStorage.setItem('anglerName', fullName);
 
+          // Kurzname ermitteln (ohne alle Profile zu laden)
           const [first, last] = fullName.split(' ');
-          supabase.from('profiles').select('name').then(({ data: allProfiles }) => {
-            const firstNameCount = allProfiles.filter(p => p.name.startsWith(first + ' ')).length;
-            const shortName = firstNameCount > 1 && last ? `${first} ${last[0]}.` : first;
+          try {
+            const { count } = await supabase
+              .from('profiles')
+              .select('id', { count: 'exact', head: true })
+              .ilike('name', `${first} %`);
+
+            const shortName =
+              (count ?? 0) > 1 && last ? `${first} ${last[0]}.` : first || 'Profil';
+
             localStorage.setItem('shortAnglerName', shortName);
-          });
+          } catch (cntErr) {
+            console.warn('⚠️ ShortName-Zählung fehlgeschlagen:', cntErr?.message);
+            localStorage.setItem('shortAnglerName', first || 'Profil');
+          }
         } else {
-          console.warn('⚠️ Kein Name im Profil gefunden oder Fehler:', error);
+          console.warn('⚠️ Kein Name im Profil gefunden.');
           setAnglerName(null);
           localStorage.removeItem('anglerName');
           localStorage.removeItem('shortAnglerName');
         }
+      } finally {
         setNameLoading(false);
-      });
+      }
+    })();
   }, [user]);
 
   // Aktivität pingen
   useEffect(() => {
     if (!user) return;
+
     const updateActivity = async () => {
       try {
-        await supabase.from('user_activity').upsert({
-          user_id: user.id,
-          angler_name: user.email,
-          last_active: new Date().toISOString(),
-        });
+        await supabase.from('user_activity').upsert(
+          {
+            user_id: user.id,
+            angler_name: user.email,
+            last_active: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' } // vermeidet Duplikate
+        );
       } catch (err) {
-        console.warn('⚠️ user_activity konnte nicht aktualisiert werden:', err.message);
+        console.warn('⚠️ user_activity konnte nicht aktualisiert werden:', err?.message || err);
       }
     };
+
     updateActivity();
     const interval = setInterval(updateActivity, 3 * 60 * 1000);
     return () => clearInterval(interval);
@@ -85,6 +109,8 @@ function AppContent() {
 
   // Wetter aus Supabase Cache
   useEffect(() => {
+    let cancelled = false;
+
     const fetchWeatherFromSupabase = async () => {
       const { data, error } = await supabase
         .from('weather_cache')
@@ -97,21 +123,25 @@ function AppContent() {
         return;
       }
 
-      setWeatherData({
-        data: data.data,
-        savedAt: new Date(data.updated_at).getTime(),
-      });
+      if (!cancelled) {
+        setWeatherData({
+          data: data.data,
+          savedAt: new Date(data.updated_at).getTime(),
+        });
+      }
     };
 
     fetchWeatherFromSupabase();
     const interval = setInterval(fetchWeatherFromSupabase, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   if (authLoading || nameLoading || user === undefined || showSplash) {
     return (
       <>
-        <PushInit />
         <div className="flex flex-col justify-center items-center h-screen bg-white relative">
           <img
             src="logo.png"
@@ -136,7 +166,6 @@ function AppContent() {
 
   return (
     <>
-      <PushInit />
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
         <AppRoutes
           isLoggedIn={isLoggedIn}
@@ -153,6 +182,8 @@ function AppContent() {
 export default function App() {
   return (
     <Router>
+      {/* PushInit global genau 1× mounten */}
+      <PushInit />
       <AppContent />
     </Router>
   );
