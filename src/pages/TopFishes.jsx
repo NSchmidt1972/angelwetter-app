@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import PageContainer from '../components/PageContainer';
 
 export default function TopFishes() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [fishes, setFishes] = useState([]);
-  const [selectedFish, setSelectedFish] = useState('');
+  const [selectedFish, setSelectedFish] = useState(() => searchParams.get('fish') || '');
   const [formattedNamesMap, setFormattedNamesMap] = useState({});
   const [onlyMine, setOnlyMine] = useState(false);
+  const lastSelectedRef = useRef(null);
 
   const anglerName = (localStorage.getItem('anglerName') || 'Unbekannt').trim();
   const anglerNameNorm = anglerName.toLowerCase();
@@ -74,11 +77,31 @@ export default function TopFishes() {
     loadData();
   }, [onlyMine, anglerName, anglerNameNorm, isMarilouLoggedIn]);
 
+  useEffect(() => {
+    const param = searchParams.get('fish') || '';
+    if (lastSelectedRef.current !== null && param === lastSelectedRef.current) {
+      lastSelectedRef.current = null;
+    }
+
+    if (param !== selectedFish && lastSelectedRef.current === null) {
+      setSelectedFish(param);
+    }
+  }, [searchParams, selectedFish]);
+
   const allTypes = [...new Set(
     fishes
       .map((f) => f.fish?.trim())
       .filter((fish) => fish && fish !== 'Unbekannt')
   )].sort();
+
+  const handleFishChange = (value) => {
+    lastSelectedRef.current = value;
+    setSelectedFish(value);
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set('fish', value);
+    else next.delete('fish');
+    setSearchParams(next, { replace: true });
+  };
 
   const top10 = fishes
     .filter((f) =>
@@ -110,7 +133,7 @@ export default function TopFishes() {
       <div className="max-w-md mx-auto mb-8">
         <select
           value={selectedFish}
-          onChange={(e) => setSelectedFish(e.target.value)}
+          onChange={(e) => handleFishChange(e.target.value)}
           className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
         >
           <option value="">Fischart auswählen</option>

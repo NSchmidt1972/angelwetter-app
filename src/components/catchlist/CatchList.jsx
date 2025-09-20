@@ -1,5 +1,6 @@
 // src/components/catchlist/CatchList.jsx
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCatches } from '../../hooks/useCatches';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 
@@ -31,6 +32,8 @@ export default function CatchList({ anglerName }) {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [modalPhoto, setModalPhoto] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
+
+  const navigate = useNavigate();
 
   useInfiniteScroll({ ref: sentinelRef, hasMore, loading, onHit: loadNext });
 
@@ -165,9 +168,14 @@ export default function CatchList({ anglerName }) {
 
                   <div className="flex items-center gap-2 ml-auto">
                     {topInfo && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold dark:bg-amber-900/60 dark:text-amber-200 whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/top-fishes?fish=${encodeURIComponent(entry.fish || '')}`)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold dark:bg-amber-900/60 dark:text-amber-200 whitespace-nowrap transition hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        title={`Top 10 für ${entry.fish}`}
+                      >
                         🏅 Top 10 #{topInfo.rank}
-                      </span>
+                      </button>
                     )}
                   </div>
 
