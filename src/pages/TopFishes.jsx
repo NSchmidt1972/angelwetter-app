@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import PageContainer from '../components/PageContainer';
 
 export default function TopFishes() {
   const [fishes, setFishes] = useState([]);
@@ -91,7 +92,7 @@ export default function TopFishes() {
     .slice(0, 10);
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+    <PageContainer>
       <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-300">🏅 Top 10</h2>
 
       <div className="max-w-md mx-auto mb-4 flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
@@ -176,6 +177,6 @@ export default function TopFishes() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

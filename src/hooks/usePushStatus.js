@@ -1,6 +1,7 @@
 // src/hooks/usePushStatus.js
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
+import { runWhenOneSignalReady, enqueueOneSignal } from '@/onesignal/deferred';
 
 function isSupported(OS) {
   if (!OS?.Notifications) return false;
@@ -22,6 +23,9 @@ export default function usePushStatus() {
   });
 
   useEffect(() => {
+    let cleanupFn;
+    let cancelled = false;
+
     const init = async (OS) => {
       try {
         const perm = OS?.Notifications?.permission ?? 'default';
@@ -30,6 +34,8 @@ export default function usePushStatus() {
 
         const subModel = OS?.User?.pushSubscription || OS?.User?.PushSubscription;
         const id = subModel?.id ?? (await subModel?.getId?.()) ?? null;
+
+        if (cancelled) return;
 
         setState((s) => ({
           ...s,
@@ -77,21 +83,44 @@ export default function usePushStatus() {
             ?.removeEventListener?.('change', onSubChange);
         };
       } catch (e) {
+        if (!cancelled) {
+          setState((s) => ({
+            ...s,
+            loading: false,
+            error: e?.message || String(e),
+          }));
+        }
+      }
+      return undefined;
+    };
+
+    const { cancel, promise } = runWhenOneSignalReady(async (OS) => {
+      if (cancelled) return;
+      const maybeCleanup = await init(OS);
+      if (cancelled && typeof maybeCleanup === 'function') {
+        maybeCleanup();
+        return;
+      }
+      cleanupFn = typeof maybeCleanup === 'function' ? maybeCleanup : undefined;
+    });
+
+    promise.catch((err) => {
+      if (!cancelled) {
         setState((s) => ({
           ...s,
           loading: false,
-          error: e?.message || String(e),
+          error: err?.message || String(err),
         }));
       }
-    };
+    });
 
-    if (window.OneSignal?.Notifications) {
-      const cleanup = init(window.OneSignal);
-      return typeof cleanup === 'function' ? cleanup : undefined;
-    } else {
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      window.OneSignalDeferred.push(init);
-    }
+    return () => {
+      cancelled = true;
+      cancel();
+      if (typeof cleanupFn === 'function') {
+        cleanupFn();
+      }
+    };
   }, []);
 
   const subscribe = () => {
@@ -182,12 +211,7 @@ export default function usePushStatus() {
       }
     };
 
-    if (window.OneSignal?.Notifications) {
-      exec(window.OneSignal);
-    } else {
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      window.OneSignalDeferred.push(exec);
-    }
+    enqueueOneSignal(exec);
   };
 
   const unsubscribe = () => {
@@ -211,12 +235,7 @@ export default function usePushStatus() {
       }
     };
 
-    if (window.OneSignal?.Notifications) {
-      exec(window.OneSignal);
-    } else {
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      window.OneSignalDeferred.push(exec);
-    }
+    enqueueOneSignal(exec);
   };
 
   // alias für Altcode (permission als boolean)

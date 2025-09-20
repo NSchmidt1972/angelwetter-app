@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { fetchWeather } from '../api/weather';
+import PageContainer from '../components/PageContainer';
 
 function windDirection(deg) {
   const dirs = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
@@ -271,7 +272,7 @@ export default function Analysis({ anglerName }) {
   );
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+    <PageContainer>
       <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-300">📊 Statistik & Analyse</h2>
 
       <div className="flex justify-center items-center gap-4 mb-4 text-sm text-gray-600 dark:text-gray-300">
@@ -399,6 +400,6 @@ export default function Analysis({ anglerName }) {
         {renderStatList("🌙 Mondphasen",             moonStats,     activeKeys.moon)}
         {renderStatList("⏰ Fangzeiten",             hourStats,     activeKeys.time)}
       </div>
-    </div>
+    </PageContainer>
   );
 }

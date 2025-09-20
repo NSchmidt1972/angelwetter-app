@@ -16,28 +16,15 @@ import VersionInfo from "@/components/VersionInfo";
 
 function PushMenuButton() {
   const {
-  sdk,
+    sdk,
     supported,
-    // aus deinem aktuellen Hook:
-    permission,   // boolean | null
+    blocked,
     optedIn,
     subId,
     loading,
     subscribe,
     unsubscribe,
   } = usePushStatus();
-
-  // robustes Mapping
- const permissionState =
-   typeof permission === 'string'
-     ? permission
-     : permission === true
-     ? 'granted'
-     : permission === false
-     ? 'denied'
-     : 'default';
-
- const blocked = permissionState === 'denied';
 
 
   if (!sdk || supported === false) return null;

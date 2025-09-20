@@ -2,6 +2,7 @@
 import { renderFishRating, formatPercent, getPressureTrendLabel, formatDateFromUnix } from "../utils/formatters";
 import { useForecast } from "../hooks/useForecast";
 import { useState } from "react";
+import PageContainer from "../components/PageContainer";
 
 
 export default function Forecast() {
@@ -15,7 +16,7 @@ export default function Forecast() {
 
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+    <PageContainer>
       <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">🔮 Fangprognose</h2>
 
       <p className="text-center text-gray-600 dark:text-gray-300 mb-4 max-w-xl mx-auto">
@@ -218,7 +219,7 @@ export default function Forecast() {
   
 
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

@@ -7,85 +7,177 @@ import PushInit from '@/components/PushInit';
 import AppRoutes from '@/AppRoutes';
 import '@/index.css';
 
+const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v1';
+
+function readProfileCache() {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(PROFILE_CACHE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeProfileCache(cache) {
+  if (typeof window === 'undefined') return;
+  const payload = {
+    userId: cache?.userId ?? null,
+    name: cache?.name ?? null,
+    shortName: cache?.shortName ?? null,
+  };
+  try {
+    window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore quota issues */
+  }
+
+  if (payload.name) {
+    window.localStorage.setItem('anglerName', payload.name);
+  } else {
+    window.localStorage.removeItem('anglerName');
+  }
+
+  if (payload.shortName) {
+    window.localStorage.setItem('shortAnglerName', payload.shortName);
+  } else {
+    window.localStorage.removeItem('shortAnglerName');
+  }
+}
+
+function clearProfileCache() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(PROFILE_CACHE_KEY);
+  window.localStorage.removeItem('anglerName');
+  window.localStorage.removeItem('shortAnglerName');
+}
+
+function scheduleLater(callback, delay = 400) {
+  if (typeof window === 'undefined') {
+    callback();
+    return () => {};
+  }
+  const id = window.setTimeout(callback, delay);
+  return () => window.clearTimeout(id);
+}
+
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
-  const [anglerName, setAnglerName] = useState(null);
+  const [anglerName, setAnglerName] = useState(() => readProfileCache()?.name ?? null);
   const [userEmail, setUserEmail] = useState(null);
-  const [nameLoading, setNameLoading] = useState(true);
+  const [nameLoading, setNameLoading] = useState(() => {
+    const cached = readProfileCache();
+    return !(cached && cached.name);
+  });
   const [weatherData, setWeatherData] = useState(null);
   const [imageLoaded, setImageLoaded] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
+  const [minSplashDone, setMinSplashDone] = useState(false);
 
   // Splash kurz anzeigen
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 1000);
-    return () => clearTimeout(timer);
+    const cancel = scheduleLater(() => setMinSplashDone(true), 350);
+    return cancel;
   }, []);
+
+  // Wenn alles bereit ist (Auth + Name + Mindestdauer), Splash ausblenden
+  useEffect(() => {
+    if (!showSplash) return;
+    if (!authLoading && !nameLoading && user !== undefined && minSplashDone) {
+      setShowSplash(false);
+    }
+  }, [authLoading, nameLoading, user, minSplashDone, showSplash]);
 
   // Profilname laden
   useEffect(() => {
     if (user === undefined) return;
+    let isActive = true;
+    let cancelShortNameCheck;
 
     if (user === null) {
       setAnglerName(null);
       setUserEmail(null);
-      localStorage.removeItem('anglerName');
-      localStorage.removeItem('shortAnglerName');
+      clearProfileCache();
       setNameLoading(false);
       return;
     }
 
-    (async () => {
-      try {
-        setNameLoading(true);
-        setUserEmail(user.email);
+    setUserEmail(user.email);
 
+    const cached = readProfileCache();
+    const hasValidCache = cached && cached.userId === user.id && cached.name;
+    if (!hasValidCache) {
+      setNameLoading(true);
+      setAnglerName(null);
+    } else {
+      setAnglerName(cached.name);
+    }
+
+    const loadProfile = async () => {
+      try {
         const { data, error } = await supabase
           .from('profiles')
           .select('name')
           .eq('id', user.id)
           .single();
 
+        if (!isActive) return;
+
         if (error) {
-          console.warn('⚠️ Profil konnte nicht geladen werden:', error.message);
+          console.warn('⚠️ Profil konnte nicht geladen werden:', error?.message);
         }
 
         if (data?.name) {
           const fullName = (data.name || '').trim();
           setAnglerName(fullName);
-          localStorage.setItem('anglerName', fullName);
 
-          // Kurzname ermitteln (ohne alle Profile zu laden)
           const [first, last] = fullName.split(' ');
-          try {
-            const { count } = await supabase
-              .from('profiles')
-              .select('id', { count: 'exact', head: true })
-              .ilike('name', `${first} %`);
+          const fallbackShort = first || 'Profil';
+          writeProfileCache({ userId: user.id, name: fullName, shortName: fallbackShort });
 
-            const shortName =
-              (count ?? 0) > 1 && last ? `${first} ${last[0]}.` : first || 'Profil';
+          if (first) {
+            cancelShortNameCheck = scheduleLater(async () => {
+              try {
+                if (!isActive) return;
+                const { count } = await supabase
+                  .from('profiles')
+                  .select('id', { count: 'exact', head: true })
+                  .ilike('name', `${first} %`);
 
-            localStorage.setItem('shortAnglerName', shortName);
-          } catch (cntErr) {
-            console.warn('⚠️ ShortName-Zählung fehlgeschlagen:', cntErr?.message);
-            localStorage.setItem('shortAnglerName', first || 'Profil');
+                if (!isActive) return;
+                const shortName =
+                  (count ?? 0) > 1 && last ? `${first} ${last[0]}.` : fallbackShort;
+                writeProfileCache({ userId: user.id, name: fullName, shortName });
+              } catch (cntErr) {
+                console.warn('⚠️ ShortName-Zählung fehlgeschlagen:', cntErr?.message);
+              }
+            }, 200);
           }
         } else {
           console.warn('⚠️ Kein Name im Profil gefunden.');
           setAnglerName(null);
-          localStorage.removeItem('anglerName');
-          localStorage.removeItem('shortAnglerName');
+          clearProfileCache();
         }
       } finally {
-        setNameLoading(false);
+        if (isActive) {
+          setNameLoading(false);
+        }
       }
-    })();
+    };
+
+    loadProfile();
+
+    return () => {
+      isActive = false;
+      cancelShortNameCheck?.();
+    };
   }, [user]);
 
   // Aktivität pingen
   useEffect(() => {
     if (!user) return;
+    let disposed = false;
 
     const updateActivity = async () => {
       try {
@@ -102,9 +194,15 @@ function AppContent() {
       }
     };
 
-    updateActivity();
+    const cancelInitial = scheduleLater(() => {
+      if (!disposed) updateActivity();
+    }, 500);
     const interval = setInterval(updateActivity, 3 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => {
+      disposed = true;
+      cancelInitial?.();
+      clearInterval(interval);
+    };
   }, [user]);
 
   // Wetter aus Supabase Cache
@@ -131,10 +229,13 @@ function AppContent() {
       }
     };
 
-    fetchWeatherFromSupabase();
+    const cancelInitial = scheduleLater(() => {
+      if (!cancelled) fetchWeatherFromSupabase();
+    }, 400);
     const interval = setInterval(fetchWeatherFromSupabase, 5 * 60 * 1000);
     return () => {
       cancelled = true;
+      cancelInitial?.();
       clearInterval(interval);
     };
   }, []);

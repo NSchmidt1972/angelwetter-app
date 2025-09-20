@@ -1,5 +1,6 @@
 // src/pages/FunFacts.jsx
 import React, { useMemo, useState } from 'react';
+import PageContainer from '../components/PageContainer';
 
 // Daten/Hooks & Utils
 import { useValidFishes } from '../hooks/useValidFishes';
@@ -422,8 +423,10 @@ export default function FunFacts() {
 
       const who = (f.angler || 'Unbekannt').trim();
       totals[who] = (totals[who] || 0) + size;
-      (perSpecies[who] ||= {});
-      perSpecies[who][type] = (perSpecies[who][type] || 0) + size;
+      const speciesForAngler = (perSpecies[who] ||= {});
+      const detail = (speciesForAngler[type] ||= { sum: 0, count: 0 });
+      detail.sum += size;
+      detail.count += 1;
     });
 
     const entries = Object.entries(totals).map(([angler, sum]) => ({
@@ -848,14 +851,39 @@ export default function FunFacts() {
     const byAngler = {};
     onlyEels.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
-      byAngler[who] = (byAngler[who] || 0) + 1;
+      const entry = (byAngler[who] ||= { count: 0, sizeSum: 0, sizeCount: 0, maxSize: null });
+
+      entry.count += 1;
+
+      const size = parseFloat(f.size);
+      if (!Number.isNaN(size) && size > 0) {
+        entry.sizeSum += size;
+        entry.sizeCount += 1;
+        entry.maxSize = entry.maxSize === null ? size : Math.max(entry.maxSize, size);
+      }
     });
 
     const sorted = Object.entries(byAngler)
-      .map(([angler, count]) => ({ angler, count }))
-      .sort((a, b) => b.count - a.count);
+      .map(([angler, data]) => {
+        const averageSize = data.sizeCount > 0 ? data.sizeSum / data.sizeCount : null;
+        return {
+          angler,
+          count: data.count,
+          averageSize,
+          averageSizeRounded: averageSize !== null ? Math.round(averageSize) : null,
+          sizeCount: data.sizeCount,
+          maxSize: data.maxSize,
+        };
+      })
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        if ((b.averageSize ?? 0) !== (a.averageSize ?? 0)) {
+          return (b.averageSize ?? 0) - (a.averageSize ?? 0);
+        }
+        return a.angler.localeCompare(b.angler);
+      });
 
-    return sorted[0];
+    return sorted.length > 0 ? sorted[0] : null;
   }, [statsFishes]);
 
   // ---------- 26) Grundel-Champion
@@ -1100,18 +1128,22 @@ const recordHunter = useMemo(() => {
   });
 
   // Rekorde je Angler zählen + Liste der gehaltenen Arten mit Maxwert
-  const counts = {}; // angler -> { angler, total, species: Array<{name, max}> }
+  const counts = {}; // angler -> { angler, total, totalLength, species: Array<{name, max}> }
   Object.entries(bySpecies).forEach(([species, info]) => {
     const max = info.max;
     info.holders.forEach((who) => {
-      if (!counts[who]) counts[who] = { angler: who, total: 0, species: [] };
+      if (!counts[who]) counts[who] = { angler: who, total: 0, totalLength: 0, species: [] };
       counts[who].total += 1;
+      counts[who].totalLength += max;
       counts[who].species.push({ name: species, max });
     });
   });
 
   const ranking = Object.values(counts).sort(
-    (a, b) => b.total - a.total || a.angler.localeCompare(b.angler, 'de')
+    (a, b) =>
+      b.total - a.total ||
+      b.totalLength - a.totalLength ||
+      a.angler.localeCompare(b.angler, 'de')
   );
   if (ranking.length === 0) return { winners: [], ranking: [] };
 
@@ -1437,12 +1469,16 @@ const recordHunter = useMemo(() => {
                       <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {Object.entries(it.perSpecies)
-                          .sort((a, b) => b[1] - a[1])
-                          .map(([sp, cm]) => (
-                            <Pill key={sp}>
-                              {PREDATOR_LABELS[sp] ?? sp} {Math.round(cm)} cm
-                            </Pill>
-                          ))}
+                          .sort((a, b) => b[1].sum - a[1].sum)
+                          .map(([sp, data]) => {
+                            const avg = data.count > 0 ? Math.round(data.sum / data.count) : 0;
+                            const countLabel = data.count === 1 ? '1 Fang' : `${data.count} Fänge`;
+                            return (
+                              <Pill key={sp}>
+                                {PREDATOR_LABELS[sp] ?? sp} · {countLabel} · Ø {avg} cm
+                              </Pill>
+                            );
+                          })}
                       </div>
                     </div>
                     <div className="text-xl font-bold text-green-700 dark:text-green-300">
@@ -1787,13 +1823,20 @@ const recordHunter = useMemo(() => {
           // 25) Aal-Magier
           <Card key="eel" title="🧙‍♂️ Aal-Magier">
             {eelWizard ? (
-              <div className="flex items-center justify-between">
-                <span className="text-green-700 dark:text-green-300 font-medium">
-                  {eelWizard.angler}
-                </span>
-                <span className="font-bold text-xl text-green-700 dark:text-green-300">
-                  {eelWizard.count} Aale
-                </span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-green-700 dark:text-green-300 font-medium">
+                    {eelWizard.angler}
+                  </span>
+                  <span className="font-bold text-xl text-green-700 dark:text-green-300">
+                    {eelWizard.count}{' '}
+                    {eelWizard.count === 1 ? 'Aal' : 'Aale'}
+                  </span>
+                </div>
+                <Pill>
+                  Aal · {eelWizard.count === 1 ? '1 Fang' : `${eelWizard.count} Fänge`} · Ø{' '}
+                  {eelWizard.averageSizeRounded !== null ? eelWizard.averageSizeRounded : '—'} cm
+                </Pill>
               </div>
             ) : (
               <p className="text-gray-600 dark:text-gray-400">Noch kein Aal gefangen.</p>
@@ -2202,7 +2245,7 @@ const recordHunter = useMemo(() => {
 
   // ---------- EINZIGER Render-Return ----------
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+    <PageContainer>
       <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">
         🎉 Fangfragen
       </h2>
@@ -2228,7 +2271,6 @@ const recordHunter = useMemo(() => {
           {cards}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
-

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { initOneSignal } from '../onesignal/OneSignalLoader';
+import { enqueueOneSignal } from '@/onesignal/deferred';
 
 export default function useOneSignal() {
   useEffect(() => {
@@ -7,16 +8,7 @@ export default function useOneSignal() {
   }, []);
 
   async function withOneSignal(callback) {
-    return new Promise((resolve, reject) => {
-      window.OneSignalDeferred.push(async function (OneSignal) {
-        try {
-          const result = await callback(OneSignal);
-          resolve(result);
-        } catch (err) {
-          reject(err);
-        }
-      });
-    });
+    return enqueueOneSignal(callback);
   }
 
   return {

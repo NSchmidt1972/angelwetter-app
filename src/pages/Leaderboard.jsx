@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import PageContainer from '../components/PageContainer';
 
 export default function Leaderboard() {
   const [fishes, setFishes] = useState([]);
@@ -126,14 +127,16 @@ export default function Leaderboard() {
 
   if (filteredFishes.length === 0) {
     return (
-      <p className="text-center text-gray-500 dark:text-gray-400 mt-6">
-        Keine Fänge zum Anzeigen.
-      </p>
+      <PageContainer>
+        <p className="text-center text-gray-500 dark:text-gray-400 mt-6">
+          Keine Fänge zum Anzeigen.
+        </p>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-100">
+    <PageContainer>
       <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">
         🏆 Rangliste
       </h2>
@@ -207,6 +210,6 @@ export default function Leaderboard() {
           </div>
         ))}
       </div>
-    </div>
+    </PageContainer>
   );
 }

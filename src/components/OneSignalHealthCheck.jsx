@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { runWhenOneSignalReady, enqueueOneSignal } from '@/onesignal/deferred';
 
 export default function OneSignalHealthCheck() {
   const [state, setState] = useState({
@@ -12,8 +13,6 @@ export default function OneSignalHealthCheck() {
   });
 
   useEffect(() => {
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-
     const initCheck = async (OneSignal) => {
       try {
         const isSupported = OneSignal.Notifications.isPushSupported();
@@ -66,18 +65,29 @@ export default function OneSignalHealthCheck() {
     };
 
     let cleanup;
-    const run = () => {
-      if (window.OneSignal && window.OneSignal.Notifications) {
-        Promise.resolve(initCheck(window.OneSignal)).then((fn) => (cleanup = fn));
-      } else {
-        window.OneSignalDeferred.push(async (OneSignal) => {
-          cleanup = await initCheck(OneSignal);
-        });
-      }
-    };
+    let cancelled = false;
 
-    run();
-    return () => { if (typeof cleanup === 'function') cleanup(); };
+    const { cancel, promise } = runWhenOneSignalReady(async (OneSignal) => {
+      if (cancelled) return;
+      const maybeCleanup = await initCheck(OneSignal);
+      if (cancelled && typeof maybeCleanup === 'function') {
+        maybeCleanup();
+        return;
+      }
+      cleanup = typeof maybeCleanup === 'function' ? maybeCleanup : undefined;
+    });
+
+    promise.catch((err) => {
+      if (!cancelled) {
+        setState((s) => ({ ...s, sdkLoaded: true, error: err?.message || String(err) }));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cancel();
+      if (typeof cleanup === 'function') cleanup();
+    };
   }, []);
 
   // ---- Helpers / Actions ----
@@ -97,7 +107,7 @@ export default function OneSignalHealthCheck() {
   };
 
   const subscribe = () => {
-    window.OneSignalDeferred.push(async (OneSignal) => {
+    enqueueOneSignal(async (OneSignal) => {
       try {
         // Permission anfragen, bei Ablehnung abbrechen
         if (!OneSignal.Notifications.permission) {
@@ -132,7 +142,7 @@ export default function OneSignalHealthCheck() {
   };
 
   const unsubscribe = () => {
-    window.OneSignalDeferred.push(async (OneSignal) => {
+    enqueueOneSignal(async (OneSignal) => {
       try {
         await OneSignal.User.PushSubscription.optOut();
         refresh(OneSignal);

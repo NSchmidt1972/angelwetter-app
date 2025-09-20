@@ -1,6 +1,7 @@
 // src/components/PushInit.jsx
 import { useEffect } from 'react';
 import { supabase } from '@/supabaseClient';
+import { runWhenOneSignalReady } from '@/onesignal/deferred';
 
 const THROTTLE_MS = 10_000; // mind. 10s zwischen zwei Writes
 
@@ -77,8 +78,7 @@ export default function PushInit() {
     }
 
     // OneSignal v16 Deferred-Init
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    window.OneSignalDeferred.push(async (OneSignal) => {
+    const { cancel } = runWhenOneSignalReady(async (OneSignal) => {
       try {
         // Sicherstellen, dass ein Service Worker im richtigen Scope aktiv ist
         const registration = await navigator.serviceWorker.ready;
@@ -164,6 +164,8 @@ export default function PushInit() {
         console.warn('[PushInit] OneSignal init error:', e);
       }
     });
+
+    return () => cancel();
   }, []);
 
   return null;
