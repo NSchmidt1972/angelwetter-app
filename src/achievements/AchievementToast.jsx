@@ -2,27 +2,45 @@
 import * as FramerMotion from "framer-motion"; // ✅ Namespace-Import großgeschrieben
 import { useEffect, useState } from "react";
 
-export default function AchievementToast({ queue }) {
+export default function AchievementToast({ queue = [], onConsume }) {
   const [current, setCurrent] = useState(null);
+  const [lastQueueId, setLastQueueId] = useState(null);
 
   useEffect(() => {
-    if (!current && queue.length > 0) {
-      setCurrent(queue[0]);
+    if (!Array.isArray(queue) || queue.length === 0) {
+      if (lastQueueId !== null) setLastQueueId(null);
+      if (!current) return;
     }
-  }, [queue, current]);
+
+    if (current) return;
+
+    const next = queue[0];
+    if (!next) return;
+
+    const nextId = next.queueId ?? next.id ?? null;
+    if (nextId && lastQueueId && nextId === lastQueueId) return;
+
+    setCurrent(next);
+    if (nextId) setLastQueueId(nextId);
+  }, [queue, current, lastQueueId]);
 
   useEffect(() => {
     if (!current) return;
-    const t = setTimeout(() => setCurrent(null), 3500);
-    return () => clearTimeout(t);
-  }, [current]);
+    const timeout = setTimeout(() => {
+      if (typeof onConsume === "function") {
+        onConsume();
+      }
+      setCurrent(null);
+    }, 3500);
+    return () => clearTimeout(timeout);
+  }, [current, onConsume]);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999] flex items-start justify-center p-4 sm:p-6">
       <FramerMotion.AnimatePresence>
         {current && (
           <FramerMotion.motion.div
-            key={current.id + Math.random()}
+            key={current.queueId || current.id}
             initial={{ y: -40, opacity: 0, scale: 0.98 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: -40, opacity: 0, scale: 0.98 }}

@@ -1,5 +1,5 @@
 // src/components/catchlist/CatchList.jsx
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCatches } from '../../hooks/useCatches';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 
@@ -9,9 +9,13 @@ import PhotoLightbox from './PhotoLightbox';
 
 import { shareEntry } from '../../utils/share';
 import { windDirection, getMoonDescription } from '../../utils/weather';
+import { supabase } from '@/supabaseClient';
+import { VERTRAUTE } from '@/constants';
+import { isVisibleToUser } from '@/utils/filters';
 
 export default function CatchList({ anglerName }) {
   const [onlyMine, setOnlyMine] = useState(false);
+  const [topBadges, setTopBadges] = useState({});
 
   const {
     catches,
@@ -29,6 +33,73 @@ export default function CatchList({ anglerName }) {
   const [editingEntry, setEditingEntry] = useState(null);
 
   useInfiniteScroll({ ref: sentinelRef, hasMore, loading, onHit: loadNext });
+
+  const normalizedName = useMemo(() => (anglerName || '').trim(), [anglerName]);
+  const isTrusted = useMemo(() => VERTRAUTE.includes(normalizedName), [normalizedName]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const entryKey = (entry) =>
+      entry.id ?? `${entry.angler || 'anon'}-${entry.timestamp}-${entry.fish}-${entry.size}`;
+
+    async function loadTopTen() {
+      try {
+        const { data, error } = await supabase
+          .from('fishes')
+          .select('id, fish, size, angler, timestamp, location_name, blank');
+        if (error) {
+          console.error('Top 10 laden:', error);
+          return;
+        }
+
+        const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
+        const valid = (data || [])
+          .filter((entry) => {
+            const sizeNum = parseFloat(entry?.size);
+            if (!entry?.fish || Number.isNaN(sizeNum) || sizeNum <= 0) return false;
+            if (entry.blank) return false;
+            return isVisibleToUser(entry, {
+              isTrusted,
+              onlyMine: false,
+              anglerName: normalizedName,
+              filterSetting,
+            });
+          })
+          .map((entry) => ({ ...entry, sizeNum: parseFloat(entry.size), key: entryKey(entry) }));
+
+        const byFish = new Map();
+        for (const entry of valid) {
+          const fishName = entry.fish?.trim();
+          if (!fishName) continue;
+          if (!byFish.has(fishName)) byFish.set(fishName, []);
+          byFish.get(fishName).push(entry);
+        }
+
+        const nextBadges = {};
+        for (const [fishName, list] of byFish.entries()) {
+          list.sort(
+            (a, b) =>
+              b.sizeNum - a.sizeNum ||
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+          list.slice(0, 10).forEach((entry, index) => {
+            nextBadges[entry.key] = { fish: fishName, rank: index + 1 };
+          });
+        }
+
+        if (!cancelled) setTopBadges(nextBadges);
+      } catch (err) {
+        console.error('Top 10 laden (allgemeiner Fehler):', err);
+      }
+    }
+
+    loadTopTen();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isTrusted, normalizedName]);
 
   return (
     <div className="p-6 bg-white dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
@@ -75,10 +146,12 @@ export default function CatchList({ anglerName }) {
               hour: '2-digit',
               minute: '2-digit',
             });
+            const key = entry.id ?? `${entry.angler || 'anon'}-${entry.timestamp}-${entry.fish}-${entry.size}`;
+            const topInfo = topBadges[key];
 
             return (
               <li
-                key={entry.id}
+                key={key}
                 className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
               >
                 <div className="flex justify-between items-center mb-1">
@@ -145,6 +218,11 @@ export default function CatchList({ anglerName }) {
                     entry.weight != null && (
                       <span className="text-sm italic">({entry.weight} kg)</span>
                     )}
+                  {topInfo && (
+                    <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold dark:bg-amber-900/60 dark:text-amber-200">
+                      🏅 Top 10 #{topInfo.rank}
+                    </span>
+                  )}
                   {entry.photo_url && (
                     <button
                       onClick={() => setModalPhoto(entry.photo_url)}

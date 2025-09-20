@@ -2,6 +2,24 @@
 import { supabase } from '../supabaseClient';
 //import { getDistanceKm } from '../utils/geo';
 
+const IS_DEV_BUILD = (() => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      if (import.meta.env.DEV) return true;
+      if (import.meta.env.MODE && import.meta.env.MODE !== 'production') return true;
+    }
+  } catch (_) {
+    // ignore – fallback checks below
+  }
+
+  if (typeof process !== 'undefined' && process.env) {
+    const env = process.env.NODE_ENV || process.env.VITE_NODE_ENV;
+    if (env && env !== 'production') return true;
+  }
+
+  return false;
+})();
+
 /**
  * Speichert den Fang und triggert (optional) einen OneSignal-Push via Edge-Function 'sendCatchPush'.
  * - Geofence kann via localStorage.pushGeofence = 'on'|'off' gesteuert werden (default: 'off').
@@ -9,8 +27,33 @@ import { supabase } from '../supabaseClient';
 export async function saveCatchEntry(entry, taken, position, anglerName, /*FERKENSBRUCH_LAT, FERKENSBRUCH_LON*/) {
   // 1) Insert
   const payload = { ...entry, taken: !!taken };
-  const { error: insertErr } = await supabase.from('fishes').insert([payload]);
+  const { data, error: insertErr } = await supabase
+    .from('fishes')
+    .insert([payload])
+    .select()
+    .single();
   if (insertErr) throw new Error('Fehler beim Speichern des Fangs.');
+
+  const shouldSkipPush = (() => {
+    if (IS_DEV_BUILD) return true;
+
+    if (typeof window !== 'undefined') {
+      const host = window.location?.hostname || '';
+      if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') return true;
+      if (host.endsWith('.local')) return true;
+      try {
+        if (window.localStorage.getItem('pushDisableDev') === 'on') return true;
+      } catch (_) {
+        // ignore storage access issues
+      }
+    }
+
+    return false;
+  })();
+
+  if (shouldSkipPush) {
+    return data;
+  }
 
   // 2) Push (best effort)
   try {
@@ -55,5 +98,5 @@ export async function saveCatchEntry(entry, taken, position, anglerName, /*FERKE
     console.warn('Push-Aufruf übersprungen (Invoke-Fehler):', e?.message || e);
   }
 
-  return true;
+  return data;
 }

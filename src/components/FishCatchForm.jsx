@@ -1,6 +1,6 @@
 // src/components/FishCatchForm.jsx
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 
 // Utils
 import { validateCatchForm } from "@/utils/validation";
@@ -62,6 +62,13 @@ export default function FishCatchForm({
   const navigate = useNavigate();
   const { position } = useGeoPosition();
 
+  // Achievement-Layer aus dem Router-Kontext, falls Prop nicht gesetzt ist
+  const outletContext = useOutletContext() ?? {};
+  const contextShowEffect = outletContext.showEffect;
+  const effectiveShowEffect = typeof showEffect === "function"
+    ? showEffect
+    : (typeof contextShowEffect === "function" ? contextShowEffect : null);
+
   // Region mit Persistenz
   const [region, setRegion] = useLocalStorage("fishRegion", "ferkensbruch");
   const fishList = fishListForRegion(region);
@@ -72,7 +79,7 @@ export default function FishCatchForm({
   // Achievements (best-effort; nicht kritisch)
   const { checkOnNewCatch } = useAchievements({
     supabase,
-    showEffect,
+    showEffect: effectiveShowEffect,
     remember: localRemember,
   });
 
@@ -153,7 +160,7 @@ export default function FishCatchForm({
         const { data: sessionData } = await supabase.auth.getSession();
         const userId = sessionData?.session?.user?.id ?? null;
         const lastCatch = inserted?.id ? { ...inserted } : { ...pendingEntry, taken };
-        if (userId && typeof checkOnNewCatch === "function") {
+        if (typeof checkOnNewCatch === "function") {
           await checkOnNewCatch({ userId, lastCatch });
         }
       } catch {

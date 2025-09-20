@@ -19,6 +19,10 @@ export function useAchievements({ supabase, showEffect, remember }) {
         let hit = false;
         let ctx = { fish: lastCatch?.fish, size: lastCatch?.size };
 
+        if (a.needsCount && !userId) {
+          continue;
+        }
+
         if (a.needsCount) {
           const { table, filter, threshold } = a.needsCount;
           const filters = [];
@@ -33,7 +37,9 @@ export function useAchievements({ supabase, showEffect, remember }) {
 
         if (hit) {
           const message = typeof a.message === "function" ? a.message(ctx) : a.message;
-          showEffect({ id: a.id, title: a.title, message, icon: a.icon });
+          if (typeof showEffect === "function") {
+            showEffect({ id: a.id, title: a.title, message, icon: a.icon });
+          }
           await remember.add(a.id, lastCatch?.id);
         }
       }

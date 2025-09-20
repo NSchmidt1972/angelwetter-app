@@ -1,13 +1,16 @@
 // src/AppLayout.jsx
 import Navbar from './components/Navbar';
 import { Outlet } from 'react-router-dom';
+import AchievementLayer from '@/achievements/AchievementLayer';
 
 export default function AppLayout({ name, isAdmin }) {
   return (
     <>
       <Navbar name={name} isAdmin={isAdmin} />
       <div className="container mx-auto px-3 py-4">
-        <Outlet />
+        <AchievementLayer>
+          {(showEffect) => <Outlet context={{ showEffect }} />}
+        </AchievementLayer>
       </div>
     </>
   );
