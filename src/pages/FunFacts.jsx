@@ -5,7 +5,7 @@ import PageContainer from '../components/PageContainer';
 // Daten/Hooks & Utils
 import { useValidFishes } from '../hooks/useValidFishes';
 import { localDayKey, monthKey, monthLabel } from '../utils/dateUtils';
-import { isRainyCatch, isSunnyCatch, extractTempC, extractMoonPhase } from '../utils/weatherParsing';
+import { isRainyCatch, isSunnyCatch, extractTempC, extractMoonPhase, parseWeather } from '../utils/weatherParsing';
 import {
   formatDateDE,
   formatDateTimeDE,
@@ -40,6 +40,52 @@ function normalizePlace(f) {
     if (re.test(raw)) return name;
   }
   return raw.replace(/\s+/g, ' ');
+}
+
+
+const WEATHER_KEYWORD_SCORES = [
+  { regex: /(gewitter|thunder|storm|sturm|orkan|blitz)/i, score: 25, label: 'Gewitter/Sturm' },
+  { regex: /(hagel|hail)/i, score: 18, label: 'Hagel' },
+  { regex: /(schnee|snow|eisregen|sleet|glatteis)/i, score: 14, label: 'Schnee/Eis' },
+  { regex: /(starke[rn]? regen|heftiger regen|downpour|wolkenbruch|heavy rain)/i, score: 12, label: 'Heftiger Regen (Text)' },
+  { regex: /(böe|böen|gust|gale|orkanartig)/i, score: 10, label: 'Sturmböen' },
+  { regex: /(nebel|fog|dunst)/i, score: 6, label: 'Dichter Nebel' },
+];
+
+const COMFORT_TEMP_C = 18;
+const TEMP_TOLERANCE = 2; // kleiner Korridor ohne Strafpunkte
+const WIND_COMFORT = 4; // m/s – darüber wird's ungemütlicher
+
+function ucfirst(str) {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function getWeatherDescription(f, fallbackLower) {
+  const candidates = [];
+  const pushStr = (val) => {
+    if (typeof val === 'string' && val.trim()) candidates.push(val.trim());
+  };
+
+  pushStr(f?.weather_description);
+  pushStr(f?.weather_desc);
+  pushStr(f?.weatherText);
+  pushStr(f?.conditions);
+
+  if (typeof f?.weather === 'string') pushStr(f.weather);
+  else if (f?.weather && typeof f.weather === 'object') {
+    pushStr(f.weather.description);
+    pushStr(f.weather.summary);
+    pushStr(f.weather.text);
+    pushStr(f.weather?.weather?.[0]?.description);
+    pushStr(f.weather?.weather?.[0]?.main);
+    pushStr(f.weather?.current?.weather?.[0]?.description);
+    pushStr(f.weather?.current?.weather?.[0]?.main);
+  }
+
+  if (candidates.length > 0) return ucfirst(candidates[0]);
+  if (typeof fallbackLower === 'string' && fallbackLower.trim()) return ucfirst(fallbackLower.trim());
+  return null;
 }
 
 
@@ -843,7 +889,28 @@ export default function FunFacts() {
     };
   }, [statsFishes]);
 
-  // ---------- 25) Aal-Magier
+  // ---------- 25) Zander-Queen (größter Zanderfang)
+  const zanderQueen = useMemo(() => {
+    const onlyZander = statsFishes
+      .map((f) => ({ f, size: typeof f.size === 'number' ? f.size : parseFloat(f.size) }))
+      .filter((x) => x.f.fish?.trim().toLowerCase() === 'zander' && !Number.isNaN(x.size) && x.size > 0);
+
+    if (onlyZander.length === 0) return { winners: [], maxSize: null };
+
+    const maxSize = Math.max(...onlyZander.map((x) => x.size));
+    const winners = onlyZander
+      .filter((x) => Math.abs(x.size - maxSize) < 1e-6)
+      .map((x) => ({
+        angler: (x.f.angler || 'Unbekannt').trim() || 'Unbekannt',
+        fish: x.f,
+        size: x.size,
+      }))
+      .sort((a, b) => a.angler.localeCompare(b.angler, 'de'));
+
+    return { winners, maxSize };
+  }, [statsFishes]);
+
+  // ---------- 26) Aal-Magier
   const eelWizard = useMemo(() => {
     const onlyEels = statsFishes.filter((f) => f.fish?.trim().toLowerCase() === 'aal');
     if (onlyEels.length === 0) return null;
@@ -886,7 +953,7 @@ export default function FunFacts() {
     return sorted.length > 0 ? sorted[0] : null;
   }, [statsFishes]);
 
-  // ---------- 26) Grundel-Champion
+  // ---------- 27) Grundel-Champion
   const grundelChampion = useMemo(() => {
     const onlyGrundeln = validFishes.filter((f) => f.fish?.trim().toLowerCase() === 'grundel');
     if (onlyGrundeln.length === 0) return null;
@@ -904,7 +971,7 @@ export default function FunFacts() {
     return sorted[0];
   }, [validFishes]);
 
-  // ---------- 27) Wer angelt gern woanders? (per location_name)
+  // ---------- 28) Wer angelt gern woanders? (per location_name)
   const foreignAnglers = useMemo(() => {
     if (validFishes.length === 0) return { top3: [] };
 
@@ -932,7 +999,7 @@ export default function FunFacts() {
     return { top3: ranking };
   }, [validFishes]);
 
-  // ---------- 28) Schneiderkönig
+  // ---------- 29) Schneiderkönig
   const schneiderKoenig = useMemo(() => {
     const counts = {};
     fishes.forEach((f) => {
@@ -951,7 +1018,7 @@ export default function FunFacts() {
     return { max, winners, ranking: entries };
   }, [fishes]);
 
-  // ---------- 29) Schlechtester Monat (meiste Schneidertage)
+  // ---------- 30) Schlechtester Monat (meiste Schneidertage)
   const worstBlankMonth = useMemo(() => {
     if (fishes.length === 0) return { max: 0, winners: [], ranking: [] };
 
@@ -972,7 +1039,7 @@ export default function FunFacts() {
     return { max, winners, ranking };
   }, [fishes]);
 
-  // ---------- 30) Heißester Fang
+  // ---------- 31) Heißester Fang
   const hottestCatch = useMemo(() => {
     const withTemp = validFishes
       .map((f) => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
@@ -988,7 +1055,7 @@ export default function FunFacts() {
     return { tempC: maxT, size: maxSize, items: winners };
   }, [validFishes]);
 
-  // ---------- 31) Kältester Fang (≤ 0°C)
+  // ---------- 32) Kältester Fang (≤ 0°C)
   const frostCatch = useMemo(() => {
     const frost = validFishes
       .map((f) => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
@@ -1019,7 +1086,110 @@ export default function FunFacts() {
     return { max, winners, ranking: entries };
   }, [validFishes]);
 
-  // ---------- 32) Ø Fische pro Angler-Tag (gesamt)
+  // ---------- 32b) Extremste Wetterbedingungen
+  const extremeWeatherCatch = useMemo(() => {
+    if (validFishes.length === 0) return null;
+
+    const entries = validFishes
+      .map((f) => {
+        const parsed = parseWeather(f) || {};
+        const { textLower = '', tempC = null, rainMm = null, windSpeed = null, windGust = null } = parsed;
+        let score = 0;
+        const highlights = [];
+        const seen = new Set();
+        const addHighlight = (label) => {
+          if (label && !seen.has(label)) {
+            seen.add(label);
+            highlights.push(label);
+          }
+        };
+
+        if (typeof tempC === 'number') {
+          const delta = Math.abs(tempC - COMFORT_TEMP_C);
+          const effective = Math.max(0, delta - TEMP_TOLERANCE);
+          if (effective >= 0.5) {
+            score += effective * 1.4;
+            addHighlight(`${tempC >= COMFORT_TEMP_C ? 'Hitze' : 'Kälte'}: ${tempC.toFixed(1)}°C`);
+          }
+          if (tempC <= 0) {
+            score += 3;
+            addHighlight('Frost');
+          } else if (tempC >= 30) {
+            score += 3;
+            addHighlight('Brütende Wärme');
+          }
+        }
+
+        if (typeof rainMm === 'number') {
+          const rainScore = rainMm * 3;
+          if (rainScore > 0) {
+            score += rainScore;
+            addHighlight(`${rainMm >= 10 ? 'Wolkenbruch' : 'Regen'}: ${rainMm.toFixed(1)} mm`);
+          }
+        } else if (isRainyCatch(f)) {
+          score += 5;
+          addHighlight('Regen laut Beschreibung');
+        }
+
+        if (typeof windSpeed === 'number') {
+          const over = Math.max(0, windSpeed - WIND_COMFORT);
+          if (over > 0.1) {
+            score += over * 2.5;
+            addHighlight(`Wind: ${windSpeed.toFixed(1)} m/s`);
+          }
+        }
+
+        if (typeof windGust === 'number') {
+          const ref = typeof windSpeed === 'number' ? Math.max(windSpeed, WIND_COMFORT) : WIND_COMFORT;
+          const overGust = Math.max(0, windGust - ref);
+          if (overGust > 0.1) {
+            score += overGust * 1.7;
+            addHighlight(`Böen: ${windGust.toFixed(1)} m/s`);
+          }
+        }
+
+        if (textLower) {
+          WEATHER_KEYWORD_SCORES.forEach(({ regex, score: bonus, label }) => {
+            if (regex.test(textLower)) {
+              score += bonus;
+              addHighlight(label);
+            }
+          });
+        }
+
+        if (highlights.length === 0 || score <= 0) return null;
+
+        const weatherDesc = getWeatherDescription(f, textLower);
+        return {
+          fish: f,
+          score,
+          highlights,
+          weatherDesc,
+        };
+      })
+      .filter(Boolean);
+
+    if (entries.length === 0) return null;
+
+    const ranking = entries.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const timeA = new Date(a.fish.timestamp).getTime();
+      const timeB = new Date(b.fish.timestamp).getTime();
+      if (!Number.isNaN(timeA) && !Number.isNaN(timeB)) return timeB - timeA;
+      return 0;
+    });
+
+    const bestScore = ranking[0].score;
+    const winners = ranking.filter((entry) => Math.abs(entry.score - bestScore) < 1e-6);
+
+    return {
+      bestScore,
+      ranking,
+      winners,
+    };
+  }, [validFishes]);
+
+  // ---------- 33) Ø Fische pro Angler-Tag (gesamt)
   const overallAvgPerAnglerDay = useMemo(() => {
     if (statsFishes.length === 0) {
       return { avg: 0, totalAnglerDays: 0, totalFishes: 0 };
@@ -1037,7 +1207,7 @@ export default function FunFacts() {
     return { avg, totalAnglerDays, totalFishes };
   }, [statsFishes]);
 
-  // ---------- 33) Angel-Queen – welche Frau fängt die meisten Fische?
+  // ---------- 34) Angel-Queen – welche Frau fängt die meisten Fische?
 const angelQueen = useMemo(() => {
   if (statsFishes.length === 0) return { winners: [], ranking: [] };
 
@@ -1079,7 +1249,7 @@ const angelQueen = useMemo(() => {
   };
 }, [statsFishes]);
 
-// ---------- 34) Foto-Künstler – wer hat die meisten Fangfotos?
+// ---------- 35) Foto-Künstler – wer hat die meisten Fangfotos?
 const photoArtist = useMemo(() => {
   if (statsFishes.length === 0) return { winners: [], ranking: [] };
 
@@ -1103,7 +1273,7 @@ const photoArtist = useMemo(() => {
   return { winners, ranking };
 }, [statsFishes]);
 
-// ---------- 35) Rekordjäger – wer hält die meisten Vereinsrekorde (größte Fische pro Art)?
+// ---------- 36) Rekordjäger – wer hält die meisten Vereinsrekorde (größte Fische pro Art)?
 const recordHunter = useMemo(() => {
   if (statsFishes.length === 0) return { winners: [], ranking: [] };
 
@@ -1794,33 +1964,53 @@ const recordHunter = useMemo(() => {
 
             {fishPairs.top3.length > 0 ? (
               <ul className="space-y-3">
-                {fishPairs.top3
-                  .filter(
-                    (p) =>
-                      !['Laura Rittlinger', 'Nicol Schmidt']
-                        .sort()
-                        .join(' & ')
-                        .includes([p.a, p.b].sort().join(' & ')),
-                  )
-                  .map((p, idx) => (
-                    <li key={idx} className="flex items-start justify-between gap-3">
-                      <div className="max-w-[70%]">
-                        <div className="text-green-700 dark:text-green-300 font-medium">
-                          {p.a} &amp; {p.b}
-                        </div>
+                {fishPairs.top3.map((p, idx) => (
+                  <li key={idx} className="flex items-start justify-between gap-3">
+                    <div className="max-w-[70%]">
+                      <div className="text-green-700 dark:text-green-300 font-medium">
+                        {p.a} &amp; {p.b}
                       </div>
-                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                        {p.count}
-                      </div>
-                    </li>
-                  ))}
+                    </div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                      {p.count}
+                    </div>
+                  </li>
+                ))}
               </ul>
             ) : (
               <p>Keine gemeinsamen Fänge gefunden.</p>
             )}
           </Card>,
 
-          // 25) Aal-Magier
+          // 25) Wer ist die Zander-Queen?
+          <Card key="zander" title="🐊 Wer ist die Zander-Queen?">
+            {zanderQueen.winners.length > 0 && zanderQueen.maxSize ? (
+              <>
+                <p className="mb-2 text-sm text-gray-600 dark:text-gray-300">
+                  Größter Zander: <b className="text-green-700 dark:text-green-300">{zanderQueen.maxSize.toFixed(0)} cm</b>
+                </p>
+                <ul className="space-y-2">
+                  {zanderQueen.winners.map((it, idx) => (
+                    <li key={idx} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-300">
+                          {formatDateTimeDE(it.fish.timestamp)}
+                        </div>
+                      </div>
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                        {it.size.toFixed(0)} cm
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-gray-600 dark:text-gray-300">Noch kein Zander in Sicht.</p>
+            )}
+          </Card>,
+
+          // 26) Aal-Magier
           <Card key="eel" title="🧙‍♂️ Aal-Magier">
             {eelWizard ? (
               <div className="space-y-2">
@@ -1843,7 +2033,7 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
-          // 26) Grundel-Champion
+          // 27) Grundel-Champion
           <Card key="grundel" title="🏆 Grundel-Champion">
             {grundelChampion ? (
               <div className="flex items-center justify-between">
@@ -1860,7 +2050,7 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
-          // 27) Fremdangeln
+          // 28) Fremdangeln
           <Card key="foreign" title="🌍 Wer angelt gern woanders?">
             {foreignAnglers.top3.length > 0 ? (
               <ul className="space-y-4">
@@ -1900,7 +2090,7 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
-          // 28) Schneiderkönig
+          // 29) Schneiderkönig
           <Card key="schneiderKing" title="❌ Wer ist der Schneiderkönig?">
             {schneiderKoenig.winners.length > 0 ? (
               <ul className="space-y-2">
@@ -1920,7 +2110,7 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
-          // 29) 📉 Schlechtester Monat (meiste Schneidertage)
+          // 30) 📉 Schlechtester Monat (meiste Schneidertage)
           <Card key="worstBlankMonth" title="📉 Schlechtester Monat (meiste Schneidertage)">
             {worstBlankMonth.max > 0 ? (
               <>
@@ -1959,7 +2149,7 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
-          // 30) 🔥 Heißester Fang (größter Fisch bei höchster Temperatur)
+          // 31) 🔥 Heißester Fang (größter Fisch bei höchster Temperatur)
           <Card key="hottestCatch" title="🔥 Heißester Fang (größter Fisch bei höchster Temperatur)">
             {hottestCatch ? (
               <>
@@ -1992,7 +2182,7 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
-          // 31) ❄️ Kältester Fang (Frost)
+          // 32) ❄️ Kältester Fang (Frost)
           <Card key="frostCatch" title="❄️ Kältester Fang: Wer hat bei Frost gefangen? (≤ 0 °C)">
             {frostCatch.ranking.length > 0 ? (
               <>
@@ -2040,7 +2230,56 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
-          // 32) 📊 Ø Fische pro Angler-Tag (gesamt)
+          // 32b) 🌩️ Extremster Wetterfang
+          <Card key="extremeWeather" title="🌩️ Extremster Wetterfang">
+            {extremeWeatherCatch ? (
+              <>
+                <p className="mb-2 text-sm text-gray-600 dark:text-gray-300">
+                  Score basiert auf Temperatur, Wind, Niederschlag & Wetterbeschreibung – je höher, desto ungemütlicher.
+                </p>
+                <ul className="space-y-3">
+                  {extremeWeatherCatch.ranking.slice(0, 3).map((item, idx) => {
+                    const isWinner = Math.abs(item.score - extremeWeatherCatch.bestScore) < 1e-6;
+                    return (
+                      <li key={item.fish.id ?? idx} className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div
+                            className={`font-medium ${
+                              isWinner
+                                ? 'text-pink-700 dark:text-pink-300'
+                                : 'text-green-700 dark:text-green-300'
+                            }`}
+                          >
+                            {item.fish.angler || 'Unbekannt'} {isWinner ? '👑' : ''}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-300">
+                            {item.fish.fish} • {parseFloat(item.fish.size).toFixed(0)} cm • {formatDateTimeDE(item.fish.timestamp)}
+                          </div>
+                          {item.weatherDesc && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Wetter: {item.weatherDesc}
+                            </div>
+                          )}
+                          {item.highlights.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {item.highlights.map((text, i) => (
+                                <Pill key={i}>{text}</Pill>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                       
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : (
+              <p className="text-gray-600 dark:text-gray-300">Noch keine Wetterdaten verfügbar.</p>
+            )}
+          </Card>,
+
+          // 33) 📊 Ø Fische pro Angler-Tag (gesamt)
           <Card key="overallAvg" title="📊 Ø Fische pro Angler-Tag (gesamt)">
             {overallAvgPerAnglerDay.totalAnglerDays > 0 ? (
               <div className="flex items-baseline justify-between">
@@ -2229,6 +2468,7 @@ const recordHunter = useMemo(() => {
       longestBreakBetweenCatchDays,
       longestCatchStreak,
       fishPairs,
+      zanderQueen,
       eelWizard,
       grundelChampion,
       foreignAnglers,
@@ -2236,6 +2476,7 @@ const recordHunter = useMemo(() => {
       worstBlankMonth,
       hottestCatch,
       frostCatch,
+      extremeWeatherCatch,
       overallAvgPerAnglerDay,
       angelQueen,
       recordHunter,

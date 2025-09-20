@@ -5,7 +5,7 @@ export const SUNNY_REGEX = /(klarer himmel|wolkenlos|heiter|clear sky|sunny|sonn
 
 /**
  * Normalisiert Wetterdaten aus unterschiedlichen Strukturen.
- * Liefert: { textLower, moonPhase, tempC, rainMm }
+ * Liefert: { textLower, moonPhase, tempC, rainMm, windSpeed, windGust }
  */
 export function parseWeather(f) {
   let w = f?.weather ?? null;
@@ -63,11 +63,46 @@ export function parseWeather(f) {
   ].map(Number).filter((n) => !Number.isNaN(n));
   const rainMm = nums.length ? Math.max(...nums) : null;
 
+  // Windgeschwindigkeit (m/s) & Böen – höchste Werte bevorzugen
+  const winds = [];
+  const gusts = [];
+  const pushWind = (val, target = winds) => {
+    const n = Number(val);
+    if (!Number.isNaN(n) && Number.isFinite(n)) target.push(n);
+  };
+
+  pushWind(w?.wind);
+  pushWind(w?.wind_speed);
+  pushWind(w?.windSpeed);
+  pushWind(w?.wind?.speed);
+  pushWind(w?.current?.wind_speed);
+  pushWind(w?.current?.wind?.speed);
+  pushWind(w?.hourly?.[0]?.wind_speed);
+  pushWind(w?.hourly?.[0]?.wind);
+  pushWind(w?.daily?.[0]?.wind_speed);
+  pushWind(w?.daily?.[0]?.wind);
+  pushWind(f?.wind);
+  pushWind(f?.wind_speed);
+  pushWind(f?.windSpeed);
+
+  pushWind(w?.wind_gust, gusts);
+  pushWind(w?.current?.wind_gust, gusts);
+  pushWind(w?.wind?.gust, gusts);
+  pushWind(w?.hourly?.[0]?.wind_gust, gusts);
+  pushWind(w?.daily?.[0]?.wind_gust, gusts);
+  pushWind(f?.wind_gust, gusts);
+  pushWind(f?.windGust, gusts);
+
+  const windSpeed = winds.length ? Math.max(...winds) : null;
+  const windGust = gusts.length ? Math.max(...gusts) : null;
+
   return {
     textLower: parts.join(' '),
     moonPhase: moon ?? null,
     tempC: (typeof t === 'number' ? t : null),
     rainMm,
+    windSpeed,
+    windGust,
   };
 }
 
