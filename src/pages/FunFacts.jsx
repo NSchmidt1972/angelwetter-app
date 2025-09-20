@@ -369,6 +369,84 @@ export default function FunFacts() {
     return { count: best, months: winners };
   }, [statsFishes]);
 
+  // ---------- 8b) Monate mit den durchschnittlich größten Fischen
+  const topMonthsByAvgSize = useMemo(() => {
+    if (statsFishes.length === 0) return { items: [] };
+
+    const monthData = new Map();
+
+    statsFishes.forEach((f) => {
+      const place = normalizePlace(f);
+      if (place !== 'Ferkensbruch') return; // nur Fänge aus Lobberich (alias Ferkensbruch)
+
+      if (f.under_min_size === true) return; // nur maßige Fische
+
+      const dt = new Date(f.timestamp);
+      if (Number.isNaN(dt.getTime())) return;
+
+      const size = typeof f.size === 'number'
+        ? f.size
+        : parseFloat(String(f.size ?? '').replace(',', '.'));
+      if (!Number.isFinite(size) || size <= 0) return;
+
+      const month = monthKey(dt);
+      let entry = monthData.get(month);
+      if (!entry) {
+        entry = { sum: 0, count: 0, species: new Map() };
+        monthData.set(month, entry);
+      }
+
+      entry.sum += size;
+      entry.count += 1;
+
+      const speciesName = (f.fish || '').trim();
+      if (speciesName) {
+        const bySpecies = entry.species;
+        const speciesEntry = bySpecies.get(speciesName) || { sum: 0, count: 0 };
+        speciesEntry.sum += size;
+        speciesEntry.count += 1;
+        bySpecies.set(speciesName, speciesEntry);
+      }
+    });
+
+    const ranked = Array.from(monthData.entries())
+      .map(([month, data]) => {
+        if (data.count === 0) return null;
+
+        const avgSize = data.sum / data.count;
+        const speciesList = Array.from(data.species.entries())
+          .map(([species, info]) => ({
+            species,
+            avgSize: info.count > 0 ? info.sum / info.count : 0,
+            count: info.count,
+          }))
+          .filter((s) => s.avgSize > 0)
+          .sort(
+            (a, b) =>
+              b.avgSize - a.avgSize ||
+              b.count - a.count ||
+              a.species.localeCompare(b.species, 'de')
+          );
+
+        return {
+          month,
+          avgSize,
+          count: data.count,
+          topSpecies: speciesList[0] || null,
+          species: speciesList,
+        };
+      })
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          b.avgSize - a.avgSize ||
+          b.count - a.count ||
+          a.month.localeCompare(b.month)
+      );
+
+    return { items: ranked.slice(0, 3) };
+  }, [statsFishes]);
+
   // ---------- 9) Bester Wochentag (gesamt)
   const mostFishesWeekday = useMemo(() => {
     if (statsFishes.length === 0) return { max: 0, items: [] };
@@ -1531,6 +1609,43 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
+          // 8b) Monate mit den größten Durchschnitts-Fischen
+          <Card key="monthAvgSize" title="📏 Welche Monate bringen die größten Ø-Fische?">
+            {topMonthsByAvgSize.items.length > 0 ? (
+              <ul className="space-y-2">
+                {topMonthsByAvgSize.items.map((item, idx) => (
+                  <li
+                    key={item.month}
+                    className="p-2 rounded bg-gray-50 dark:bg-gray-800"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-medium">
+                        {idx + 1}. {monthLabel(item.month)}
+                      </span>
+                      <span className="font-bold text-green-700 dark:text-green-300">
+                        Ø {item.avgSize.toFixed(1)} cm
+                      </span>
+                    </div>
+                   
+                    {item.species && item.species.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {item.species.map((speciesEntry) => (
+                          <Pill key={`${item.month}-${speciesEntry.species}`}>
+                            {speciesEntry.species} • Ø {speciesEntry.avgSize.toFixed(1)} cm
+                            {speciesEntry.count > 0 ? ` (${speciesEntry.count}x)` : ''}
+                          </Pill>
+                        ))}
+                      </div>
+                    )}
+                    
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Keine Größenangaben vorhanden.</p>
+            )}
+          </Card>,
+
           // 9) Wochentage
           <Card key="weekday" title="🗓️ Welcher Wochentag bringt die meisten Fänge?">
             {mostFishesWeekday.items.length > 0 ? (
@@ -2452,6 +2567,7 @@ const recordHunter = useMemo(() => {
       mostMonsterFishes,
       mostFishesDay,
       mostFishesMonth,
+      topMonthsByAvgSize,
       mostFishesWeekday,
       mostSpeciesInOneHour,
       mostPlacesAngler,
