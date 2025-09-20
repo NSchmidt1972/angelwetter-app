@@ -154,7 +154,7 @@ export default function CatchList({ anglerName }) {
                 key={key}
                 className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
               >
-                <div className="flex justify-between items-center mb-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {dateStr} – {timeStr}{' '}
                     {!entry.location_name ||
@@ -162,6 +162,14 @@ export default function CatchList({ anglerName }) {
                       ? ''
                       : `📍 ${entry.location_name}`}
                   </p>
+
+                  <div className="flex items-center gap-2 ml-auto">
+                    {topInfo && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold dark:bg-amber-900/60 dark:text-amber-200 whitespace-nowrap">
+                        🏅 Top 10 #{topInfo.rank}
+                      </span>
+                    )}
+                  </div>
 
                   {entry.angler === anglerName && (
                     <div className="relative">
@@ -218,11 +226,6 @@ export default function CatchList({ anglerName }) {
                     entry.weight != null && (
                       <span className="text-sm italic">({entry.weight} kg)</span>
                     )}
-                  {topInfo && (
-                    <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold dark:bg-amber-900/60 dark:text-amber-200">
-                      🏅 Top 10 #{topInfo.rank}
-                    </span>
-                  )}
                   {entry.photo_url && (
                     <button
                       onClick={() => setModalPhoto(entry.photo_url)}

@@ -12,12 +12,12 @@ export const REGION_LABELS = {
 };
 
 const FERKENSBRUCH_FISH = [
-"Aal", "Barsch", "Brasse", "Güster", "Hecht", "Karausche", "Karpfen",
+"Aal", "Barsch", "Brasse", "Gründling", "Güster", "Hecht", "Karausche", "Karpfen",
 "Rotauge", "Rotfeder", "Schleie", "Wels", "Zander",
 ];
 
 const INLAND_FISH = [
-"Aal", "Barsch", "Brasse", "Forelle", "Güster", "Grundel", "Hecht", "Karausche", "Karpfen",
+"Aal", "Barsch", "Brasse", "Forelle", "Güster", "Gründling", "Grundel", "Hecht", "Karausche", "Karpfen",
 "Rotauge", "Rotfeder", "Schleie", "Wels", "Zander",
 ];
 
