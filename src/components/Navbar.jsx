@@ -30,7 +30,11 @@ function PushMenuButton() {
   if (!sdk || supported === false) return null;
   const enabled = !!(optedIn && subId);
   const copyId = async () => {
-    try { await navigator.clipboard.writeText(subId || ""); } catch {}
+    try {
+      await navigator.clipboard.writeText(subId || "");
+    } catch (error) {
+      console.warn('Subscription-ID konnte nicht kopiert werden:', error);
+    }
   };
 
   return (

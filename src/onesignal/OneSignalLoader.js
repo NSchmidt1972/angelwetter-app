@@ -94,11 +94,11 @@ export async function initOneSignal() {
         });
 
         // ——— Events / Debug (optional) ———
-        OneSignal.Notifications.addEventListener('click', (e) => {
-          // console.log('[OneSignal] Notification click', e);
+        OneSignal.Notifications.addEventListener('click', () => {
+          // console.log('[OneSignal] Notification click');
         });
-        OneSignal.Notifications.addEventListener('display', (e) => {
-          // console.log('[OneSignal] Notification display', e);
+        OneSignal.Notifications.addEventListener('display', () => {
+          // console.log('[OneSignal] Notification display');
         });
 
         // Falls gewünscht: Angler-Tags setzen (Segmentierung)
@@ -217,7 +217,7 @@ export async function isOptedIn() {
 }
 
 /**
- * User-Tags setzen (z. B. { role: 'admin' } oder { angler: 'Max' }).
+ * User-Tags setzen (z. B. { role: 'admin' } oder { angler: 'Max' }).
  */
 export async function setUserTag(key, value) {
   if (!window.OneSignalDeferred) return;
@@ -246,7 +246,7 @@ export async function setUserTags(tagsObj) {
 
 /**
  * Glocke „kontextuell“ anzeigen/ausblenden lassen (per displayPredicate-Neub bewerten).
- * Praktisch, wenn du z. B. auf manchen Routen nicht anzeigen willst:
+ * Praktisch, wenn du z. B. auf manchen Routen nicht anzeigen willst:
  * - Aufruf einfach nach einem Route-Change.
  */
 export async function showBellIf(predicateFn) {
@@ -281,7 +281,7 @@ export async function showBellIf(predicateFn) {
 }
 
 /**
- * (Optional) Eigene Nutzer-ID mit OneSignal verknüpfen (z. B. Supabase-UID/Email).
+ * (Optional) Eigene Nutzer-ID mit OneSignal verknüpfen (z. B. Supabase-UID/Email).
  */
 export async function loginUser(externalId) {
   if (!window.OneSignalDeferred || !externalId) return;

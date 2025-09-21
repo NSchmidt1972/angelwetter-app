@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import PageContainer from '../components/PageContainer';
+
+const MARILOU_ALIASES = ['marilou boes', 'marilou'];
 
 export default function TopFishes() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -14,11 +16,11 @@ export default function TopFishes() {
   const anglerName = (localStorage.getItem('anglerName') || 'Unbekannt').trim();
   const anglerNameNorm = anglerName.toLowerCase();
 
-  // ✅ Aliase & Login-Check wie in der Rangliste
-  const MARILOU_ALIASES = ['marilou boes', 'marilou'];
   const isMarilouLoggedIn = MARILOU_ALIASES.includes(anglerNameNorm);
-  const isMarilouAngler = (name) =>
-    MARILOU_ALIASES.includes((name || '').trim().toLowerCase());
+  const isMarilouAngler = useCallback(
+    (name) => MARILOU_ALIASES.includes((name || '').trim().toLowerCase()),
+    []
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -75,7 +77,7 @@ export default function TopFishes() {
     }
 
     loadData();
-  }, [onlyMine, anglerName, anglerNameNorm, isMarilouLoggedIn]);
+  }, [onlyMine, anglerName, anglerNameNorm, isMarilouLoggedIn, isMarilouAngler]);
 
   useEffect(() => {
     const param = searchParams.get('fish') || '';

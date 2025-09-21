@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
+import { formatDateOnly, formatDateTime, parseTimestamp, formatTimeOnly } from '@/utils/dateUtils';
 
 export default function AdminOverview() {
   const [weatherUpdatedAt, setWeatherUpdatedAt] = useState(null);
@@ -14,65 +15,22 @@ export default function AdminOverview() {
   const [takenCatches, setTakenCatches] = useState([]);
 
 
-  const dateTimeFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('de-DE', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-        timeZone: 'Europe/Berlin',
-      }),
-    []
-  );
-
-  const timeFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('de-DE', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Europe/Berlin',
-      }),
-    []
-  );
-
-  const dateFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('de-DE', {
-        dateStyle: 'short',
-        timeZone: 'Europe/Berlin',
-      }),
-    []
-  );
-
-  const parseDateSafe = (value) => {
-    if (!value) return null;
-    if (value instanceof Date) {
-      return Number.isNaN(value.getTime()) ? null : value;
-    }
-    if (typeof value === 'number') {
-      const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? null : date;
-    }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      const isoLike = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T');
-      const hasTimezone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(isoLike);
-      const candidate = hasTimezone ? isoLike : `${isoLike}Z`;
-      const date = new Date(candidate);
-      return Number.isNaN(date.getTime()) ? null : date;
-    }
-    return null;
+  const formatDateTimeLabel = (value) => {
+    const parsed = parseTimestamp(value);
+    if (!parsed) return 'unbekannt';
+    return formatDateTime(parsed);
   };
 
-  const formatDateTime = (value) => {
-    const date = parseDateSafe(value);
-    if (!date) return 'unbekannt';
-    return dateTimeFormatter.format(date);
+  const formatDateLabel = (value) => {
+    const parsed = parseTimestamp(value);
+    if (!parsed) return 'unbekannt';
+    return formatDateOnly(parsed);
   };
 
-  const formatDate = (value) => {
-    const date = parseDateSafe(value);
-    if (!date) return 'unbekannt';
-    return dateFormatter.format(date);
+  const formatTimeLabel = (value) => {
+    const parsed = parseTimestamp(value);
+    if (!parsed) return 'unbekannt';
+    return formatTimeOnly(parsed);
   };
 
   useEffect(() => {
@@ -85,8 +43,8 @@ export default function AdminOverview() {
           .single();
 
         if (weatherData?.updated_at) {
-          const parsed = parseDateSafe(weatherData.updated_at);
-          if (parsed) setWeatherUpdatedAt(timeFormatter.format(parsed));
+          const label = formatTimeLabel(weatherData.updated_at);
+          if (label !== 'unbekannt') setWeatherUpdatedAt(label);
         }
 
         const { data: users } = await supabase
@@ -204,9 +162,9 @@ export default function AdminOverview() {
           <div className="max-h-60 overflow-y-auto">
             <ul className={listItemClass}>
               <li>
-                {nameShort} – {latestCatch.fish} ({latestCatch.size} cm)
+                {nameShort} – {latestCatch.fish} ({latestCatch.size} cm)
                 <span className={metaTextClass}> {' am '}
-                  {formatDateTime(latestCatch.timestamp)}
+                  {formatDateTimeLabel(latestCatch.timestamp)}
                 </span>
               </li>
             </ul>
@@ -225,7 +183,7 @@ export default function AdminOverview() {
                 <li key={i}>
                   {b.angler}
                   <span className={metaTextClass}> {' am '}
-                    {formatDateTime(b.timestamp)}
+                    {formatDateTimeLabel(b.timestamp)}
                   </span>
                 </li>
               ))}
@@ -243,12 +201,12 @@ export default function AdminOverview() {
               .slice()
               .sort(
                 (a, b) =>
-                  (parseDateSafe(b.last_active)?.getTime() || 0) -
-                  (parseDateSafe(a.last_active)?.getTime() || 0)
+                  (parseTimestamp(b.last_active)?.getTime() || 0) -
+                  (parseTimestamp(a.last_active)?.getTime() || 0)
               )
               .map((u, i) => (
               <li key={i}>
-                {u.name} <span className={metaTextClass}>(aktiv am {formatDateTime(u.last_active)})</span>
+                {u.name} <span className={metaTextClass}>(aktiv am {formatDateTimeLabel(u.last_active)})</span>
               </li>
             ))}
           </ul>
@@ -264,7 +222,7 @@ export default function AdminOverview() {
                   {entry.angler} – {entry.fish}
                   <span className={metaTextClass}>
                     {' am '}
-                    {entry.timestamp ? formatDateTime(entry.timestamp) : 'unbekannt'}
+                    {entry.timestamp ? formatDateTimeLabel(entry.timestamp) : 'unbekannt'}
                   </span>
                 </li>
               ))}
@@ -281,10 +239,10 @@ export default function AdminOverview() {
             <ul className={listItemClass}>
               {externalCatches.map((entry, i) => (
                 <li key={i}>
-                  {entry.angler} – {entry.fish} ({entry.size} cm)
+                  {entry.angler} – {entry.fish} ({entry.size} cm)
                   <span className={metaTextClass}>
                     {' am '}
-                    {formatDateTime(entry.timestamp)}
+                    {formatDateTimeLabel(entry.timestamp)}
                     {' bei '}
                     {entry.location_name || 'unbekannt'} ({entry.lat.toFixed(4)}, {entry.lon.toFixed(4)})
                   </span>
@@ -303,7 +261,7 @@ export default function AdminOverview() {
           <ul className={listItemClass}>
             {allProfiles.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map((p, i) => (
               <li key={i}>
-                {p.name} <span className={metaTextClass}>(seit {formatDate(p.created_at)})</span>
+                {p.name} <span className={metaTextClass}>(seit {formatDateLabel(p.created_at)})</span>
               </li>
             ))}
           </ul>

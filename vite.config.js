@@ -5,6 +5,7 @@ import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'node:child_process';
+import process from 'node:process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

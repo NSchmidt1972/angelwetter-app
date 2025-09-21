@@ -8,15 +8,9 @@ const IS_DEV_BUILD = (() => {
       if (import.meta.env.DEV) return true;
       if (import.meta.env.MODE && import.meta.env.MODE !== 'production') return true;
     }
-  } catch (_) {
-    // ignore – fallback checks below
+  } catch (error) {
+    console.warn('[catchService] env check failed:', error);
   }
-
-  if (typeof process !== 'undefined' && process.env) {
-    const env = process.env.NODE_ENV || process.env.VITE_NODE_ENV;
-    if (env && env !== 'production') return true;
-  }
-
   return false;
 })();
 
@@ -43,8 +37,8 @@ export async function saveCatchEntry(entry, taken, position, anglerName, /*FERKE
       if (host.endsWith('.local')) return true;
       try {
         if (window.localStorage.getItem('pushDisableDev') === 'on') return true;
-      } catch (_) {
-        // ignore storage access issues
+      } catch (error) {
+        console.warn('[catchService] Zugriff auf localStorage fehlgeschlagen:', error);
       }
     }
 
@@ -94,8 +88,8 @@ export async function saveCatchEntry(entry, taken, position, anglerName, /*FERKE
     });
 
     if (fnErr) console.warn('Push fehlgeschlagen (ignoriert):', fnErr.message || fnErr);
-  } catch (e) {
-    console.warn('Push-Aufruf übersprungen (Invoke-Fehler):', e?.message || e);
+  } catch (error) {
+    console.warn('Push-Aufruf übersprungen (Invoke-Fehler):', error?.message || error);
   }
 
   return data;

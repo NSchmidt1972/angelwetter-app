@@ -45,7 +45,7 @@ export default function ForecastHourly({ data }) {
                 alt={desc}
                 style={{ width: '50px', height: '50px' }}
               />
-              <div>{temp} °C</div>
+              <div>{temp} °C</div>
               <small>{desc}</small>
               <div style={{ marginTop: '0.5rem' }}>
                 🌧️ {pop}%

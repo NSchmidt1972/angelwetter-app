@@ -107,8 +107,8 @@ export default function PushInit() {
               }
             }
           }
-        } catch (_) {
-          /* noop */
+        } catch (error) {
+          console.warn('[PushInit] Prüfen bestehender Subscription fehlgeschlagen:', error);
         }
 
         // 1) Beim Start (falls bereits subscribed & eingeloggt)

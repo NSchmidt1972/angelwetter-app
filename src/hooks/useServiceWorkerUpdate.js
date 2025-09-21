@@ -8,34 +8,49 @@ export function useServiceWorkerUpdate() {
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    let offCC;
+    let offControllerChange = null;
+    let cancel = false;
+    let visibilityHandler = null;
 
     (async () => {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) return;
-      regRef.current = reg;
-      if (reg.waiting) setUpdateReady(true);
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg || cancel) return;
+        regRef.current = reg;
+        if (reg.waiting) setUpdateReady(true);
 
-      reg.addEventListener("updatefound", () => {
-        const installing = reg.installing;
-        if (!installing) return;
-        installing.addEventListener("statechange", () => {
-          if (installing.state === "installed" && reg.waiting) setUpdateReady(true);
+        reg.addEventListener("updatefound", () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener("statechange", () => {
+            if (installing.state === "installed" && reg.waiting) setUpdateReady(true);
+          });
         });
-      });
 
-      const onControllerChange = () => window.location.reload();
-      navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
-      offCC = () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+        const onControllerChange = () => window.location.reload();
+        navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+        offControllerChange = () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
 
-      const onVis = async () => {
-        if (document.visibilityState === "visible") await reg.update();
-      };
-      document.addEventListener("visibilitychange", onVis);
-      return () => document.removeEventListener("visibilitychange", onVis);
+        visibilityHandler = async () => {
+          if (document.visibilityState === "visible") {
+            try {
+              await reg.update();
+            } catch (error) {
+              console.warn('[SW] Update beim Sichtbarwerden fehlgeschlagen:', error);
+            }
+          }
+        };
+        document.addEventListener("visibilitychange", visibilityHandler);
+      } catch (error) {
+        console.warn('[SW] Registrierung laden fehlgeschlagen:', error);
+      }
     })();
 
-    return () => { if (offCC) offCC(); };
+    return () => {
+      cancel = true;
+      if (offControllerChange) offControllerChange();
+      if (visibilityHandler) document.removeEventListener("visibilitychange", visibilityHandler);
+    };
   }, []);
 
   const applyUpdateNow = async () => {
@@ -49,8 +64,18 @@ export function useServiceWorkerUpdate() {
       }
 
       const skip = async () => {
-        try { reg.waiting && reg.waiting.postMessage({ type: "SKIP_WAITING" }); } catch {}
-        try { await waitForControllerChange(3000); return true; } catch { return false; }
+        try {
+          reg.waiting && reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        } catch (error) {
+          console.warn('[SW] SKIP_WAITING Nachricht fehlgeschlagen:', error);
+        }
+        try {
+          await waitForControllerChange(3000);
+          return true;
+        } catch (error) {
+          console.warn('[SW] Controller-Änderung abgewartet aber fehlgeschlagen:', error);
+          return false;
+        }
       };
 
       if (reg.waiting && await skip()) return;
@@ -58,16 +83,22 @@ export function useServiceWorkerUpdate() {
       try {
         await reg.update();
         if (reg.waiting && await skip()) return;
-      } catch {}
+      } catch (error) {
+        console.warn('[SW] Manuelles Update fehlgeschlagen:', error);
+      }
 
       try {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.allSettled(regs.map(r => r.unregister()));
-      } catch {}
+      } catch (error) {
+        console.warn('[SW] Registrierungen konnten nicht bereinigt werden:', error);
+      }
       try {
         const keys = await caches.keys();
         await Promise.allSettled(keys.map(k => caches.delete(k)));
-      } catch {}
+      } catch (error) {
+        console.warn('[SW] Cache-Bereinigung fehlgeschlagen:', error);
+      }
 
       window.location.reload();
     } finally {

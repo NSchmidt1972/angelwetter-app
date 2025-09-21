@@ -18,7 +18,7 @@ export default function UpdatePassword() {
 
     if (access_token) {
       supabase.auth.setSession({ access_token, refresh_token })
-        .then(({ data, error }) => {
+        .then(({ error }) => {
           if (error) {
             setError("Fehler beim Anmelden – bitte Link erneut aufrufen.");
           } else {

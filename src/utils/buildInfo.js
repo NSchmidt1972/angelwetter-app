@@ -1,4 +1,5 @@
 // utils/buildInfo.js
+/* global __BUILD_INFO__, __APP_VERSION__, __BUILD_DATE__, __GIT_COMMIT__ */
 const BI = (typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__) || null;
 
 const FALLBACKS = {

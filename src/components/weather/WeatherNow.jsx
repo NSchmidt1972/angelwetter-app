@@ -1,5 +1,5 @@
 // src/components/weather/WeatherNow.jsx
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CurrentPanel from '@/components/weather/CurrentPanel';
 import HourlyScroller from '@/components/weather/HourlyScroller';
 import DailyScroller from '@/components/weather/DailyScroller';
@@ -28,19 +28,36 @@ function makeKey(w) {
 }
 function usePredictionCache() {
   const ref = useRef(null);
+
   if (!ref.current) {
-    try { ref.current = JSON.parse(localStorage.getItem(PREDICTION_CACHE_KEY) || '{}'); }
-    catch { ref.current = {}; }
+    try {
+      ref.current = JSON.parse(localStorage.getItem(PREDICTION_CACHE_KEY) || '{}');
+    } catch (err) {
+      console.warn('Vorhersage-Cache konnte nicht geladen werden:', err);
+      ref.current = {};
+    }
   }
-  const get = (k) => {
-    const e = ref.current[k];
-    if (!e) return null;
-    if (Date.now() - e.ts > PREDICTION_TTL_MS) return null;
-    return e.v;
-  };
-  const set = (k, v) => { ref.current[k] = { ts: Date.now(), v }; };
-  const persist = () => { try { localStorage.setItem(PREDICTION_CACHE_KEY, JSON.stringify(ref.current)); } catch {} };
-  return { get, set, persist };
+
+  const get = useCallback((key) => {
+    const entry = ref.current[key];
+    if (!entry) return null;
+    if (Date.now() - entry.ts > PREDICTION_TTL_MS) return null;
+    return entry.v;
+  }, []);
+
+  const set = useCallback((key, value) => {
+    ref.current[key] = { ts: Date.now(), v: value };
+  }, []);
+
+  const persist = useCallback(() => {
+    try {
+      localStorage.setItem(PREDICTION_CACHE_KEY, JSON.stringify(ref.current));
+    } catch (err) {
+      console.warn('Vorhersage-Cache konnte nicht persistiert werden:', err);
+    }
+  }, []);
+
+  return useMemo(() => ({ get, set, persist }), [get, set, persist]);
 }
 async function fetchPrediction(weather, signal) {
   const res = await fetch('https://ai.asv-rotauge.de/predict', {
@@ -57,7 +74,12 @@ async function runBatched(tasks, limit = MAX_CONCURRENCY) {
   async function worker() {
     while (i < tasks.length) {
       const idx = i++;
-      try { out[idx] = await tasks[idx](); } catch { out[idx] = null; }
+      try {
+        out[idx] = await tasks[idx]();
+      } catch (err) {
+        console.warn('Vorhersage-Worker fehlgeschlagen:', err);
+        out[idx] = null;
+      }
     }
   }
   const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
@@ -66,7 +88,6 @@ async function runBatched(tasks, limit = MAX_CONCURRENCY) {
 }
 
 export default function WeatherNow({ data, onRefresh }) {
-  const [autoUpdated, setAutoUpdated] = useState(false);
 
   // Daily (inkl. AI)
   const [dailyWithPrediction, setDailyWithPrediction] = useState([]);
@@ -78,6 +99,11 @@ export default function WeatherNow({ data, onRefresh }) {
 
   const [currentPrediction, setCurrentPrediction] = useState(null);
 
+  const hoursToRender = useMemo(
+    () => hourlyBase.slice(0, Math.min(visibleCount, hourlyBase.length)),
+    [hourlyBase, visibleCount]
+  );
+
   const cache = usePredictionCache();
   const hourlyRef = useRef(null);
 
@@ -86,9 +112,7 @@ export default function WeatherNow({ data, onRefresh }) {
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
       if ('onLine' in navigator && !navigator.onLine) return;
-      setAutoUpdated(true);
       onRefresh?.();
-      setTimeout(() => setAutoUpdated(false), 1500);
     };
     const id = setInterval(tick, 5 * 60 * 1000);
     return () => clearInterval(id);
@@ -104,7 +128,7 @@ export default function WeatherNow({ data, onRefresh }) {
     setHourPreds({});
     setCurrentPrediction(null);
     if (hourlyRef.current) hourlyRef.current.scrollLeft = 0;
-  }, [data]);
+  }, [data, cache]);
 
   // KI-Prognosen: DAILY (idle)
   useEffect(() => {
@@ -172,12 +196,14 @@ export default function WeatherNow({ data, onRefresh }) {
           cache.set(key, pred);
           setCurrentPrediction(pred);
           cache.persist();
-        } catch {}
+        } catch (err) {
+          console.warn('Aktuelle Vorhersage fehlgeschlagen:', err);
+        }
       })();
       return () => ac.abort();
     });
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
-  }, [data]);
+  }, [cache, data]);
 
   // KI-Prognosen: sichtbare Stunden
   useEffect(() => {
@@ -232,7 +258,7 @@ export default function WeatherNow({ data, onRefresh }) {
 
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleCount, hourlyBase]);
+  }, [visibleCount, hourlyBase, cache, data]);
 
   // Infinite-Scroll: sichtbare Stunden erhöhen
   const onHourlyScroll = (e) => {
@@ -257,10 +283,6 @@ export default function WeatherNow({ data, onRefresh }) {
 
   const now = data.data.current;
   const days = dailyWithPrediction || [];
-  const hoursToRender = useMemo(
-    () => hourlyBase.slice(0, Math.min(visibleCount, hourlyBase.length)),
-    [hourlyBase, visibleCount]
-  );
 
   return (
     <div className="p-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow-md rounded-xl max-w-6xl mx-auto">
