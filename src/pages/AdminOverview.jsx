@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
 
@@ -14,6 +14,67 @@ export default function AdminOverview() {
   const [takenCatches, setTakenCatches] = useState([]);
 
 
+  const dateTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('de-DE', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: 'Europe/Berlin',
+      }),
+    []
+  );
+
+  const timeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Europe/Berlin',
+      }),
+    []
+  );
+
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('de-DE', {
+        dateStyle: 'short',
+        timeZone: 'Europe/Berlin',
+      }),
+    []
+  );
+
+  const parseDateSafe = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+    if (typeof value === 'number') {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      const isoLike = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T');
+      const hasTimezone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(isoLike);
+      const candidate = hasTimezone ? isoLike : `${isoLike}Z`;
+      const date = new Date(candidate);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+    return null;
+  };
+
+  const formatDateTime = (value) => {
+    const date = parseDateSafe(value);
+    if (!date) return 'unbekannt';
+    return dateTimeFormatter.format(date);
+  };
+
+  const formatDate = (value) => {
+    const date = parseDateSafe(value);
+    if (!date) return 'unbekannt';
+    return dateFormatter.format(date);
+  };
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -24,12 +85,8 @@ export default function AdminOverview() {
           .single();
 
         if (weatherData?.updated_at) {
-          setWeatherUpdatedAt(
-            new Date(weatherData.updated_at).toLocaleTimeString('de-DE', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-          );
+          const parsed = parseDateSafe(weatherData.updated_at);
+          if (parsed) setWeatherUpdatedAt(timeFormatter.format(parsed));
         }
 
         const { data: users } = await supabase
@@ -149,8 +206,7 @@ export default function AdminOverview() {
               <li>
                 {nameShort} – {latestCatch.fish} ({latestCatch.size} cm)
                 <span className={metaTextClass}> {' am '}
-                  {new Date(new Date(latestCatch.timestamp).getTime() + 2 * 60 * 60 * 1000)
-                    .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
+                  {formatDateTime(latestCatch.timestamp)}
                 </span>
               </li>
             </ul>
@@ -169,8 +225,7 @@ export default function AdminOverview() {
                 <li key={i}>
                   {b.angler}
                   <span className={metaTextClass}> {' am '}
-                    {new Date(new Date(b.timestamp).getTime() + 2 * 60 * 60 * 1000)
-                      .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
+                    {formatDateTime(b.timestamp)}
                   </span>
                 </li>
               ))}
@@ -184,12 +239,16 @@ export default function AdminOverview() {
       <Section title="👥 Aktive User (7 Tage)" value={`${activeUsers.length} aktive Nutzer`}>
         <div className="max-h-60 overflow-y-auto">
           <ul className={listItemClass}>
-            {activeUsers.slice().sort((a, b) => new Date(b.last_active) - new Date(a.last_active)).map((u, i) => (
+            {activeUsers
+              .slice()
+              .sort(
+                (a, b) =>
+                  (parseDateSafe(b.last_active)?.getTime() || 0) -
+                  (parseDateSafe(a.last_active)?.getTime() || 0)
+              )
+              .map((u, i) => (
               <li key={i}>
-                {u.name} <span className={metaTextClass}>(aktiv am {
-                  new Date(new Date(u.last_active).getTime() + 2 * 60 * 60 * 1000)
-                    .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
-                })</span>
+                {u.name} <span className={metaTextClass}>(aktiv am {formatDateTime(u.last_active)})</span>
               </li>
             ))}
           </ul>
@@ -205,10 +264,7 @@ export default function AdminOverview() {
                   {entry.angler} – {entry.fish}
                   <span className={metaTextClass}>
                     {' am '}
-                    {entry.timestamp
-                      ? new Date(new Date(entry.timestamp).getTime() + 2 * 60 * 60 * 1000)
-                        .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
-                      : 'unbekannt'}
+                    {entry.timestamp ? formatDateTime(entry.timestamp) : 'unbekannt'}
                   </span>
                 </li>
               ))}
@@ -228,8 +284,7 @@ export default function AdminOverview() {
                   {entry.angler} – {entry.fish} ({entry.size} cm)
                   <span className={metaTextClass}>
                     {' am '}
-                    {new Date(new Date(entry.timestamp).getTime() + 2 * 60 * 60 * 1000)
-                      .toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
+                    {formatDateTime(entry.timestamp)}
                     {' bei '}
                     {entry.location_name || 'unbekannt'} ({entry.lat.toFixed(4)}, {entry.lon.toFixed(4)})
                   </span>
@@ -248,7 +303,7 @@ export default function AdminOverview() {
           <ul className={listItemClass}>
             {allProfiles.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map((p, i) => (
               <li key={i}>
-                {p.name} <span className={metaTextClass}>(seit {new Date(p.created_at).toLocaleDateString('de-DE')})</span>
+                {p.name} <span className={metaTextClass}>(seit {formatDate(p.created_at)})</span>
               </li>
             ))}
           </ul>

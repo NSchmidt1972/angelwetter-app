@@ -111,7 +111,29 @@ export default function TopFishes() {
       f.fish !== 'Unbekannt' &&
       !f.blank
     )
-    .sort((a, b) => parseFloat(b.size) - parseFloat(a.size))
+    .sort((a, b) => {
+      const sizeA = parseFloat(a.size);
+      const sizeB = parseFloat(b.size);
+
+      if (Number.isFinite(sizeA) && Number.isFinite(sizeB) && sizeA !== sizeB) {
+        return sizeB - sizeA;
+      }
+
+      if (Number.isFinite(sizeA) && !Number.isFinite(sizeB)) return -1;
+      if (!Number.isFinite(sizeA) && Number.isFinite(sizeB)) return 1;
+
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+
+      if (Number.isFinite(timeA) && Number.isFinite(timeB) && timeA !== timeB) {
+        return timeA - timeB;
+      }
+
+      if (Number.isFinite(timeA) && !Number.isFinite(timeB)) return -1;
+      if (!Number.isFinite(timeA) && Number.isFinite(timeB)) return 1;
+
+      return 0;
+    })
     .slice(0, 10);
 
   return (

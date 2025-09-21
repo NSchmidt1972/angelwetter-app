@@ -825,6 +825,40 @@ export default function FunFacts() {
     return { max, items: top3 };
   }, [statsFishes]);
 
+  // ---------- 21b) Durchschnittlich größte Fische pro Angler
+  const averageSizeByAngler = useMemo(() => {
+    if (statsFishes.length === 0) return { top3: [], ranking: [] };
+
+    const totals = new Map();
+    statsFishes.forEach((f) => {
+      const angler = (f.angler || 'Unbekannt').trim();
+      if (!angler || f.blank) return;
+      const size = parseFloat(f.size);
+      if (!Number.isFinite(size) || size <= 0) return;
+
+      const entry = totals.get(angler) || { total: 0, count: 0 };
+      entry.total += size;
+      entry.count += 1;
+      totals.set(angler, entry);
+    });
+
+    const ranking = [...totals.entries()]
+      .map(([angler, { total, count }]) => ({
+        angler,
+        count,
+        average: count > 0 ? total / count : 0,
+      }))
+      .filter((item) => item.count > 0)
+      .sort(
+        (a, b) =>
+          b.average - a.average ||
+          b.count - a.count ||
+          a.angler.localeCompare(b.angler)
+      );
+
+    return { top3: ranking.slice(0, 3), ranking };
+  }, [statsFishes]);
+
   // ---------- 22) Längste Pause zwischen Fangtagen
   const longestBreakBetweenCatchDays = useMemo(() => {
     if (statsFishes.length === 0) return { gap: 0, winners: [], ranking: [] };
@@ -2019,6 +2053,37 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
+          // 21b) Durchschnittliche Größe je Angler
+          <Card
+            key="avg-size"
+            title="📏 Wer fängt im Schnitt die größten Fische? (Top 3)"
+          >
+            {averageSizeByAngler.top3.length > 0 ? (
+              <ol className="space-y-2">
+                {averageSizeByAngler.top3.map((it, idx) => (
+                  <li
+                    key={it.angler}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 text-sm tabular-nums text-gray-500 dark:text-gray-400">
+                        {idx + 1}.
+                      </span>
+                      <span className="font-medium text-green-700 dark:text-green-300">
+                        {it.angler}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Pill>Ø {it.average.toFixed(1)} cm</Pill>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p>Keine auswertbaren Fänge.</p>
+            )}
+          </Card>,
+
           // 22) Längste Pause
           <Card key="pause" title="⏳ Wer muss sich am längsten zwischen den Fangtagen ausruhen?">
             {longestBreakBetweenCatchDays.winners.length > 0 ? (
@@ -2596,7 +2661,8 @@ const recordHunter = useMemo(() => {
       overallAvgPerAnglerDay,
       angelQueen,
       recordHunter,
-      photoArtist
+      photoArtist,
+      averageSizeByAngler.top3
     ]
   );
 
