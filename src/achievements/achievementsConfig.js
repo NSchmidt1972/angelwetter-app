@@ -45,6 +45,8 @@ function dayBoundsEuropeBerlinUTC(tsISO) {
   return { startUTC, endUTC };
 }
 
+const normalizeName = (name) => (name || '').trim();
+
 export const achievements = [
   // ========= Zähl-Meilensteine (nutzen needsCount -> Hook übernimmt die Zählung) =========
   {
@@ -53,21 +55,45 @@ export const achievements = [
     message: "Stark! Du hast deinen 10. Fisch gefangen 🎉",
     icon: "🐟",
     // ❌ keine eigene check-Funktion nötig; wir zählen über needsCount:
-    needsCount: { table: "fishes", filter: { key: "angler_user_id", op: "eq" }, threshold: 10 }
+    needsCount: {
+      table: "fishes",
+      threshold: 10,
+      filters: ({ lastCatch }) => {
+        const name = normalizeName(lastCatch?.angler);
+        if (!name) return [];
+        return [["angler", "eq", name]];
+      },
+    },
   },
   {
     id: "fish_50",
     title: "50 Fische!",
     message: "Maschine! 50 Fänge sind im Sack 💪",
     icon: "🏆",
-    needsCount: { table: "fishes", filter: { key: "angler_user_id", op: "eq" }, threshold: 50 }
+    needsCount: {
+      table: "fishes",
+      threshold: 50,
+      filters: ({ lastCatch }) => {
+        const name = normalizeName(lastCatch?.angler);
+        if (!name) return [];
+        return [["angler", "eq", name]];
+      },
+    },
   },
   {
     id: "fish_100",
     title: "100 Fische!!!",
     message: "Legendär! 100 Fänge – Applaus! 👑",
     icon: "👑",
-    needsCount: { table: "fishes", filter: { key: "angler_user_id", op: "eq" }, threshold: 100 }
+    needsCount: {
+      table: "fishes",
+      threshold: 100,
+      filters: ({ lastCatch }) => {
+        const name = normalizeName(lastCatch?.angler);
+        if (!name) return [];
+        return [["angler", "eq", name]];
+      },
+    },
   },
 
   // ========= Erste gefangene Art (pro User) =========
@@ -76,10 +102,11 @@ export const achievements = [
     title: "Neue Art!",
     message: (ctx) => `Erster ${ctx?.fish} in deiner Liste – weiter so! 🌟`,
     icon: "🧭",
-    check: async ({ supabase, userId, lastCatch }) => {
-      if (!userId || !lastCatch?.fish) return false;
+    check: async ({ supabase, lastCatch }) => {
+      const name = normalizeName(lastCatch?.angler);
+      if (!name || !lastCatch?.fish) return false;
       const { count } = await getCount(supabase, "fishes", [
-        ["angler_user_id", "eq", userId],
+        ["angler", "eq", name],
         ["fish", "eq", lastCatch.fish],
       ]);
       // Wenn der aktuelle Insert schon drin ist, ist es genau dann die erste Art, wenn count === 1
@@ -93,14 +120,15 @@ export const achievements = [
     title: "Persönliche Bestlänge!",
     message: (ctx) => `Neuer Rekord ${ctx?.fish}: ${ctx?.size} cm! 🚀`,
     icon: "📏",
-    check: async ({ supabase, userId, lastCatch }) => {
-      if (!userId || !lastCatch?.fish || !lastCatch?.size || !lastCatch?.timestamp) return false;
+    check: async ({ supabase, lastCatch }) => {
+      const name = normalizeName(lastCatch?.angler);
+      if (!name || !lastCatch?.fish || !lastCatch?.size || !lastCatch?.timestamp) return false;
 
       // Bisheriger persönlicher Rekord (nur frühere Fänge, gleiche Art)
       const { data: prev, error } = await supabase
         .from("fishes")
         .select("size")
-        .eq("angler_user_id", userId)
+        .eq("angler", name)
         .eq("fish", lastCatch.fish)
         .lt("timestamp", lastCatch.timestamp)   // nur frühere
         .order("size", { ascending: false })

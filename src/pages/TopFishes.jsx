@@ -189,6 +189,7 @@ export default function TopFishes() {
                   const dateStr = new Date(f.timestamp).toLocaleDateString('de-DE');
                   const nameKey = (f.angler || '').trim();
                   const displayName = formattedNamesMap[nameKey] || f.angler || 'Unbekannt';
+                  const isCurrentAngler = nameKey && nameKey.toLowerCase() === anglerNameNorm;
 
                   // ✅ Ort-Logik: wenn leer oder Lobberich => Ferkensbruch
                   let ort = (f.location_name || '').trim();
@@ -202,10 +203,18 @@ export default function TopFishes() {
                   return (
                     <tr
                       key={f.id || `${f.angler}-${f.timestamp}-${i}`}
-                      className="border-t border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition"
+                      className={`border-t border-gray-200 dark:border-gray-700 transition ${
+                        isCurrentAngler
+                          ? 'bg-blue-50/60 dark:bg-blue-900/20 font-semibold'
+                          : 'hover:bg-blue-50 dark:hover:bg-gray-700'
+                      }`}
                     >
                       <td className="px-4 py-2">{i + 1}</td>
-                      {!onlyMine && <td className="px-4 py-2 font-sans">{displayName}</td>}
+                      {!onlyMine && (
+                        <td className={`px-4 py-2 font-sans ${isCurrentAngler ? 'text-blue-700 dark:text-blue-300' : ''}`}>
+                          {displayName}
+                        </td>
+                      )}
                       <td className="px-4 py-2 text-right">{sizeFormatted}</td>
                       <td className="px-4 py-2 text-right">{dateStr}</td>
                       {onlyMine && <td className="px-4 py-2 font-sans">{ort}</td>}

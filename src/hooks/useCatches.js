@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PAGE_SIZE, CACHE_KEY, VERTRAUTE, PUBLIC_FROM } from '../constants';
 import { listFishes, countFishes, updateFish as svcUpdate, deleteFish as svcDelete } from '../services/fishes';
-import { uploadPhotoAndGetUrl } from '../services/storage';
+import { processAndUploadImage } from '../services/imageProcessing';
 import { isVisibleToUser } from '../utils/filters';
 import { readCache, writeCache } from '../utils/cache';
 
@@ -66,7 +66,10 @@ export function useCatches(anglerName, onlyMine) {
   // editing helpers
   const updateEntry = useCallback(async ({ entry, fish, size, note, photoFile }) => {
     let photo_url = entry.photo_url;
-    if (photoFile) photo_url = await uploadPhotoAndGetUrl({ file: photoFile, id: entry.id });
+
+    if (photoFile) {
+      photo_url = await processAndUploadImage(photoFile, entry.angler || 'Unbekannt');
+    }
 
     const { error } = await svcUpdate(entry.id, { fish, size: parseFloat(size), note, photo_url });
     if (error) throw error;

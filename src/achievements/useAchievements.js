@@ -19,15 +19,13 @@ export function useAchievements({ supabase, showEffect, remember }) {
         let hit = false;
         let ctx = { fish: lastCatch?.fish, size: lastCatch?.size };
 
-        if (a.needsCount && !userId) {
-          continue;
-        }
-
         if (a.needsCount) {
-          const { table, filter, threshold } = a.needsCount;
-          const filters = [];
-          if (filter?.key && filter?.op && userId) {
-            filters.push([filter.key, filter.op, userId]);
+          const { table, filters: buildFilters, threshold } = a.needsCount;
+          const filters = typeof buildFilters === 'function'
+            ? buildFilters({ supabase, userId, lastCatch })
+            : [];
+          if (!Array.isArray(filters) || filters.length === 0) {
+            continue;
           }
           const { count } = await getCount(supabase, table, filters);
           hit = count === threshold;
