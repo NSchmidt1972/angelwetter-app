@@ -56,12 +56,32 @@ export default function PushInit() {
         const ua = navigator.userAgent || null;
 
         // 5) Schreiben – await, damit Lock sicher gelöst wird
+        let anglerName = null;
+        try {
+          anglerName = localStorage.getItem('anglerName') || null;
+        } catch {
+          anglerName = null;
+        }
+
         const { error } = await supabase.rpc('claim_push_subscription', {
           p_subscription_id: subscriptionId,
           p_device_label: device,
           p_user_agent: ua,
           p_scope: scope,
+          p_angler_name: anglerName,
         });
+
+        if (!error && anglerName) {
+          try {
+            await supabase
+              .from('push_subscriptions')
+              .update({ angler_name: anglerName })
+              .eq('subscription_id', subscriptionId)
+              .eq('user_id', uid);
+          } catch (updateErr) {
+            console.warn('[PushInit] backfill angler_name failed:', updateErr);
+          }
+        }
 
         if (error) {
           console.warn('[PushInit] claim_push_subscription RPC error:', error, reason);

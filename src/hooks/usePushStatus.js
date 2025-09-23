@@ -177,13 +177,36 @@ export default function usePushStatus() {
             const device =
               navigator.userAgentData?.platform || navigator.platform || null;
             const ua = navigator.userAgent || null;
+            let anglerName = null;
+            try {
+              anglerName = localStorage.getItem('anglerName') || null;
+            } catch {
+              anglerName = null;
+            }
 
             await supabase.rpc('claim_push_subscription', {
               p_subscription_id: sid,
               p_device_label: device,
               p_user_agent: ua,
               p_scope: scope,
+              p_angler_name: anglerName,
             });
+
+            if (anglerName) {
+              try {
+                const { data: userRes } = await supabase.auth.getUser();
+                const uid = userRes?.user?.id;
+                if (uid) {
+                  await supabase
+                    .from('push_subscriptions')
+                    .update({ angler_name: anglerName })
+                    .eq('subscription_id', sid)
+                    .eq('user_id', uid);
+                }
+              } catch (updateErr) {
+                console.warn('[usePushStatus] backfill angler_name failed:', updateErr);
+              }
+            }
           } catch (rpcErr) {
             console.warn(
               '[usePushStatus] RPC claim_push_subscription error:',

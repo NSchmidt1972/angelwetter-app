@@ -17,17 +17,22 @@ export function useServiceWorkerUpdate() {
         const reg = await navigator.serviceWorker.getRegistration();
         if (!reg || cancel) return;
         regRef.current = reg;
-        if (reg.waiting) setUpdateReady(true);
+        setUpdateReady(Boolean(reg.waiting));
 
         reg.addEventListener("updatefound", () => {
           const installing = reg.installing;
           if (!installing) return;
           installing.addEventListener("statechange", () => {
-            if (installing.state === "installed" && reg.waiting) setUpdateReady(true);
+            if (installing.state === "installed") {
+              setUpdateReady(Boolean(reg.waiting));
+            }
           });
         });
 
-        const onControllerChange = () => window.location.reload();
+        const onControllerChange = () => {
+          setUpdateReady(false);
+          window.location.reload();
+        };
         navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
         offControllerChange = () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
 
@@ -71,6 +76,7 @@ export function useServiceWorkerUpdate() {
         }
         try {
           await waitForControllerChange(3000);
+          setUpdateReady(false);
           return true;
         } catch (error) {
           console.warn('[SW] Controller-Änderung abgewartet aber fehlgeschlagen:', error);
@@ -83,6 +89,7 @@ export function useServiceWorkerUpdate() {
       try {
         await reg.update();
         if (reg.waiting && await skip()) return;
+        setUpdateReady(Boolean(reg.waiting));
       } catch (error) {
         console.warn('[SW] Manuelles Update fehlgeschlagen:', error);
       }
