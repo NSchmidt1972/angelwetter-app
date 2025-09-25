@@ -37,35 +37,65 @@ function PushMenuButton() {
     }
   };
 
+  const handleToggle = () => {
+    if (loading) return;
+    if (enabled) {
+      unsubscribe();
+      return;
+    }
+
+    if (!blocked) {
+      subscribe();
+    }
+  };
+
+  const statusLabel = (() => {
+    if (loading) return "Status wird aktualisiert...";
+    if (blocked) return "Im Browser blockiert";
+    return enabled ? "aktiviert" : "deaktiviert";
+  })();
+
+  const disabled = loading || (!enabled && blocked);
+
   return (
     <div className="w-full">
-      {enabled ? (
-
+      <div
+        className={`flex items-start gap-4 rounded-3xl border px-4 py-3 transition ${
+          enabled
+            ? "border-green-300 bg-green-100 text-green-900 shadow-sm dark:border-green-700 dark:bg-green-900/40 dark:text-green-100"
+            : "border-transparent bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
+        }`}
+      >
+        <div className="flex-1 text-sm">
+          <div className="flex items-center gap-2 font-medium">
+            <span role="img" aria-hidden="true">🔔</span>
+            Push
+          </div>
+          <div className="mt-1 text-xs opacity-80">
+            {statusLabel}
+          </div>
+        </div>
         <button
           type="button"
-          onClick={unsubscribe}
-          disabled={loading}
-          className="px-3 py-2 rounded-2xl bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-60 w-full text-left"
-          title="Benachrichtigungen deaktivieren"
+          onClick={handleToggle}
+          disabled={disabled}
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Push-Benachrichtigungen umschalten"
+          title={blocked ? "Benachrichtigungen im Browser freigeben" : "Push-Benachrichtigungen umschalten"}
+          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-500 ${
+            enabled
+              ? "bg-green-500"
+              : "bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500"
+          } ${disabled ? "opacity-60" : ""}`}
         >
-          🔔 Push-Aktiv
+          <span
+            className={`absolute inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${
+              enabled ? "translate-x-5" : "translate-x-1"
+            }`}
+          />
         </button>
-      ) : (
-        <button
-         type="button"
-          onClick={subscribe}
-          disabled={loading || blocked}
-          className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60 w-full text-left"
-          title={blocked ? "Im Browser blockiert" : "Benachrichtigungen aktivieren"}
-        >
-          🔔 Push-Aktivieren
-        </button>
-
-        
-      )}
-
-    
-
+      </div>
 
       <div className="mt-2 text-[11px] leading-snug text-gray-600 dark:text-gray-400">
         <div className="font-semibold">Subscription-ID:</div>
@@ -271,7 +301,7 @@ export default function Navbar({ name, isAdmin }) {
                   className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
                   onClick={() => setShowMenu(false)}
                 >
-                  ⚙️ Einstellungen
+                  ⚙️ Downloads
                 </Link>
 
                 {/* 🔔 Push */}

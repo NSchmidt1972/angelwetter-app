@@ -5,6 +5,7 @@ export function useServiceWorkerUpdate() {
   const [updateReady, setUpdateReady] = useState(false);
   const [updating, setUpdating] = useState(false);
   const regRef = useRef(null);
+  const reloadRequestedRef = useRef(false);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -31,7 +32,10 @@ export function useServiceWorkerUpdate() {
 
         const onControllerChange = () => {
           setUpdateReady(false);
-          window.location.reload();
+          if (reloadRequestedRef.current) {
+            reloadRequestedRef.current = false;
+            window.location.reload();
+          }
         };
         navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
         offControllerChange = () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
@@ -69,8 +73,10 @@ export function useServiceWorkerUpdate() {
       }
 
       const skip = async () => {
+        if (!reg.waiting) return false;
+        reloadRequestedRef.current = true;
         try {
-          reg.waiting && reg.waiting.postMessage({ type: "SKIP_WAITING" });
+          reg.waiting.postMessage({ type: "SKIP_WAITING" });
         } catch (error) {
           console.warn('[SW] SKIP_WAITING Nachricht fehlgeschlagen:', error);
         }
@@ -79,6 +85,7 @@ export function useServiceWorkerUpdate() {
           setUpdateReady(false);
           return true;
         } catch (error) {
+          reloadRequestedRef.current = false;
           console.warn('[SW] Controller-Änderung abgewartet aber fehlgeschlagen:', error);
           return false;
         }
@@ -107,6 +114,7 @@ export function useServiceWorkerUpdate() {
         console.warn('[SW] Cache-Bereinigung fehlgeschlagen:', error);
       }
 
+      reloadRequestedRef.current = false;
       window.location.reload();
     } finally {
       setUpdating(false);
