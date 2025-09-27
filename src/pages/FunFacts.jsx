@@ -369,6 +369,63 @@ export default function FunFacts() {
     return { count: best, months: winners };
   }, [statsFishes]);
 
+  // ---------- 8a) Monat mit den meisten Top-10-Fischen (größte Fänge gesamt)
+  const mostTopTenFishesMonth = useMemo(() => {
+    if (statsFishes.length === 0) {
+      return { bestCount: 0, bestMonths: [], ranking: [], topTen: [] };
+    }
+
+    const withSize = statsFishes
+      .map((fish) => {
+        const rawSize = typeof fish.size === 'number'
+          ? fish.size
+          : parseFloat(String(fish.size ?? '').replace(',', '.'));
+        return {
+          fish,
+          size: Number.isFinite(rawSize) ? rawSize : null,
+        };
+      })
+      .filter((entry) => entry.size != null && entry.size > 0);
+
+    if (withSize.length === 0) {
+      return { bestCount: 0, bestMonths: [], ranking: [], topTen: [] };
+    }
+
+    const sortedBySize = [...withSize].sort((a, b) => {
+      if (b.size !== a.size) return b.size - a.size;
+
+      const timeA = new Date(a.fish.timestamp).getTime();
+      const timeB = new Date(b.fish.timestamp).getTime();
+      if (Number.isFinite(timeA) && Number.isFinite(timeB)) return timeA - timeB;
+      if (Number.isFinite(timeA)) return -1;
+      if (Number.isFinite(timeB)) return 1;
+      return 0;
+    });
+
+    const topTen = sortedBySize.slice(0, 10);
+    const monthCounts = new Map();
+
+    topTen.forEach(({ fish }) => {
+      const dt = new Date(fish.timestamp);
+      if (Number.isNaN(dt.getTime())) return;
+      const key = monthKey(dt);
+      monthCounts.set(key, (monthCounts.get(key) || 0) + 1);
+    });
+
+    const months = Array.from(monthCounts.entries()).map(([month, count]) => ({ month, count }));
+    if (months.length === 0) {
+      return { bestCount: 0, bestMonths: [], ranking: [], topTen };
+    }
+
+    const bestCount = Math.max(...months.map((m) => m.count));
+    const bestMonths = months
+      .filter((m) => m.count === bestCount)
+      .sort((a, b) => a.month.localeCompare(b.month));
+    const ranking = [...months].sort((a, b) => b.count - a.count || a.month.localeCompare(b.month));
+
+    return { bestCount, bestMonths, ranking, topTen };
+  }, [statsFishes]);
+
   // ---------- 8b) Monate mit den durchschnittlich größten Fischen
   const topMonthsByAvgSize = useMemo(() => {
     if (statsFishes.length === 0) return { items: [] };
@@ -1643,6 +1700,43 @@ const recordHunter = useMemo(() => {
             )}
           </Card>,
 
+          // 8a) Monat mit den meisten Top-10-Fischen
+          <Card key="monthTopTen" title="🏅 In welchem Monat wurden die meisten Top-10-Fische gefangen?">
+            {mostTopTenFishesMonth.bestCount > 0 ? (
+              <>
+                <p className="mb-2">
+                  Spitzenmonat{mostTopTenFishesMonth.bestMonths.length > 1 ? 'e' : ''} mit <b className="text-green-700 dark:text-green-300">{mostTopTenFishesMonth.bestCount}</b> Top-10-Fisch{mostTopTenFishesMonth.bestCount === 1 ? '' : 'e'}.
+                </p>
+                <ul className="space-y-1">
+                  {mostTopTenFishesMonth.bestMonths.map((entry) => (
+                    <li key={entry.month} className="flex justify-between">
+                      <span className="font-medium">{monthLabel(entry.month)}</span>
+                      <span className="font-bold text-green-700 dark:text-green-300">{entry.count}x</span>
+                    </li>
+                  ))}
+                </ul>
+                {mostTopTenFishesMonth.ranking.length > mostTopTenFishesMonth.bestMonths.length && (
+                  <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                    Weitere Monate:
+                    <ul className="mt-1 space-y-1">
+                      {mostTopTenFishesMonth.ranking
+                        .filter((entry) => entry.count < mostTopTenFishesMonth.bestCount)
+                        .slice(0, 3)
+                        .map((entry) => (
+                          <li key={entry.month} className="flex justify-between">
+                            <span>{monthLabel(entry.month)}</span>
+                            <span>{entry.count}x</span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p>Zu wenig Top-10-Fänge (mit Größenangabe) vorhanden.</p>
+            )}
+          </Card>,
+
           // 8b) Monate mit den größten Durchschnitts-Fischen
           <Card key="monthAvgSize" title="📏 Welche Monate bringen die größten Ø-Fische?">
             {topMonthsByAvgSize.items.length > 0 ? (
@@ -2632,6 +2726,7 @@ const recordHunter = useMemo(() => {
       mostMonsterFishes,
       mostFishesDay,
       mostFishesMonth,
+      mostTopTenFishesMonth,
       topMonthsByAvgSize,
       mostFishesWeekday,
       mostSpeciesInOneHour,

@@ -43,7 +43,7 @@ function SettingsMenuToggle({ open, onToggle, onNavigate }) {
             <span role="img" aria-hidden="true">
               ⚙️
             </span>
-            Downloads
+            Download
           </div>
           <div className="mt-1 text-xs opacity-80">{statusLabel}</div>
         </div>
