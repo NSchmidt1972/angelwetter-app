@@ -8,17 +8,11 @@ import {
   SERVICE_WORKER_INFO,
 } from '@/onesignal/swHelpers';
 
-const THROTTLE_MS = 10_000; // mind. 10s zwischen zwei Writes
-
 export default function PushInit() {
   useEffect(() => {
     // nur einmal initialisieren
     if (window.__osInitialized) return;
     window.__osInitialized = true;
-
-    // Throttle/Lock im Window halten
-    window.__psUpsertInFlight = false;
-    window.__psLastWriteAt = 0;
 
     /** Liefert die aktuelle Subscription-ID (oder null) */
     async function getSubId(OS) {
@@ -39,74 +33,49 @@ export default function PushInit() {
       }
     }
 
-    /** Supabase-Write via RPC (Owner-Claim) – mit robustem Lock/Throttle */
-    async function claimSubscription(subscriptionId, reason = '') {
+    async function upsertSubscription(subscriptionId, reason = '') {
+      if (!subscriptionId) return;
+
+      const { data: userRes, error: userErr } = await supabase.auth.getUser();
+      if (userErr) {
+        console.warn('[PushInit] getUser error:', userErr);
+      }
+      const uid = userRes?.user?.id;
+      if (!uid) return;
+
+      const reg = await ensureServiceWorkerRegistration();
+      const scope = reg?.scope || SERVICE_WORKER_INFO.scope || null;
+      const device = navigator.userAgentData?.platform || navigator.platform || null;
+      const ua = navigator.userAgent || null;
+
+      let anglerName = null;
       try {
-        if (!subscriptionId) return;
+        anglerName = localStorage.getItem('anglerName') || null;
+      } catch {
+        anglerName = null;
+      }
 
-        // 1) User MUSS eingeloggt sein – ohne Lock vorzeitig abbrechen
-        const { data: userRes, error: userErr } = await supabase.auth.getUser();
-        if (userErr) console.warn('[PushInit] getUser error:', userErr);
-        const uid = userRes?.user?.id;
-        if (!uid) return;
+      const payload = {
+        subscription_id: subscriptionId,
+        user_id: uid,
+        scope,
+        device_label: device,
+        user_agent: ua,
+        opted_in: true,
+        revoked_at: null,
+        last_seen_at: new Date().toISOString(),
+      };
 
-        // 2) Throttle prüfen – noch ohne Lock abbrechen
-        const now = Date.now();
-        if (now - (window.__psLastWriteAt || 0) < THROTTLE_MS) return;
+      if (anglerName) {
+        payload.angler_name = anglerName;
+      }
 
-        // 3) Wenn bereits ein Upsert läuft, abbrechen
-        if (window.__psUpsertInFlight) return;
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .upsert(payload, { onConflict: 'subscription_id' });
 
-        // 4) Jetzt erst Lock & Timestamp setzen
-        window.__psUpsertInFlight = true;
-        window.__psLastWriteAt = now;
-
-        // Gerätemetadaten
-        const reg = await ensureServiceWorkerRegistration();
-        const scope = reg?.scope || null;
-        const device =
-          navigator.userAgentData?.platform || navigator.platform || null;
-        const ua = navigator.userAgent || null;
-
-        // 5) Schreiben – await, damit Lock sicher gelöst wird
-        let anglerName = null;
-        try {
-          anglerName = localStorage.getItem('anglerName') || null;
-        } catch {
-          anglerName = null;
-        }
-
-        const { error } = await supabase.rpc('claim_push_subscription', {
-          p_subscription_id: subscriptionId,
-          p_device_label: device,
-          p_user_agent: ua,
-          p_scope: scope,
-          p_angler_name: anglerName,
-        });
-
-        if (!error && anglerName) {
-          try {
-            await supabase
-              .from('push_subscriptions')
-              .update({ angler_name: anglerName })
-              .eq('subscription_id', subscriptionId)
-              .eq('user_id', uid);
-          } catch (updateErr) {
-            console.warn('[PushInit] backfill angler_name failed:', updateErr);
-          }
-        }
-
-        if (error) {
-          console.warn('[PushInit] claim_push_subscription RPC error:', error, reason);
-        } else {
-          // optionales Log
-          // console.info('[PushInit] claim ok:', subscriptionId, reason);
-        }
-      } catch (e) {
-        console.warn('[PushInit] claim exception:', e, reason);
-      } finally {
-        // 6) Lock immer lösen
-        window.__psUpsertInFlight = false;
+      if (error) {
+        console.warn('[PushInit] upsert push_subscriptions failed:', error, reason);
       }
     }
 
@@ -158,7 +127,7 @@ export default function PushInit() {
         }
 
         // 1) Beim Start (falls bereits subscribed & eingeloggt)
-        getSubId(OneSignal).then((sid) => claimSubscription(sid, 'initial'));
+        getSubId(OneSignal).then((sid) => upsertSubscription(sid, 'initial'));
 
         // 2a) Abo-Änderungen (opt-in/out, ID-Wechsel) – User Model Listener
         try {
@@ -184,7 +153,7 @@ export default function PushInit() {
               }
             } else {
               // Opt-in oder ID-Refresh → speichern/claimen
-              claimSubscription(sid, 'push-change');
+              upsertSubscription(sid, 'push-change');
             }
           };
 
@@ -198,7 +167,7 @@ export default function PushInit() {
         try {
           const onNotifChange = async () => {
             const sid = await getSubId(OneSignal);
-            claimSubscription(sid, 'subscriptionChange');
+            upsertSubscription(sid, 'subscriptionChange');
           };
 
           OneSignal.Notifications.addEventListener('subscriptionChange', onNotifChange);
@@ -210,7 +179,7 @@ export default function PushInit() {
         // 3) Login/Logout → erneut versuchen (falls beim Start kein uid da war)
         const { data: authSub } = supabase.auth.onAuthStateChange(async (_event, session) => {
           const sid = await getSubId(OneSignal);
-          if (sid && session?.user?.id) claimSubscription(sid, 'auth-change');
+          if (sid && session?.user?.id) upsertSubscription(sid, 'auth-change');
         });
         cleanupFns.push(() => authSub?.subscription?.unsubscribe?.());
       } catch (e) {

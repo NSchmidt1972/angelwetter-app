@@ -310,11 +310,10 @@ export default function usePushStatus() {
           return;
         }
 
-        // DB: RPC (Owner-Claim) inkl. Metadaten
         if (sid) {
           try {
             const reg = await ensureServiceWorkerRegistration();
-            const scope = reg?.scope || SERVICE_WORKER_INFO.scope;
+            const scope = reg?.scope || SERVICE_WORKER_INFO.scope || null;
             const device =
               navigator.userAgentData?.platform || navigator.platform || null;
             const ua = navigator.userAgent || null;
@@ -325,32 +324,40 @@ export default function usePushStatus() {
               anglerName = null;
             }
 
-            await supabase.rpc('claim_push_subscription', {
-              p_subscription_id: sid,
-              p_device_label: device,
-              p_user_agent: ua,
-              p_scope: scope,
-              p_angler_name: anglerName,
-            });
+            const { data: userRes, error: userErr } = await supabase.auth.getUser();
+            if (userErr) {
+              throw userErr;
+            }
+            const uid = userRes?.user?.id;
+            if (!uid) {
+              throw new Error('Kein eingeloggter Nutzer für Push vorhanden.');
+            }
+
+            const payload = {
+              subscription_id: sid,
+              user_id: uid,
+              scope,
+              device_label: device,
+              user_agent: ua,
+              opted_in: true,
+              revoked_at: null,
+              last_seen_at: new Date().toISOString(),
+            };
 
             if (anglerName) {
-              try {
-                const { data: userRes } = await supabase.auth.getUser();
-                const uid = userRes?.user?.id;
-                if (uid) {
-                  await supabase
-                    .from('push_subscriptions')
-                    .update({ angler_name: anglerName })
-                    .eq('subscription_id', sid)
-                    .eq('user_id', uid);
-                }
-              } catch (updateErr) {
-                console.warn('[usePushStatus] backfill angler_name failed:', updateErr);
-              }
+              payload.angler_name = anglerName;
+            }
+
+            const { error: upsertError } = await supabase
+              .from('push_subscriptions')
+              .upsert(payload, { onConflict: 'subscription_id' });
+
+            if (upsertError) {
+              throw upsertError;
             }
           } catch (rpcErr) {
             console.warn(
-              '[usePushStatus] RPC claim_push_subscription error:',
+              '[usePushStatus] push_subscriptions upsert error:',
               rpcErr?.message || rpcErr
             );
           }
