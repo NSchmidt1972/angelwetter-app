@@ -2,6 +2,11 @@
 import { useEffect } from 'react';
 import { supabase } from '@/supabaseClient';
 import { runWhenOneSignalReady } from '@/onesignal/deferred';
+import {
+  ensureServiceWorkerRegistration,
+  waitForServiceWorkerRegistration,
+  SERVICE_WORKER_INFO,
+} from '@/onesignal/swHelpers';
 
 const THROTTLE_MS = 10_000; // mind. 10s zwischen zwei Writes
 
@@ -19,8 +24,16 @@ export default function PushInit() {
     async function getSubId(OS) {
       try {
         const sub = OS?.User?.pushSubscription || OS?.User?.PushSubscription;
-        const id = sub?.id ?? (await sub?.getId?.());
-        return id ?? null;
+        if (sub?.id) return sub.id;
+        if (typeof sub?.getId === 'function') {
+          const id = await sub.getId();
+          if (id) return id;
+        }
+        if (typeof OS?.User?.getId === 'function') {
+          const uid = await OS.User.getId();
+          return uid || null;
+        }
+        return null;
       } catch {
         return null;
       }
@@ -49,7 +62,7 @@ export default function PushInit() {
         window.__psLastWriteAt = now;
 
         // Gerätemetadaten
-        const reg = await navigator.serviceWorker.getRegistration();
+        const reg = await ensureServiceWorkerRegistration();
         const scope = reg?.scope || null;
         const device =
           navigator.userAgentData?.platform || navigator.platform || null;
@@ -98,18 +111,31 @@ export default function PushInit() {
     }
 
     // OneSignal v16 Deferred-Init
-    const { cancel } = runWhenOneSignalReady(async (OneSignal) => {
+    const cleanupFns = [];
+
+    const { cancel, promise } = runWhenOneSignalReady(async (OneSignal) => {
       try {
-        // Sicherstellen, dass ein Service Worker im richtigen Scope aktiv ist
-        const registration = await navigator.serviceWorker.ready;
+        // Service Worker bevorzugt nutzen, aber nicht auf Erstbesuch blockieren
+        const registration = await waitForServiceWorkerRegistration();
 
         // OneSignal initialisieren (nicht UI-blockierend)
-        await OneSignal.init({
+        const serviceWorkerPath = SERVICE_WORKER_INFO.path.startsWith('/')
+          ? SERVICE_WORKER_INFO.path.slice(1)
+          : SERVICE_WORKER_INFO.path;
+
+        const initOptions = {
           appId: 'b05a44e8-bea5-4941-8972-5194254aadad',
-          serviceWorkerRegistration: registration,
           allowLocalhostAsSecureOrigin: true, // nur DEV
+          serviceWorkerPath,
+          serviceWorkerParam: { scope: SERVICE_WORKER_INFO.scope },
           // kein Auto-Prompt hier – Steuerung über deine UI
-        });
+        };
+
+        if (registration) {
+          initOptions.serviceWorkerRegistration = registration;
+        }
+
+        await OneSignal.init(initOptions);
 
         // 0) Falls bereits "granted" aber (noch) nicht subscribed → nachziehen
         try {
@@ -136,56 +162,76 @@ export default function PushInit() {
 
         // 2a) Abo-Änderungen (opt-in/out, ID-Wechsel) – User Model Listener
         try {
-          (OneSignal.User?.pushSubscription || OneSignal.User?.PushSubscription)
-            ?.addEventListener('change', async (ev) => {
-              const cur = ev?.current || {};
-              let sid = cur?.id ?? (await getSubId(OneSignal));
+          const subModel = OneSignal.User?.pushSubscription || OneSignal.User?.PushSubscription;
+          const onSubChange = async (ev) => {
+            const cur = ev?.current || {};
+            let sid = cur?.id ?? (await getSubId(OneSignal));
 
-              if (cur?.optedIn === false && sid) {
-                // Opt-out → Abo als widerrufen markieren (falls Zeile existiert)
-                const { data: u } = await supabase.auth.getUser();
-                if (u?.user?.id) {
-                  supabase
-                    .from('push_subscriptions')
-                    .update({
-                      opted_in: false,
-                      revoked_at: new Date().toISOString(),
-                      last_seen_at: new Date().toISOString(),
-                    })
-                    .eq('subscription_id', sid)
-                    .eq('user_id', u.user.id)
-                    .catch((e) => console.warn('[PushInit] revoke failed:', e));
-                }
-              } else {
-                // Opt-in oder ID-Refresh → speichern/claimen
-                claimSubscription(sid, 'push-change');
+            if (cur?.optedIn === false && sid) {
+              // Opt-out → Abo als widerrufen markieren (falls Zeile existiert)
+              const { data: u } = await supabase.auth.getUser();
+              if (u?.user?.id) {
+                supabase
+                  .from('push_subscriptions')
+                  .update({
+                    opted_in: false,
+                    revoked_at: new Date().toISOString(),
+                    last_seen_at: new Date().toISOString(),
+                  })
+                  .eq('subscription_id', sid)
+                  .eq('user_id', u.user.id)
+                  .catch((e) => console.warn('[PushInit] revoke failed:', e));
               }
-            });
+            } else {
+              // Opt-in oder ID-Refresh → speichern/claimen
+              claimSubscription(sid, 'push-change');
+            }
+          };
+
+          subModel?.addEventListener('change', onSubChange);
+          cleanupFns.push(() => subModel?.removeEventListener('change', onSubChange));
         } catch (e) {
           console.warn('[PushInit] pushSubscription.change listener failed', e);
         }
 
         // 2b) Fallback: Notifications-Event (manche Integrationen feuern hier)
         try {
-          OneSignal.Notifications.addEventListener('subscriptionChange', async () => {
+          const onNotifChange = async () => {
             const sid = await getSubId(OneSignal);
             claimSubscription(sid, 'subscriptionChange');
-          });
+          };
+
+          OneSignal.Notifications.addEventListener('subscriptionChange', onNotifChange);
+          cleanupFns.push(() => OneSignal.Notifications.removeEventListener('subscriptionChange', onNotifChange));
         } catch (e) {
           console.warn('[PushInit] notifications.subscriptionChange listener failed', e);
         }
 
         // 3) Login/Logout → erneut versuchen (falls beim Start kein uid da war)
-        supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: authSub } = supabase.auth.onAuthStateChange(async (_event, session) => {
           const sid = await getSubId(OneSignal);
           if (sid && session?.user?.id) claimSubscription(sid, 'auth-change');
         });
+        cleanupFns.push(() => authSub?.subscription?.unsubscribe?.());
       } catch (e) {
         console.warn('[PushInit] OneSignal init error:', e);
       }
     });
 
-    return () => cancel();
+    promise.catch((err) => {
+      console.warn('[PushInit] runWhenOneSignalReady error:', err);
+    });
+
+    return () => {
+      cancel();
+      cleanupFns.forEach((fn) => {
+        try {
+          fn?.();
+        } catch (err) {
+          console.warn('[PushInit] cleanup failed:', err);
+        }
+      });
+    };
   }, []);
 
   return null;

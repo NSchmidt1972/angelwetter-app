@@ -31,7 +31,7 @@ export default function AchievementToast({ queue = [], onConsume }) {
         onConsume();
       }
       setCurrent(null);
-    }, 3500);
+    }, 6500);
     return () => clearTimeout(timeout);
   }, [current, onConsume]);
 

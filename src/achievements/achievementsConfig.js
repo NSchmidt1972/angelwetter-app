@@ -22,7 +22,7 @@ export async function getCount(supabase, table, filters = []) {
  * Liefert Start/Ende des lokalen Kalendertags in Europe/Berlin als UTC-ISO.
  * So stimmen Tages-Achievements trotz UTC-Speicherung in der DB.
  */
-function dayBoundsEuropeBerlinUTC(tsISO) {
+function dayBoundsEuropeBerlinUTC(tsISO, offsetDays = 0) {
   const d = tsISO ? new Date(tsISO) : new Date();
 
   // Datumsteile in Europe/Berlin extrahieren
@@ -40,8 +40,16 @@ function dayBoundsEuropeBerlinUTC(tsISO) {
   const day = Number(parts.day);
 
   // 00:00:00 und 23:59:59.999 des Berlin-Tags als UTC konstruieren
-  const startUTC = new Date(Date.UTC(y, m, day, 0, 0, 0, 0)).toISOString();
-  const endUTC   = new Date(Date.UTC(y, m, day, 23, 59, 59, 999)).toISOString();
+  const startDate = new Date(Date.UTC(y, m, day, 0, 0, 0, 0));
+  const endDate = new Date(Date.UTC(y, m, day, 23, 59, 59, 999));
+
+  if (offsetDays !== 0) {
+    startDate.setUTCDate(startDate.getUTCDate() + offsetDays);
+    endDate.setUTCDate(endDate.getUTCDate() + offsetDays);
+  }
+
+  const startUTC = startDate.toISOString();
+  const endUTC = endDate.toISOString();
   return { startUTC, endUTC };
 }
 
@@ -157,6 +165,136 @@ export const achievements = [
       ]);
       // Falls der aktuelle Insert gespeichert ist, ist #1 des Tages genau count === 1
       return count === 1;
+    },
+  },
+
+  // ========= Drei Arten an einem Tag =========
+  {
+    id: "multi_species_day_3",
+    title: "Artenjäger!",
+    message: "Drei verschiedene Fischarten an einem Tag – starke Vielfalt! 🐠",
+    icon: "🎯",
+    check: async ({ supabase, lastCatch }) => {
+      const name = normalizeName(lastCatch?.angler);
+      if (!name || !lastCatch?.timestamp) return false;
+
+      const { startUTC, endUTC } = dayBoundsEuropeBerlinUTC(lastCatch.timestamp);
+      const { data, error } = await supabase
+        .from("fishes")
+        .select("fish")
+        .eq("angler", name)
+        .gte("timestamp", startUTC)
+        .lte("timestamp", endUTC);
+
+      if (error || !Array.isArray(data)) return false;
+      const speciesCount = new Set(
+        data
+          .map((row) => row?.fish)
+          .filter((fish) => typeof fish === "string" && fish.trim().length > 0)
+      ).size;
+
+      // Exakt beim dritten unterschiedlichen Fisch auslösen, damit der Toast nicht mehrfach erscheint.
+      return speciesCount === 3;
+    },
+  },
+
+  // ========= Tagesfang-Mengen =========
+  {
+    id: "daily_catch_3",
+    title: "Dreierpack!",
+    message: "Heute schon drei Fische im Kescher – läuft bei dir! 🎣",
+    icon: "🥉",
+    needsCount: {
+      table: "fishes",
+      threshold: 3,
+      filters: ({ lastCatch }) => {
+        const name = normalizeName(lastCatch?.angler);
+        if (!name || !lastCatch?.timestamp) return [];
+        const { startUTC, endUTC } = dayBoundsEuropeBerlinUTC(lastCatch.timestamp);
+        return [
+          ["angler", "eq", name],
+          ["timestamp", "gte", startUTC],
+          ["timestamp", "lte", endUTC],
+        ];
+      },
+    },
+  },
+  {
+    id: "daily_catch_5",
+    title: "Fünfer-Serie!",
+    message: "Fünf Fische an einem Tag – du bist im Flow! ⚡️",
+    icon: "🥈",
+    needsCount: {
+      table: "fishes",
+      threshold: 5,
+      filters: ({ lastCatch }) => {
+        const name = normalizeName(lastCatch?.angler);
+        if (!name || !lastCatch?.timestamp) return [];
+        const { startUTC, endUTC } = dayBoundsEuropeBerlinUTC(lastCatch.timestamp);
+        return [
+          ["angler", "eq", name],
+          ["timestamp", "gte", startUTC],
+          ["timestamp", "lte", endUTC],
+        ];
+      },
+    },
+  },
+  {
+    id: "daily_catch_10",
+    title: "Zweistellig!",
+    message: "Zehn Tagesfänge – was für ein Angeltag! 🏅",
+    icon: "🥇",
+    needsCount: {
+      table: "fishes",
+      threshold: 10,
+      filters: ({ lastCatch }) => {
+        const name = normalizeName(lastCatch?.angler);
+        if (!name || !lastCatch?.timestamp) return [];
+        const { startUTC, endUTC } = dayBoundsEuropeBerlinUTC(lastCatch.timestamp);
+        return [
+          ["angler", "eq", name],
+          ["timestamp", "gte", startUTC],
+          ["timestamp", "lte", endUTC],
+        ];
+      },
+    },
+  },
+
+  // ========= Fangserie (5 Tage in Folge) =========
+  {
+    id: "streak_5_days",
+    title: "Serienmeister!",
+    message: "Fünf Fangtage in Folge – konsequent durchgezogen! 🔥",
+    icon: "📆",
+    check: async ({ supabase, lastCatch }) => {
+      const name = normalizeName(lastCatch?.angler);
+      if (!name || !lastCatch?.timestamp) return false;
+
+      for (let offset = 0; offset < 5; offset += 1) {
+        const { startUTC, endUTC } = dayBoundsEuropeBerlinUTC(lastCatch.timestamp, -offset);
+        const { count } = await getCount(supabase, "fishes", [
+          ["angler", "eq", name],
+          ["timestamp", "gte", startUTC],
+          ["timestamp", "lte", endUTC],
+        ]);
+        if (count === 0) {
+          return false;
+        }
+      }
+
+      // Nur auslösen, wenn der Vortag vor der Serie leer war – verhindert tägliche Wiederholungen.
+      const { count: prevDayCount } = await getCount(supabase, "fishes", [
+        ["angler", "eq", name],
+        ...(() => {
+          const { startUTC, endUTC } = dayBoundsEuropeBerlinUTC(lastCatch.timestamp, -5);
+          return [
+            ["timestamp", "gte", startUTC],
+            ["timestamp", "lte", endUTC],
+          ];
+        })(),
+      ]);
+
+      return prevDayCount === 0;
     },
   },
 ];

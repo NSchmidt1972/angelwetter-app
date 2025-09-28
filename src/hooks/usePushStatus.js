@@ -2,11 +2,110 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { runWhenOneSignalReady, enqueueOneSignal } from '@/onesignal/deferred';
+import {
+  ensureServiceWorkerRegistration,
+  waitForServiceWorkerRegistration,
+  SERVICE_WORKER_INFO,
+} from '@/onesignal/swHelpers';
 
 function isSupported(OS) {
   if (!OS?.Notifications) return false;
   const v = OS.Notifications.isPushSupported;
-  return typeof v === 'function' ? !!v() : !!v;
+  try {
+    return typeof v === 'function' ? !!v() : !!v;
+  } catch (err) {
+    console.warn('[usePushStatus] isPushSupported() Fehler:', err);
+    return false;
+  }
+}
+
+async function resolveSubscriptionId(OS) {
+  if (!OS) return null;
+  const model = OS.User?.pushSubscription || OS.User?.PushSubscription;
+  if (model?.id) return model.id;
+
+  if (typeof model?.getId === 'function') {
+    try {
+      const id = await model.getId();
+      if (id) return id;
+    } catch (err) {
+      console.warn('[usePushStatus] pushSubscription.getId() fehlgeschlagen:', err);
+    }
+  }
+
+  if (typeof OS?.User?.getId === 'function') {
+    try {
+      const uid = await OS.User.getId();
+      return uid || null;
+    } catch (err) {
+      console.warn('[usePushStatus] OneSignal.User.getId() fehlgeschlagen:', err);
+    }
+  }
+
+  return null;
+}
+
+async function waitForSubscriptionId(
+  OS,
+  { attempts = 20, delayMs = 500, timeoutMs } = {}
+) {
+  const tryResolve = async () => {
+    try {
+      return await resolveSubscriptionId(OS);
+    } catch (err) {
+      console.warn('[usePushStatus] resolveSubscriptionId Fehler:', err);
+      return null;
+    }
+  };
+
+  const immediate = await tryResolve();
+  if (immediate) return immediate;
+
+  return new Promise((resolve) => {
+    const model = OS?.User?.pushSubscription || OS?.User?.PushSubscription;
+    let finished = false;
+    let pollTimer;
+    let timeoutTimer;
+
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      if (pollTimer) clearTimeout(pollTimer);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      model?.removeEventListener?.('change', handler);
+    };
+
+    const done = (val) => {
+      if (finished) return;
+      cleanup();
+      resolve(val ?? null);
+    };
+
+    const handler = async (ev) => {
+      const candidate = ev?.current?.id ?? (await tryResolve());
+      if (candidate) done(candidate);
+    };
+
+    model?.addEventListener?.('change', handler);
+
+    const poll = async (attempt = 0) => {
+      const candidate = await tryResolve();
+      if (candidate) {
+        done(candidate);
+        return;
+      }
+      if (attempt >= attempts) {
+        done(null);
+        return;
+      }
+      pollTimer = window.setTimeout(() => poll(attempt + 1), delayMs);
+    };
+
+    poll();
+
+    const totalTimeout = timeoutMs ?? attempts * delayMs + 5000;
+    timeoutTimer = window.setTimeout(() => done(null), totalTimeout);
+  });
 }
 
 export default function usePushStatus() {
@@ -33,7 +132,7 @@ export default function usePushStatus() {
         const blocked = perm === 'denied';
 
         const subModel = OS?.User?.pushSubscription || OS?.User?.PushSubscription;
-        const id = subModel?.id ?? (await subModel?.getId?.()) ?? null;
+        const id = await resolveSubscriptionId(OS);
 
         if (cancelled) return;
 
@@ -64,7 +163,7 @@ export default function usePushStatus() {
           try {
             const cur = ev?.current || {};
             const model = OS?.User?.pushSubscription || OS?.User?.PushSubscription;
-            const id2 = cur?.id ?? model?.id ?? (await model?.getId?.()) ?? null;
+            const id2 = cur?.id ?? (await resolveSubscriptionId(OS));
             const opted2 =
               typeof cur?.optedIn === 'boolean' ? cur.optedIn : !!model?.optedIn;
             setState((prev) => ({ ...prev, subId: id2, optedIn: opted2 }));
@@ -86,6 +185,8 @@ export default function usePushStatus() {
         if (!cancelled) {
           setState((s) => ({
             ...s,
+            sdk: null,
+            supported: false,
             loading: false,
             error: e?.message || String(e),
           }));
@@ -102,12 +203,14 @@ export default function usePushStatus() {
         return;
       }
       cleanupFn = typeof maybeCleanup === 'function' ? maybeCleanup : undefined;
-    });
+    }, { requireUser: true });
 
     promise.catch((err) => {
       if (!cancelled) {
         setState((s) => ({
           ...s,
+          sdk: null,
+          supported: false,
           loading: false,
           error: err?.message || String(err),
         }));
@@ -175,9 +278,11 @@ export default function usePushStatus() {
           }
         }
 
-        // SW bereit?
         if ('serviceWorker' in navigator) {
-          await navigator.serviceWorker.ready;
+          const registration = await waitForServiceWorkerRegistration();
+          if (!registration) {
+            console.warn('[usePushStatus] keine Service-Worker-Registration verfügbar');
+          }
         }
 
         // Abonnieren (SDK-kompatibel: optIn + subscribe)
@@ -188,14 +293,28 @@ export default function usePushStatus() {
           await OS.Notifications.subscribe();
         }
 
-        // ID holen
-        const sid = model?.id ?? (await model?.getId?.()) ?? null;
+        // ID holen (mit Retry, damit neue Abos sicher eine ID erhalten)
+        const sid = await waitForSubscriptionId(OS, { attempts: 15, delayMs: 400 });
+
+        if (!sid) {
+          setState((s) => ({
+            ...s,
+            permissionState: 'granted',
+            granted: true,
+            blocked: false,
+            optedIn: false,
+            subId: null,
+            loading: false,
+            error: 'OneSignal hat keine Subscription-ID zurückgegeben. Bitte erneut versuchen.',
+          }));
+          return;
+        }
 
         // DB: RPC (Owner-Claim) inkl. Metadaten
         if (sid) {
           try {
-            const reg = await navigator.serviceWorker.getRegistration();
-            const scope = reg?.scope || null;
+            const reg = await ensureServiceWorkerRegistration();
+            const scope = reg?.scope || SERVICE_WORKER_INFO.scope;
             const device =
               navigator.userAgentData?.platform || navigator.platform || null;
             const ua = navigator.userAgent || null;
@@ -256,7 +375,13 @@ export default function usePushStatus() {
       }
     };
 
-    enqueueOneSignal(exec);
+    enqueueOneSignal(exec, { requireUser: true }).catch((err) => {
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: err?.message || String(err),
+      }));
+    });
   };
 
   const unsubscribe = () => {
@@ -280,7 +405,9 @@ export default function usePushStatus() {
       }
     };
 
-    enqueueOneSignal(exec);
+    enqueueOneSignal(exec, { requireUser: true }).catch((err) => {
+      setState((s) => ({ ...s, loading: false, error: err?.message || String(err) }));
+    });
   };
 
   // alias für Altcode (permission als boolean)

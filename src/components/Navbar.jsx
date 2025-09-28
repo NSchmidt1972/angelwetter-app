@@ -96,6 +96,7 @@ function PushMenuButton() {
     optedIn,
     subId,
     loading,
+    error,
     subscribe,
     unsubscribe,
   } = usePushStatus();
@@ -125,13 +126,21 @@ function PushMenuButton() {
   };
 
   const statusLabel = (() => {
+    if (error) {
+      if (/nicht verfügbar/i.test(error) || /Timeout/i.test(error)) {
+        return "Push nicht verfügbar";
+      }
+      return `Fehler: ${error}`;
+    }
     if (supportUnavailable) return "Nicht unterstützt";
-    if (!ready || loading) return "Status wird aktualisiert...";
+    if (loading) return "Status wird aktualisiert...";
+    if (!ready) return "Nicht initialisiert";
+    if (!subId) return "deaktiviert";
     if (blocked) return "Im Browser blockiert";
     return enabled ? "aktiviert" : "deaktiviert";
   })();
 
-  const disabled = loading || (!enabled && (blocked || supportUnavailable));
+  const disabled = loading || (!!error) || (!enabled && (blocked || supportUnavailable));
 
   const containerClass = supportUnavailable
     ? "border-yellow-300 bg-yellow-100 text-yellow-900 shadow-sm dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-100"
