@@ -13,6 +13,8 @@ export default function AdminOverview() {
   const [allProfiles, setAllProfiles] = useState([]);
   const [externalCatches, setExternalCatches] = useState([]);
   const [takenCatches, setTakenCatches] = useState([]);
+  const [pushByAngler, setPushByAngler] = useState([]);
+  const [pushDeviceSummary, setPushDeviceSummary] = useState([]);
 
 
   const formatDateTimeLabel = (value) => {
@@ -109,9 +111,51 @@ export default function AdminOverview() {
 
         const { data: allProfilesData } = await supabase
           .from('profiles')
-          .select('name, created_at')
+          .select('id, name, created_at')
           .order('created_at', { ascending: false });
         setAllProfiles(allProfilesData);
+
+        const { data: pushSubs } = await supabase
+          .from('push_subscriptions')
+          .select('user_id, angler_name, device_label, opted_in, revoked_at');
+
+        if (pushSubs) {
+          const profileNameById = (allProfilesData || []).reduce((acc, profile) => {
+            if (profile?.id) acc[profile.id] = profile.name || null;
+            return acc;
+          }, {});
+
+          const byAngler = pushSubs.reduce((acc, entry) => {
+            const fallbackName = entry?.user_id ? profileNameById[entry.user_id] : null;
+            const label = entry?.angler_name?.trim() || fallbackName || 'Unbekannt';
+            if (!acc[label]) acc[label] = { total: 0, active: 0 };
+            acc[label].total += 1;
+            if (entry?.opted_in && !entry?.revoked_at) acc[label].active += 1;
+            return acc;
+          }, {});
+
+          const byDevice = pushSubs.reduce((acc, entry) => {
+            const label = entry?.device_label?.trim() || 'Unbekanntes Gerät';
+            if (!acc[label]) acc[label] = { total: 0, active: 0 };
+            acc[label].total += 1;
+            if (entry?.opted_in && !entry?.revoked_at) acc[label].active += 1;
+            return acc;
+          }, {});
+
+          const sortedAngler = Object.entries(byAngler)
+            .map(([name, counts]) => ({ name, ...counts }))
+            .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+          const sortedDevices = Object.entries(byDevice)
+            .map(([device, counts]) => ({ device, ...counts }))
+            .sort((a, b) => b.total - a.total || a.device.localeCompare(b.device));
+
+          setPushByAngler(sortedAngler);
+          setPushDeviceSummary(sortedDevices);
+        } else {
+          setPushByAngler([]);
+          setPushDeviceSummary([]);
+        }
 
         // ⬇️ Angepasste externe Fänge-Query
         const { data: externals } = await supabase
@@ -149,6 +193,12 @@ export default function AdminOverview() {
   const listItemClass = "list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-200";
   const fallbackTextClass = "text-sm text-gray-700 dark:text-gray-300";
   const metaTextClass = "text-xs text-gray-400 dark:text-gray-400";
+  const totalPushSubscriptions = pushDeviceSummary.reduce((sum, entry) => sum + entry.total, 0);
+  const activePushSubscriptions = pushDeviceSummary.reduce((sum, entry) => sum + entry.active, 0);
+  const pushSectionLabelBase = totalPushSubscriptions === 1 ? '1 gespeichertes Abo' : `${totalPushSubscriptions} gespeicherte Abos`;
+  const pushSectionLabel = `${pushSectionLabelBase} (${activePushSubscriptions} aktiv)`;
+  const anglerGroupCount = pushByAngler.length;
+  const deviceGroupCount = pushDeviceSummary.length;
 
   return (
     <div className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
@@ -266,6 +316,53 @@ export default function AdminOverview() {
             ))}
           </ul>
         </div>
+      </Section>
+
+      <Section title="📣 Push-Abonnenten" value={pushSectionLabel}>
+        {pushByAngler.length > 0 || pushDeviceSummary.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Angler ({anglerGroupCount})</h4>
+              {pushByAngler.length > 0 ? (
+                <div className="max-h-60 overflow-y-auto">
+                  <ul className={listItemClass}>
+                    {pushByAngler.map((entry) => (
+                      <li key={entry.name}>
+                        {entry.name}
+                        <span className={metaTextClass}>
+                          {` – ${entry.total} Gerät${entry.total !== 1 ? 'e' : ''} (${entry.active} aktiv)`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className={fallbackTextClass}>Keine Anglerdaten</div>
+              )}
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Geräte ({deviceGroupCount})</h4>
+              {pushDeviceSummary.length > 0 ? (
+                <div className="max-h-60 overflow-y-auto">
+                  <ul className={listItemClass}>
+                    {pushDeviceSummary.map((entry) => (
+                      <li key={entry.device}>
+                        {entry.total}x {entry.device}
+                        <span className={metaTextClass}>
+                          {` (${entry.active} aktiv)`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className={fallbackTextClass}>Keine Gerätedaten</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className={fallbackTextClass}>Keine Push-Daten</div>
+        )}
       </Section>
 
 

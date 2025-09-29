@@ -130,10 +130,14 @@ export async function requestPushPermission() {
   return new Promise((resolve) => {
     window.OneSignalDeferred.push(async function (OneSignal) {
       try {
-        const result = await OneSignal.Slidedown.promptPush(); // Slidedown + nativer Prompt
-        resolve(!!result?.accepted);
+        const res = await OneSignal.Notifications.requestPermission();
+        if (typeof res === 'string') {
+          resolve(res === 'granted');
+          return;
+        }
+        resolve(Boolean(res));
       } catch (e) {
-        console.warn('[OneSignal] Slidedown prompt error:', e);
+        console.warn('[OneSignal] requestPermission error:', e);
         resolve(false);
       }
     });

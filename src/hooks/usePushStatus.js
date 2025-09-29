@@ -239,42 +239,21 @@ export default function usePushStatus() {
         // Permission anfragen (falls nötig)
         let perm = OS.Notifications.permission;
         if (perm !== 'granted') {
-          const hadSubscription = Boolean(
-            state.subId || model?.id || model?.optedIn
-          );
-
-          let usedSlidedown = false;
-          if (!hadSubscription && typeof OS?.Slidedown?.promptPush === 'function') {
-            usedSlidedown = true;
-            try {
-              const res = await OS.Slidedown.promptPush();
-              perm = OS.Notifications.permission;
-              if (perm !== 'granted' || res?.accepted === false) {
-                usedSlidedown = false; // Fallback nutzen
-              }
-            } catch (err) {
-              console.warn('[usePushStatus] Slidedown prompt error:', err);
-              usedSlidedown = false;
-            }
-          }
-
-          if (!usedSlidedown) {
-            const res = await OS.Notifications.requestPermission();
-            perm = typeof res === 'string' ? res : res ? 'granted' : 'denied';
-            if (perm !== 'granted') {
-              setState((s) => ({
-                ...s,
-                loading: false,
-                permissionState: perm,
-                granted: false,
-                blocked: perm === 'denied',
-                error:
-                  perm === 'denied'
-                    ? 'Benachrichtigungen im Browser blockiert.'
-                    : 'Berechtigung nicht erteilt.',
-              }));
-              return;
-            }
+          const res = await OS.Notifications.requestPermission();
+          perm = typeof res === 'string' ? res : res ? 'granted' : 'denied';
+          if (perm !== 'granted') {
+            setState((s) => ({
+              ...s,
+              loading: false,
+              permissionState: perm,
+              granted: false,
+              blocked: perm === 'denied',
+              error:
+                perm === 'denied'
+                  ? 'Benachrichtigungen im Browser blockiert.'
+                  : 'Berechtigung nicht erteilt.',
+            }));
+            return;
           }
         }
 
