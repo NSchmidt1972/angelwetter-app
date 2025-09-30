@@ -208,7 +208,7 @@ function PushMenuButton() {
   );
 }
 
-export default function Navbar({ name, isAdmin }) {
+export default function Navbar({ name, isAdmin, canAccessBoard }) {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -297,7 +297,7 @@ export default function Navbar({ name, isAdmin }) {
     navigate("/");
   };
 
-  const navItems = navItemsFor(!!isAdmin);
+  const navItems = navItemsFor({ isAdmin: !!isAdmin, canAccessBoard: !!canAccessBoard });
 
   const displayName = (() => {
     const [first] = (name || "").split(" ");

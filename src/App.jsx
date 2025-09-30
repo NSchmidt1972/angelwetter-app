@@ -7,7 +7,7 @@ import PushInit from '@/components/PushInit';
 import AppRoutes from '@/AppRoutes';
 import '@/index.css';
 
-const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v1';
+const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
 
 function readProfileCache() {
   if (typeof window === 'undefined') return null;
@@ -26,6 +26,7 @@ function writeProfileCache(cache) {
     userId: cache?.userId ?? null,
     name: cache?.name ?? null,
     shortName: cache?.shortName ?? null,
+    role: cache?.role ?? null,
   };
   try {
     window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(payload));
@@ -66,6 +67,7 @@ function AppContent() {
   const { user, loading: authLoading } = useAuth();
   const [anglerName, setAnglerName] = useState(() => readProfileCache()?.name ?? null);
   const [userEmail, setUserEmail] = useState(null);
+  const [profileRole, setProfileRole] = useState(() => readProfileCache()?.role ?? null);
   const [nameLoading, setNameLoading] = useState(() => {
     const cached = readProfileCache();
     return !(cached && cached.name);
@@ -98,6 +100,7 @@ function AppContent() {
     if (user === null) {
       setAnglerName(null);
       setUserEmail(null);
+      setProfileRole(null);
       clearProfileCache();
       setNameLoading(false);
       return;
@@ -110,15 +113,17 @@ function AppContent() {
     if (!hasValidCache) {
       setNameLoading(true);
       setAnglerName(null);
+      setProfileRole(null);
     } else {
       setAnglerName(cached.name);
+      setProfileRole(cached.role ?? null);
     }
 
     const loadProfile = async () => {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('name')
+          .select('name, role')
           .eq('id', user.id)
           .single();
 
@@ -131,10 +136,12 @@ function AppContent() {
         if (data?.name) {
           const fullName = (data.name || '').trim();
           setAnglerName(fullName);
+          const rawRole = data?.role ? String(data.role).trim() : null;
+          setProfileRole(rawRole || null);
 
           const [first, last] = fullName.split(' ');
           const fallbackShort = first || 'Profil';
-          writeProfileCache({ userId: user.id, name: fullName, shortName: fallbackShort });
+          writeProfileCache({ userId: user.id, name: fullName, shortName: fallbackShort, role: rawRole || null });
 
           if (first) {
             cancelShortNameCheck = scheduleLater(async () => {
@@ -148,7 +155,7 @@ function AppContent() {
                 if (!isActive) return;
                 const shortName =
                   (count ?? 0) > 1 && last ? `${first} ${last[0]}.` : fallbackShort;
-                writeProfileCache({ userId: user.id, name: fullName, shortName });
+                writeProfileCache({ userId: user.id, name: fullName, shortName, role: rawRole || null });
               } catch (cntErr) {
                 console.warn('⚠️ ShortName-Zählung fehlgeschlagen:', cntErr?.message);
               }
@@ -157,6 +164,7 @@ function AppContent() {
         } else {
           console.warn('⚠️ Kein Name im Profil gefunden.');
           setAnglerName(null);
+          setProfileRole(null);
           clearProfileCache();
         }
       } finally {
@@ -263,7 +271,10 @@ function AppContent() {
   const isPasswordResetFlow = window.location.pathname === '/update-password' || isRecoveryHash;
 
   const isLoggedIn = user && !isPasswordResetFlow;
-  const isAdmin = userEmail === 'nicol@schmidt-2006.de';
+  const cachedRole = profileRole ? profileRole.toLowerCase() : null;
+  const isDeveloperAdmin = userEmail === 'nicol@schmidt-2006.de';
+  const isAdmin = isDeveloperAdmin || cachedRole === 'admin';
+  const canAccessBoard = isAdmin || cachedRole === 'vorstand';
 
   return (
     <>
@@ -271,6 +282,7 @@ function AppContent() {
         <AppRoutes
           isLoggedIn={isLoggedIn}
           isAdmin={isAdmin}
+          canAccessBoard={canAccessBoard}
           anglerName={anglerName}
           weatherData={weatherData}
           setWeatherData={setWeatherData}

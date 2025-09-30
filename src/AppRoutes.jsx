@@ -35,6 +35,7 @@ const AdminOverview = lazy(() => import('@/pages/AdminOverview'));
 const Calendar      = lazy(() => import('@/pages/Calendar'));
 const MapView       = lazy(() => import('@/pages/MapView'));
 const Regulations   = lazy(() => import('@/pages/Regulations'));
+const BoardOverview = lazy(() => import('@/pages/BoardOverview'));
 
 // Optional
 const SettingsPage  = safeLazy(() => import('@/pages/SettingsPage'), 'SettingsPage');
@@ -44,10 +45,9 @@ const FunFacts      = safeLazy(() => import('@/pages/FunFacts'), 'FunFacts');
 const CatchList     = lazy(() => import('@/components/catchlist/CatchList'));
 const FishCatchForm = lazy(() => import('@/components/FishCatchForm'));
 
-// Admin-Guard
-function RequireAdmin({ isAdmin, children }) {
-  if (!isAdmin) {
-    return <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Nur für Admins</div>;
+function RequireManagement({ canAccessBoard, children }) {
+  if (!canAccessBoard) {
+    return <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Nur für Vorstand/Admin</div>;
   }
   return children;
 }
@@ -55,6 +55,7 @@ function RequireAdmin({ isAdmin, children }) {
 export default function AppRoutes({
   isLoggedIn,
   isAdmin,
+  canAccessBoard,
   anglerName,
   weatherData,
   setWeatherData,
@@ -71,7 +72,7 @@ export default function AppRoutes({
 
       {isLoggedIn ? (
         // Eingeloggt: zentrales Layout mit Navbar
-        <Route element={<AppLayout name={anglerName} isAdmin={isAdmin} />}>
+        <Route element={<AppLayout name={anglerName} isAdmin={isAdmin} canAccessBoard={canAccessBoard} />}>
           <Route index element={<Home />} />
 
           <Route
@@ -94,14 +95,21 @@ export default function AppRoutes({
           <Route path="regeln"       element={<Regulations />} />
           <Route path="fun"          element={<FunFacts />} />
           <Route
-            path="admin"
+            path="vorstand"
             element={
-              <RequireAdmin isAdmin={isAdmin}>
-                <AdminOverview />
-              </RequireAdmin>
+              <RequireManagement canAccessBoard={canAccessBoard}>
+                <BoardOverview />
+              </RequireManagement>
             }
           />
-         
+          <Route
+            path="admin"
+            element={
+              <RequireManagement canAccessBoard={canAccessBoard}>
+                <AdminOverview isAdmin={isAdmin} canAccessBoard={canAccessBoard} />
+              </RequireManagement>
+            }
+          />
           <Route path="settings" element={<SettingsPage />} />
 
           {/* Fallback */}
