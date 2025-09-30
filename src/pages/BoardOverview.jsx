@@ -124,12 +124,26 @@ export default function BoardOverview() {
     setAddingEmail(true);
 
     try {
+      const normalizedInput = newEmail.trim().toLowerCase();
+      const exists = whitelist.some((entry) =>
+        String(entry?.email || '').toLowerCase() === normalizedInput
+      );
+      if (exists) {
+        setWhitelistError('E-Mail ist bereits auf der Whitelist.');
+        setAddingEmail(false);
+        return;
+      }
+
       await addWhitelistEmail(newEmail);
       setWhitelistMessage('E-Mail wurde zur Whitelist hinzugefügt.');
       setNewEmail('');
       await refreshWhitelist();
     } catch (error) {
-      setWhitelistError(error.message || 'E-Mail konnte nicht hinzugefügt werden.');
+      if (error?.code === '23505' || /duplicate key value/i.test(error?.message || '')) {
+        setWhitelistError('E-Mail ist bereits auf der Whitelist.');
+      } else {
+        setWhitelistError(error?.message || 'E-Mail konnte nicht hinzugefügt werden.');
+      }
     } finally {
       setAddingEmail(false);
     }
