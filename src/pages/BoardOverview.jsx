@@ -43,6 +43,15 @@ function formatDate(value) {
   }
 }
 
+function formatNumber(value) {
+  try {
+    return new Intl.NumberFormat('de-DE').format(value ?? 0);
+  } catch (error) {
+    console.warn('formatNumber failed', error);
+    return String(value ?? 0);
+  }
+}
+
 export default function BoardOverview() {
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -60,6 +69,58 @@ export default function BoardOverview() {
   const [addingEmail, setAddingEmail] = useState(false);
 
   const [search, setSearch] = useState('');
+  const [showWhitelist, setShowWhitelist] = useState(false);
+  const [showMemberList, setShowMemberList] = useState(false);
+
+  const stats = useMemo(() => {
+    const totalWhitelist = whitelist.length;
+
+    let memberCount = 0;
+    let guestCount = 0;
+    let testerCount = 0;
+    let inactiveMembers = 0;
+    let leadership = 0;
+    let newMembers30d = 0;
+
+    const now = Date.now();
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+    profiles.forEach((profile) => {
+      const normalizedRole = normalizeRoleValue(profile?.role);
+      const createdAt = profile?.created_at ? new Date(profile.created_at).getTime() : null;
+
+      if (normalizedRole === 'inactive') {
+        inactiveMembers += 1;
+        return;
+      }
+
+      if (normalizedRole === 'gast') {
+        guestCount += 1;
+      } else if (normalizedRole === 'tester') {
+        testerCount += 1;
+      } else {
+        memberCount += 1;
+      }
+
+      if (normalizedRole === 'vorstand' || normalizedRole === 'admin') {
+        leadership += 1;
+      }
+
+      if (createdAt && !Number.isNaN(createdAt) && createdAt >= thirtyDaysAgo) {
+        newMembers30d += 1;
+      }
+    });
+
+    return {
+      totalWhitelist,
+      newMembers30d,
+      memberCount,
+      guestCount,
+      testerCount,
+      inactiveMembers,
+      leadership,
+    };
+  }, [profiles, whitelist]);
 
   const canAssignAdmin = useCallback((profile) => {
     if (!profile?.name) return false;
@@ -260,6 +321,47 @@ export default function BoardOverview() {
   return (
     <div className="space-y-8">
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Kennzahlen</h2>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Whitelist</p>
+            <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.totalWhitelist)}</p>
+            <p className="text-xs text-blue-700/80 dark:text-blue-200/70">Freigegebene Adressen</p>
+          </div>
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Neue Mitglieder</p>
+            <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.newMembers30d)}</p>
+            <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">in den letzten 30 Tagen</p>
+          </div>
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-indigo-800 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Mitglieder</p>
+            <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.memberCount)}</p>
+            <p className="text-xs text-indigo-700/80 dark:text-indigo-200/70">Mitglied, Vorstand oder Admin</p>
+          </div>
+          <div className="rounded-lg border border-sky-100 bg-sky-50 p-4 text-sky-800 dark:border-sky-900/40 dark:bg-sky-900/20 dark:text-sky-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Tester</p>
+            <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.testerCount)}</p>
+            <p className="text-xs text-sky-700/80 dark:text-sky-200/70">Personen im Teststatus</p>
+          </div>
+          <div className="rounded-lg border border-cyan-100 bg-cyan-50 p-4 text-cyan-800 dark:border-cyan-900/40 dark:bg-cyan-900/20 dark:text-cyan-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Gäste</p>
+            <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.guestCount)}</p>
+            <p className="text-xs text-cyan-700/80 dark:text-cyan-200/70">Nur Gastzugang</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-gray-800 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Inaktive Mitglieder</p>
+            <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.inactiveMembers)}</p>
+            <p className="text-xs text-gray-600/80 dark:text-gray-300/70">Derzeit pausiert</p>
+          </div>
+          <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Vorstand & Admin</p>
+            <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.leadership)}</p>
+            <p className="text-xs text-amber-700/80 dark:text-amber-200/70">Mit erweiterten Rechten</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Whitelist verwalten</h2>
@@ -267,83 +369,100 @@ export default function BoardOverview() {
               Nur E-Mail-Adressen auf der Whitelist dürfen neue Accounts erstellen.
             </p>
           </div>
-          <form className="flex gap-2" onSubmit={handleAddEmail}>
-            <input
-              type="email"
-              value={newEmail}
-              onChange={(event) => setNewEmail(event.target.value)}
-              placeholder="E-Mail hinzufügen"
-              className="w-60 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-              required
-            />
-            <button
-              type="submit"
-              disabled={addingEmail}
-              className={`rounded px-4 py-2 text-sm font-semibold text-white ${
-                addingEmail ? 'bg-blue-300' : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {addingEmail ? 'Speichert...' : 'Hinzufügen'}
-            </button>
-          </form>
-        </div>
-
-        {(whitelistError || whitelistMessage) && (
-          <div
-            className={`mt-4 rounded border px-3 py-2 text-sm ${
-              whitelistError
-                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200'
-                : 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/30 dark:text-green-200'
+          <button
+            type="button"
+            onClick={() => setShowWhitelist((prev) => !prev)}
+            aria-expanded={showWhitelist}
+            className={`rounded px-4 py-2 text-sm font-semibold transition ${
+              showWhitelist
+                ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
-            {whitelistError || whitelistMessage}
-          </div>
-        )}
-
-        <div className="mt-6 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
-              <tr>
-                <th className="px-4 py-2 text-left font-semibold">E-Mail</th>
-                <th className="px-4 py-2 text-left font-semibold">Freigeschaltet seit</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {whitelistLoading ? (
-                <tr>
-                  <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
-                    Lädt Whitelist...
-                  </td>
-                </tr>
-              ) : whitelist.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
-                    Keine E-Mails gespeichert.
-                  </td>
-                </tr>
-              ) : (
-                whitelist.map((entry) => (
-                  <tr key={entry.email} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
-                    <td className="px-4 py-2 font-mono text-[13px] text-gray-800 dark:text-gray-200">
-                      {entry.email}
-                    </td>
-                    <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{formatDate(entry.created_at)}</td>
-                    <td className="px-4 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEmail(entry.email)}
-                        className="rounded px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/30"
-                      >
-                        Entfernen
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+            {showWhitelist ? 'Liste verbergen' : 'Liste anzeigen'}
+          </button>
         </div>
+
+        {showWhitelist && (
+          <>
+            <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={handleAddEmail}>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(event) => setNewEmail(event.target.value)}
+                placeholder="E-Mail hinzufügen"
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white sm:w-60"
+                required
+              />
+              <button
+                type="submit"
+                disabled={addingEmail}
+                className={`rounded px-4 py-2 text-sm font-semibold text-white ${
+                  addingEmail ? 'bg-blue-300' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {addingEmail ? 'Speichert...' : 'Hinzufügen'}
+              </button>
+            </form>
+
+            {(whitelistError || whitelistMessage) && (
+              <div
+                className={`mt-4 rounded border px-3 py-2 text-sm ${
+                  whitelistError
+                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200'
+                    : 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/30 dark:text-green-200'
+                }`}
+              >
+                {whitelistError || whitelistMessage}
+              </div>
+            )}
+
+            <div className="mt-6 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold">E-Mail</th>
+                    <th className="px-4 py-2 text-left font-semibold">Freigeschaltet seit</th>
+                    <th className="px-4 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {whitelistLoading ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
+                        Lädt Whitelist...
+                      </td>
+                    </tr>
+                  ) : whitelist.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
+                        Keine E-Mails gespeichert.
+                      </td>
+                    </tr>
+                  ) : (
+                    whitelist.map((entry) => (
+                      <tr key={entry.email} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
+                        <td className="px-4 py-2 font-mono text-[13px] text-gray-800 dark:text-gray-200">
+                          {entry.email}
+                        </td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{formatDate(entry.created_at)}</td>
+                        <td className="px-4 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEmail(entry.email)}
+                            className="rounded px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/30"
+                          >
+                            Entfernen
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -354,101 +473,120 @@ export default function BoardOverview() {
               Weise Vorstand- oder Admin-Rechte zu. Änderungen wirken sofort.
             </p>
           </div>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Name oder Rolle suchen"
-            className="w-60 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-          />
-        </div>
-
-        {(profilesError || roleMessage) && (
-          <div
-            className={`mt-4 rounded border px-3 py-2 text-sm ${
-              profilesError
-                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200'
-                : 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/30 dark:text-green-200'
+          <button
+            type="button"
+            onClick={() => setShowMemberList((prev) => !prev)}
+            aria-expanded={showMemberList}
+            className={`rounded px-4 py-2 text-sm font-semibold transition ${
+              showMemberList
+                ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
-            {profilesError || roleMessage}
-          </div>
-        )}
+            {showMemberList ? 'Liste verbergen' : 'Liste anzeigen'}
+          </button>
+        </div>
 
-        <div className="mt-6 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
-              <tr>
-                <th className="px-4 py-2 text-left font-semibold">Name</th>
-                <th className="px-4 py-2 text-left font-semibold">Rolle</th>
-                <th className="px-4 py-2 text-left font-semibold">Angemeldet seit</th>
-                <th className="px-4 py-2 text-left font-semibold">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {profilesLoading ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
-                    Lädt Profile...
-                  </td>
-                </tr>
-              ) : filteredProfiles.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
-                    Keine passenden Profile gefunden.
-                  </td>
-                </tr>
-              ) : (
-                filteredProfiles.map((profile) => {
-                  const normalizedRole = normalizeRoleValue(profile.role);
-                  const selectValue = normalizedRole === 'inactive' ? 'mitglied' : normalizedRole;
-                  const isInactive = normalizedRole === 'inactive';
-                  return (
-                    <tr key={profile.id} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
-                      <td className="px-4 py-2 text-gray-800 dark:text-gray-200">
-                        <div className="flex items-center gap-2">
-                          <span>{profile.name || '—'}</span>
-                          {isInactive && (
-                            <span className="rounded bg-gray-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                              Inaktiv
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
-                        <select
-                          value={selectValue}
-                          onChange={(event) => handleRoleChange(profile.id, event.target.value)}
-                          disabled={updatingRoleId === profile.id || deletingProfileId === profile.id}
-                          className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                        >
-                          {roleOptionsForProfile(profile).map((option) => (
-                            <option key={option.value || 'none'} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{formatDate(profile.created_at)}</td>
-                      <td className="px-4 py-2 text-right">
-                        <select
-                          value={isInactive ? 'inactive' : 'active'}
-                          onChange={(event) => handleMemberActionChange(profile, event.target.value)}
-                          disabled={updatingRoleId === profile.id || deletingProfileId === profile.id}
-                          className="rounded border border-gray-300 px-2 py-1 text-xs font-semibold focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                        >
-                          <option value="active">Aktiv</option>
-                          <option value="inactive">Inaktiv</option>
-                          <option value="delete">Löschen</option>
-                        </select>
+        {showMemberList && (
+          <>
+            <div className="mt-4 flex justify-end">
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Name oder Rolle suchen"
+                className="w-full max-w-xs rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+              />
+            </div>
+
+            {(profilesError || roleMessage) && (
+              <div
+                className={`mt-4 rounded border px-3 py-2 text-sm ${
+                  profilesError
+                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200'
+                    : 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/30 dark:text-green-200'
+                }`}
+              >
+                {profilesError || roleMessage}
+              </div>
+            )}
+
+            <div className="mt-6 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold">Name</th>
+                    <th className="px-4 py-2 text-left font-semibold">Rolle</th>
+                    <th className="px-4 py-2 text-left font-semibold">Angemeldet seit</th>
+                    <th className="px-4 py-2 text-left font-semibold">Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profilesLoading ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
+                        Lädt Profile...
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : filteredProfiles.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
+                        Keine passenden Profile gefunden.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProfiles.map((profile) => {
+                      const normalizedRole = normalizeRoleValue(profile.role);
+                      const selectValue = normalizedRole === 'inactive' ? 'mitglied' : normalizedRole;
+                      const isInactive = normalizedRole === 'inactive';
+                      return (
+                        <tr key={profile.id} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
+                          <td className="px-4 py-2 text-gray-800 dark:text-gray-200">
+                            <div className="flex items-center gap-2">
+                              <span>{profile.name || '—'}</span>
+                              {isInactive && (
+                                <span className="rounded bg-gray-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                  Inaktiv
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                            <select
+                              value={selectValue}
+                              onChange={(event) => handleRoleChange(profile.id, event.target.value)}
+                              disabled={updatingRoleId === profile.id || deletingProfileId === profile.id}
+                              className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+                            >
+                              {roleOptionsForProfile(profile).map((option) => (
+                                <option key={option.value || 'none'} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{formatDate(profile.created_at)}</td>
+                          <td className="px-4 py-2 text-right">
+                            <select
+                              value={isInactive ? 'inactive' : 'active'}
+                              onChange={(event) => handleMemberActionChange(profile, event.target.value)}
+                              disabled={updatingRoleId === profile.id || deletingProfileId === profile.id}
+                              className="rounded border border-gray-300 px-2 py-1 text-xs font-semibold focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+                            >
+                              <option value="active">Aktiv</option>
+                              <option value="inactive">Inaktiv</option>
+                              <option value="delete">Löschen</option>
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
