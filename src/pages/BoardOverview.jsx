@@ -3,6 +3,7 @@ import {
   addWhitelistEmail,
   fetchProfiles,
   fetchWhitelist,
+  fetchFishAggregates,
   removeWhitelistEmail,
   updateProfileRole,
   deleteProfile,
@@ -52,6 +53,20 @@ function formatNumber(value) {
   }
 }
 
+function formatPercent(value) {
+  try {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'percent',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1,
+    }).format(value ?? 0);
+  } catch (error) {
+    console.warn('formatPercent failed', error);
+    const fallback = Number.isFinite(value) ? (value * 100).toFixed(0) : '0';
+    return `${fallback}%`;
+  }
+}
+
 export default function BoardOverview() {
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -71,6 +86,9 @@ export default function BoardOverview() {
   const [search, setSearch] = useState('');
   const [showWhitelist, setShowWhitelist] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
+  const [fishStats, setFishStats] = useState([]);
+  const [fishStatsLoading, setFishStatsLoading] = useState(false);
+  const [fishStatsError, setFishStatsError] = useState('');
 
   const stats = useMemo(() => {
     const totalWhitelist = whitelist.length;
@@ -122,6 +140,21 @@ export default function BoardOverview() {
     };
   }, [profiles, whitelist]);
 
+  const fishOverviewTotals = useMemo(() => {
+    if (!Array.isArray(fishStats) || fishStats.length === 0) {
+      return { total: 0, taken: 0 };
+    }
+
+    return fishStats.reduce(
+      (acc, item) => {
+        acc.total += Number(item?.total) || 0;
+        acc.taken += Number(item?.taken) || 0;
+        return acc;
+      },
+      { total: 0, taken: 0 }
+    );
+  }, [fishStats]);
+
   const canAssignAdmin = useCallback((profile) => {
     if (!profile?.name) return false;
     return String(profile.name).trim().toLowerCase() === 'nicol schmidt';
@@ -153,10 +186,45 @@ export default function BoardOverview() {
     }
   }, []);
 
+  const refreshFishAggregates = useCallback(async () => {
+    setFishStatsLoading(true);
+    setFishStatsError('');
+    try {
+      const data = await fetchFishAggregates();
+      const threshold = Date.UTC(2025, 5, 1); // 01.06.2025 00:00 UTC
+      const grouped = (Array.isArray(data) ? data : []).reduce((acc, entry) => {
+        const fishName = entry?.fish ? String(entry.fish).trim() : '';
+        const location = entry?.location_name ? String(entry.location_name).toLowerCase() : '';
+        const timestampMs = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
+        const isAfterThreshold = Number.isFinite(timestampMs) && timestampMs >= threshold;
+
+        const isLobberich = location.includes('lobberich');
+        const isUnknown = !entry?.location_name;
+        if (!fishName || !isAfterThreshold || (!isLobberich && !isUnknown)) return acc;
+
+        if (!acc[fishName]) acc[fishName] = { fish: fishName, total: 0, taken: 0 };
+        acc[fishName].total += 1;
+        if (entry?.taken === true) acc[fishName].taken += 1;
+        return acc;
+      }, {});
+
+      const sorted = Object.values(grouped).sort(
+        (a, b) => b.total - a.total || a.fish.localeCompare(b.fish)
+      );
+
+      setFishStats(sorted);
+    } catch (error) {
+      setFishStatsError(error.message || 'Fischübersicht konnte nicht geladen werden.');
+    } finally {
+      setFishStatsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshProfiles();
     refreshWhitelist();
-  }, [refreshProfiles, refreshWhitelist]);
+    refreshFishAggregates();
+  }, [refreshProfiles, refreshWhitelist, refreshFishAggregates]);
 
   const filteredProfiles = useMemo(() => {
     const trimmed = search.trim();
@@ -358,6 +426,95 @@ export default function BoardOverview() {
             <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.leadership)}</p>
             <p className="text-xs text-amber-700/80 dark:text-amber-200/70">Mit erweiterten Rechten</p>
           </div>
+        </div>
+      </section>
+
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Fänge nach Fischart</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Gegenüberstellung aller Fänge sowie entnommener Fische pro Art.
+            </p>
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-300">
+            <div className="text-right font-semibold text-gray-800 dark:text-gray-100">
+              {formatNumber(fishOverviewTotals.total)} gesamt
+            </div>
+            <div className="text-right text-xs">
+              {formatNumber(fishOverviewTotals.taken)} entnommen ({
+                fishOverviewTotals.total > 0
+                  ? formatPercent(fishOverviewTotals.taken / fishOverviewTotals.total)
+                  : '—'
+              })
+            </div>
+          </div>
+        </div>
+
+        {fishStatsError && (
+          <div className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200">
+            {fishStatsError}
+          </div>
+        )}
+
+        <div className="mt-6 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
+              <tr>
+                <th className="px-4 py-2 text-left font-semibold">Fischart</th>
+                <th className="px-4 py-2 text-left font-semibold">Gefangen gesamt</th>
+                <th className="px-4 py-2 text-left font-semibold">Davon entnommen</th>
+                <th className="px-4 py-2 text-left font-semibold">Entnahmequote</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fishStatsLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
+                    Lädt Fangstatistik...
+                  </td>
+                </tr>
+              ) : fishStats.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
+                    Keine Fänge erfasst.
+                  </td>
+                </tr>
+              ) : (
+                fishStats.map((entry) => {
+                  const total = Number(entry?.total) || 0;
+                  const taken = Number(entry?.taken) || 0;
+                  const ratio = total > 0 ? Math.max(0, Math.min(1, taken / total)) : 0;
+                  const ratioPercent = Math.round(ratio * 100);
+
+                  return (
+                    <tr key={entry.fish} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
+                      <td className="px-4 py-2 font-medium text-gray-800 dark:text-gray-100">{entry.fish}</td>
+                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(total)}</td>
+                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(taken)}</td>
+                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                        {total > 0 ? formatPercent(ratio) : '—'}
+                        {total > 0 && (
+                          <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                            <div
+                              className={`h-1.5 rounded-full ${
+                                ratioPercent >= 66
+                                  ? 'bg-red-500 dark:bg-red-400'
+                                  : ratioPercent >= 33
+                                    ? 'bg-amber-500 dark:bg-amber-400'
+                                    : 'bg-emerald-500 dark:bg-emerald-400'
+                              }`}
+                              style={{ width: `${ratioPercent}%` }}
+                            />
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 

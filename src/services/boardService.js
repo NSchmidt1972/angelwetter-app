@@ -46,6 +46,19 @@ export async function fetchProfiles() {
   return data || [];
 }
 
+export async function fetchFishAggregates() {
+  const { data, error } = await supabase
+    .from('fishes')
+    .select('fish, taken, location_name, timestamp')
+    .not('blank', 'is', true)
+    .not('fish', 'is', null)
+    .neq('fish', '')
+    .order('fish', { ascending: true });
+
+  if (error) throw new Error(error.message || 'Fischübersicht konnte nicht geladen werden.');
+  return data || [];
+}
+
 export async function updateProfileRole(profileId, role) {
   const normalizedRole = role ? role.trim() : null;
   const { error } = await supabase
