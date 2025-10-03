@@ -1,5 +1,5 @@
 // src/components/FishCatchForm.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 
 // Utils
@@ -57,6 +57,9 @@ export default function FishCatchForm({
   // Busy Flags
   const [loadingCatch, setLoadingCatch] = useState(false);
   const [loadingBlank, setLoadingBlank] = useState(false);
+  const [savingCatch, setSavingCatch] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const savingCatchRef = useRef(false);
 
   // Misc
   const navigate = useNavigate();
@@ -93,6 +96,8 @@ export default function FishCatchForm({
 
   // 1) Formular absenden → Daten sammeln, vorbereiten, Dialog „entnommen?“ anzeigen
   const handleSubmit = async () => {
+    if (loadingCatch || loadingBlank || savingCatch) return;
+
     const errorMessage = validateCatchForm({ fish, size, weight, position });
     if (errorMessage) {
       alert(errorMessage);
@@ -146,8 +151,16 @@ export default function FishCatchForm({
   // 2) Finalisieren → mit „taken“-Flag wirklich speichern
   const finalizeCatch = async (taken) => {
     try {
+      if (savingCatchRef.current || !pendingEntry) return;
+
+      setSavingCatch(true);
+      savingCatchRef.current = true;
+      setStatusMessage("Fang wird gespeichert...");
+
+      const entryToSave = pendingEntry;
+
       const inserted = await saveCatchEntry(
-        pendingEntry,
+        entryToSave,
         taken,
         position,
         anglerName,
@@ -159,7 +172,7 @@ export default function FishCatchForm({
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const userId = sessionData?.session?.user?.id ?? null;
-        const lastCatch = inserted?.id ? { ...inserted } : { ...pendingEntry, taken };
+        const lastCatch = inserted?.id ? { ...inserted } : { ...entryToSave, taken };
         if (typeof checkOnNewCatch === "function") {
           await checkOnNewCatch({ userId, lastCatch });
         }
@@ -174,6 +187,9 @@ export default function FishCatchForm({
     } finally {
       setShowTakenDialog(false);
       setPendingEntry(null);
+      setSavingCatch(false);
+      savingCatchRef.current = false;
+      setStatusMessage("");
     }
   };
 
@@ -191,79 +207,112 @@ export default function FishCatchForm({
     }
   };
 
+  const inputClasses = "w-full rounded-lg border border-slate-300/70 dark:border-slate-700 bg-white/95 dark:bg-slate-900/70 px-4 py-3 text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
+
   return (
-    <div className="p-6 max-w-xl mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl mt-10 mb-10 text-gray-800 dark:text-gray-100">
-      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-300 mb-6 text-center">
-        🎣 Fang eintragen
-      </h2>
+    <div className="mt-10 mb-10 max-w-2xl mx-auto">
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-950/70 backdrop-blur shadow-2xl shadow-slate-900/40">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-emerald-500/10" aria-hidden="true" />
+        <div className="relative p-6 sm:p-8 text-gray-800 dark:text-gray-100">
+          <div className="mb-6 text-center">
+            <h2 className="text-3xl font-extrabold tracking-tight text-blue-700 dark:text-blue-300">
+              🎣 Fang eintragen
+            </h2>
+            
+          </div>
 
-      <div className="space-y-4">
-        {/* Region + Fischart */}
-        <RegionSelect value={region} onChange={setRegion} />
-        <FishSelect fishList={fishList} value={fish} onChange={setFish} />
+          <div className="space-y-6">
+            {/* Region + Fischart */}
+            <RegionSelect value={region} onChange={setRegion} />
+            <FishSelect fishList={fishList} value={fish} onChange={setFish} />
 
-        {/* Größe */}
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          placeholder="Größe (cm)"
-          value={size}
-          onChange={(e) => setSize(e.target.value)}
-          className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800"
-        />
+            {/* Größe */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                Größe in Zentimeter
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="z. B. 35"
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                className={inputClasses}
+              />
+            </div>
 
-        {/* Gewicht nur bei Karpfen */}
-        {fish === "Karpfen" && (
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="Gewicht (kg)"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800"
-          />
-        )}
+            {/* Gewicht nur bei Karpfen */}
+            {fish === "Karpfen" && (
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  Gewicht in Kilogramm
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="z. B. 12"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  className={inputClasses}
+                />
+              </div>
+            )}
 
-        {/* Kommentar */}
-        <textarea
-          placeholder="Kommentar (optional)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={4}
-          className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800"
-        />
+            {/* Kommentar */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                Kommentar (optional)
+              </label>
+              <textarea
+                placeholder="Besondere Umstände, Köder oder Notizen"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={4}
+                className={`${inputClasses} resize-none`}
+              />
+            </div>
 
-        {/* Foto */}
-        <PhotoPicker
-          previewUrl={previewUrl}
-          onPick={(file, url) => {
-            setPhotoFile(file);
-            setPreviewUrl(url);
-          }}
-          onRemove={() => {
-            setPhotoFile(null);
-            setPreviewUrl(null);
-          }}
-        />
+            {/* Foto */}
+            <PhotoPicker
+              previewUrl={previewUrl}
+              onPick={(file, url) => {
+                setPhotoFile(file);
+                setPreviewUrl(url);
+              }}
+              onRemove={() => {
+                setPhotoFile(null);
+                setPreviewUrl(null);
+              }}
+            />
 
-        {/* Buttons */}
-        <button
-          onClick={handleSubmit}
-          disabled={loadingCatch || loadingBlank}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-2 rounded"
-        >
-          {loadingCatch ? "Speichern..." : "✅ Fang speichern"}
-        </button>
+            {/* Buttons */}
+            <div className="space-y-3">
+              <button
+                onClick={handleSubmit}
+                disabled={loadingCatch || loadingBlank || savingCatch || !!pendingEntry}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:from-emerald-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loadingCatch ? "Speichern..." : "✅ Fang speichern"}
+              </button>
 
-        <button
-          onClick={() => setShowHourDialog(true)}
-          disabled={loadingCatch || loadingBlank}
-          className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 rounded"
-        >
-          ❌ Heute nichts gefangen
-        </button>
+              <button
+                onClick={() => setShowHourDialog(true)}
+                disabled={loadingCatch || loadingBlank || savingCatch}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-slate-200/80 dark:bg-slate-800/70 px-4 py-3 text-base font-semibold text-slate-700 dark:text-slate-100 shadow-md shadow-slate-900/20 transition hover:bg-slate-300/90 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ❌ Heute nichts gefangen
+              </button>
+            </div>
+
+            {statusMessage && (
+              <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-400/50 bg-blue-500/10 px-4 py-3 text-sm font-medium text-blue-700 dark:text-blue-200">
+                ⏳ {statusMessage}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Schneidertag-Dialog */}
@@ -281,7 +330,7 @@ export default function FishCatchForm({
       />
 
       {/* Entnommen-Dialog */}
-      <TakenDialog open={showTakenDialog} onPick={finalizeCatch} />
+      <TakenDialog open={showTakenDialog} onPick={finalizeCatch} loading={savingCatch} />
     </div>
   );
 }
