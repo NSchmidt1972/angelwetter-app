@@ -69,37 +69,34 @@ export const achievements = [
       filters: ({ lastCatch }) => {
         const name = normalizeName(lastCatch?.angler);
         if (!name) return [];
-        return [["angler", "eq", name]];
+        return [
+          ["angler", "eq", name],
+          ["blank", "eq", false],
+        ];
       },
     },
   },
   {
     id: "fish_50",
-    title: "50 Fische!",
-    message: "Maschine! 50 Fänge sind im Sack 💪",
+    title: (ctx) => `${ctx?.count ?? 50} Fische!`,
+    message: (ctx) => {
+      const count = ctx?.count ?? 0;
+      if (count === 50) return "Maschine! 50 Fänge sind im Sack 💪";
+      if (count === 100) return "Legendär! 100 Fänge – Applaus! 👑";
+      return `Unglaublich! Schon ${count} Fische – weiter so! 🎉`;
+    },
     icon: "🏆",
     needsCount: {
       table: "fishes",
       threshold: 50,
+      repeatEvery: 50,
       filters: ({ lastCatch }) => {
         const name = normalizeName(lastCatch?.angler);
         if (!name) return [];
-        return [["angler", "eq", name]];
-      },
-    },
-  },
-  {
-    id: "fish_100",
-    title: "100 Fische!!!",
-    message: "Legendär! 100 Fänge – Applaus! 👑",
-    icon: "👑",
-    needsCount: {
-      table: "fishes",
-      threshold: 100,
-      filters: ({ lastCatch }) => {
-        const name = normalizeName(lastCatch?.angler);
-        if (!name) return [];
-        return [["angler", "eq", name]];
+        return [
+          ["angler", "eq", name],
+          ["blank", "eq", false],
+        ];
       },
     },
   },
@@ -162,6 +159,7 @@ export const achievements = [
       const { count } = await getCount(supabase, "fishes", [
         ["timestamp", "gte", startUTC],
         ["timestamp", "lte", endUTC],
+        ["blank", "eq", false],
       ]);
       // Falls der aktuelle Insert gespeichert ist, ist #1 des Tages genau count === 1
       return count === 1;
@@ -215,6 +213,7 @@ export const achievements = [
           ["angler", "eq", name],
           ["timestamp", "gte", startUTC],
           ["timestamp", "lte", endUTC],
+          ["blank", "eq", false],
         ];
       },
     },
@@ -235,6 +234,7 @@ export const achievements = [
           ["angler", "eq", name],
           ["timestamp", "gte", startUTC],
           ["timestamp", "lte", endUTC],
+          ["blank", "eq", false],
         ];
       },
     },
@@ -255,12 +255,50 @@ export const achievements = [
           ["angler", "eq", name],
           ["timestamp", "gte", startUTC],
           ["timestamp", "lte", endUTC],
+          ["blank", "eq", false],
         ];
       },
     },
   },
 
   // ========= Fangserie (5 Tage in Folge) =========
+  {
+    id: "streak_3_days",
+    title: "Hattrick!",
+    message: "Drei Fangtage in Folge – starker Lauf! 🔁",
+    icon: "🔁",
+    check: async ({ supabase, lastCatch }) => {
+      const name = normalizeName(lastCatch?.angler);
+      if (!name || !lastCatch?.timestamp) return false;
+
+      for (let offset = 0; offset < 3; offset += 1) {
+        const { startUTC, endUTC } = dayBoundsEuropeBerlinUTC(lastCatch.timestamp, -offset);
+        const { count } = await getCount(supabase, "fishes", [
+          ["angler", "eq", name],
+          ["timestamp", "gte", startUTC],
+          ["timestamp", "lte", endUTC],
+          ["blank", "eq", false],
+        ]);
+        if (count === 0) {
+          return false;
+        }
+      }
+
+      const { count: prevDayCount } = await getCount(supabase, "fishes", [
+        ["angler", "eq", name],
+        ...(() => {
+          const { startUTC, endUTC } = dayBoundsEuropeBerlinUTC(lastCatch.timestamp, -3);
+          return [
+            ["timestamp", "gte", startUTC],
+            ["timestamp", "lte", endUTC],
+            ["blank", "eq", false],
+          ];
+        })(),
+      ]);
+
+      return prevDayCount === 0;
+    },
+  },
   {
     id: "streak_5_days",
     title: "Serienmeister!",
@@ -276,6 +314,7 @@ export const achievements = [
           ["angler", "eq", name],
           ["timestamp", "gte", startUTC],
           ["timestamp", "lte", endUTC],
+          ["blank", "eq", false],
         ]);
         if (count === 0) {
           return false;
@@ -290,6 +329,7 @@ export const achievements = [
           return [
             ["timestamp", "gte", startUTC],
             ["timestamp", "lte", endUTC],
+            ["blank", "eq", false],
           ];
         })(),
       ]);

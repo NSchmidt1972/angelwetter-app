@@ -20,7 +20,7 @@ export function useAchievements({ supabase, showEffect, remember }) {
         let ctx = { fish: lastCatch?.fish, size: lastCatch?.size };
 
         if (a.needsCount) {
-          const { table, filters: buildFilters, threshold } = a.needsCount;
+          const { table, filters: buildFilters, threshold, repeatEvery } = a.needsCount;
           const filters = typeof buildFilters === 'function'
             ? buildFilters({ supabase, userId, lastCatch })
             : [];
@@ -28,15 +28,23 @@ export function useAchievements({ supabase, showEffect, remember }) {
             continue;
           }
           const { count } = await getCount(supabase, table, filters);
-          hit = count === threshold;
+          if (typeof count === 'number') {
+            ctx = { ...ctx, count };
+          }
+          if (typeof threshold === 'number' && typeof repeatEvery === 'number' && repeatEvery > 0) {
+            hit = count >= threshold && ((count - threshold) % repeatEvery === 0);
+          } else if (typeof threshold === 'number') {
+            hit = count === threshold;
+          }
         } else if (a.check) {
           hit = await a.check({ supabase, userId, lastCatch });
         }
 
         if (hit) {
+          const title = typeof a.title === "function" ? a.title(ctx) : a.title;
           const message = typeof a.message === "function" ? a.message(ctx) : a.message;
           if (typeof showEffect === "function") {
-            showEffect({ id: a.id, title: a.title, message, icon: a.icon });
+            showEffect({ id: a.id, title, message, icon: a.icon });
           }
           await remember.add(a.id, lastCatch?.id);
         }
