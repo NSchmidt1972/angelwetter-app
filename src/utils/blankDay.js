@@ -1,22 +1,6 @@
 import { supabase } from '../supabaseClient';
 
 /**
- * Prüft, ob der Angler heute bereits einen Schneidertag eingetragen hat.
- */
-async function checkExistingBlankDay(anglerName, isoStart, isoEnd) {
-  const { data: existing, error } = await supabase
-    .from('fishes')
-    .select('id')
-    .eq('angler', anglerName)
-    .eq('blank', true)
-    .gte('timestamp', isoStart)
-    .lt('timestamp', isoEnd);
-
-  if (error) throw new Error("Fehler bei der Tagesprüfung.");
-  return existing.length > 0;
-}
-
-/**
  * Ruft die Wetterzusammenfassung-Funktion auf.
  */
 async function sendBlankWeatherSummary(anglerName, hours, accessToken) {
@@ -37,12 +21,12 @@ async function sendBlankWeatherSummary(anglerName, hours, accessToken) {
 }
 
 /**
- * Speichert den Schneidertag in der DB.
+ * Speichert die Schneidersession in der DB.
  */
-async function insertBlankDay(anglerName, position) {
+async function insertBlankSession(anglerName, position) {
   const { error } = await supabase.from('fishes').insert([{
     angler: anglerName,
-    note: 'Schneidertag',
+    note: 'Schneidersession',
     blank: true,
     timestamp: new Date().toISOString(),
     lat: position?.lat ?? null,
@@ -52,29 +36,21 @@ async function insertBlankDay(anglerName, position) {
 }
 
 /**
- * Führt den gesamten Ablauf für das Speichern eines Schneidertags aus.
+ * Führt den gesamten Ablauf für das Speichern einer Schneidersession aus.
  */
 export async function handleBlankDay(anglerName, hours, position, navigate) {
   const sessionResult = await supabase.auth.getSession();
   const accessToken = sessionResult.data?.session?.access_token;
   if (!accessToken) throw new Error("Nicht eingeloggt – bitte zuerst anmelden.");
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const isoStart = today.toISOString();
-  const isoEnd = new Date(today.getTime() + 86400000).toISOString();
-
-  const exists = await checkExistingBlankDay(anglerName, isoStart, isoEnd);
-  if (exists) throw new Error("Du hast heute bereits einen Schneidertag eingetragen.");
-
   await sendBlankWeatherSummary(anglerName, hours, accessToken);
-  await insertBlankDay(anglerName, position);
+  await insertBlankSession(anglerName, position);
 
   if (window.location.hostname === 'app.asv-rotauge.de' && window.OneSignal) {
     window.OneSignal.push(() => {
       window.OneSignal.sendSelfNotification(
-        "❌ Schneidertag eingetragen",
-        `${anglerName} hat heute leider nichts gefangen.`,
+        "❌ Schneidersession eingetragen",
+        `${anglerName} hat in dieser Session leider nichts gefangen.`,
         null,
         { data: { blank: true } }
       );

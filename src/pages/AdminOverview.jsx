@@ -225,7 +225,7 @@ export default function AdminOverview() {
       </Section>
 
 
-      <Section title="❌ Letzte Schneidertage (7 Tage)">
+      <Section title="❌ Letzte Schneidersessions (7 Tage)">
         {recentBlanks.length > 0 ? (
           <div className="max-h-60 overflow-y-auto">
             <ul className={listItemClass}>
@@ -240,7 +240,7 @@ export default function AdminOverview() {
             </ul>
           </div>
         ) : (
-          <div className={fallbackTextClass}>Keine Schneidertage</div>
+          <div className={fallbackTextClass}>Keine Schneidersessions</div>
         )}
       </Section>
 

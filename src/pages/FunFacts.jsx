@@ -1187,7 +1187,7 @@ export default function FunFacts() {
     return { max, winners, ranking: entries };
   }, [fishes]);
 
-  // ---------- 30) Schlechtester Monat (meiste Schneidertage)
+  // ---------- 30) Schlechtester Monat (meiste Schneidersessions)
   const worstBlankMonth = useMemo(() => {
     if (fishes.length === 0) return { max: 0, winners: [], ranking: [] };
 
@@ -2380,16 +2380,16 @@ const recordHunter = useMemo(() => {
                 ))}
               </ul>
             ) : (
-              <p>Keine Schneidertage erfasst.</p>
+              <p>Keine Schneidersessions erfasst.</p>
             )}
           </Card>,
 
-          // 30) 📉 Schlechtester Monat (meiste Schneidertage)
-          <Card key="worstBlankMonth" title="📉 Schlechtester Monat (meiste Schneidertage)">
+          // 30) 📉 Schlechtester Monat (meiste Schneidersessions)
+          <Card key="worstBlankMonth" title="📉 Schlechtester Monat (meiste Schneidersessions)">
             {worstBlankMonth.max > 0 ? (
               <>
                 <p className="mb-2">
-                  Meiste Schneidertage:{' '}
+                  Meiste Schneidersessions:{' '}
                   <b className="text-green-700 dark:text-green-300">
                     {worstBlankMonth.max}
                   </b>
@@ -2419,7 +2419,7 @@ const recordHunter = useMemo(() => {
                 </ul>
               </>
             ) : (
-              <p>Keine Schneidertage erfasst.</p>
+              <p>Keine Schneidersessions erfasst.</p>
             )}
           </Card>,
 

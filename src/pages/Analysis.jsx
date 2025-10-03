@@ -73,25 +73,21 @@ export default function Analysis({ anglerName }) {
 
   const totalFishes = fishes.filter(f => f.fish && f.fish.trim() !== '').length;
 
-  // Tagesauswertung pro Angler
-  const anglerTageMap = {};
+  const blankSessions = fishes.filter(f => f.blank === true).length;
+
+  const catchSessionKeys = new Set();
   fishes.forEach(f => {
-    const dateStr = new Date(f.timestamp).toDateString();
-    const key = `${dateStr}__${f.angler}`;
-    if (!anglerTageMap[key]) anglerTageMap[key] = [];
-    anglerTageMap[key].push(f);
+    if (f.blank) return;
+    const ts = new Date(f.timestamp);
+    if (Number.isNaN(ts.getTime())) return;
+    const datePart = ts.toISOString().slice(0, 10);
+    const anglerKey = (f.angler || 'Unbekannt').trim() || 'Unbekannt';
+    catchSessionKeys.add(`${anglerKey}__${datePart}`);
   });
+  const catchSessions = catchSessionKeys.size;
 
-  const blankDays = Object.values(anglerTageMap).filter(entries =>
-    entries.every(f => f.blank === true)
-  ).length;
-
-  const catchDays = Object.values(anglerTageMap).filter(entries =>
-    entries.some(f => !f.blank)
-  ).length;
-
-  const sumDays = blankDays + catchDays;
-  const blankRatio = sumDays > 0 ? ((blankDays / sumDays) * 100).toFixed(1) : '0.0';
+  const totalSessions = blankSessions + catchSessions;
+  const blankSessionRatio = totalSessions > 0 ? ((blankSessions / totalSessions) * 100).toFixed(1) : '0.0';
 
   // Basis: gültige Fänge (für Gesamtauswertungen / Monate immer ALLE Fische)
   const baseValidFishes = fishes.filter(f =>
@@ -290,18 +286,18 @@ export default function Analysis({ anglerName }) {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xl">📅</span>
-          <span>Fangtage:</span>
-          <span className="ml-auto font-bold text-right">{catchDays}</span>
+          <span>Sessions mit Fang:</span>
+          <span className="ml-auto font-bold text-right">{catchSessions}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xl">❌</span>
-          <span>Schneidertage:</span>
-          <span className="ml-auto font-bold text-right">{blankDays}</span>
+          <span>Schneidersessions:</span>
+          <span className="ml-auto font-bold text-right">{blankSessions}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xl">📉</span>
-          <span>Schneidertage-Anteil:</span>
-          <span className="ml-auto font-bold text-right">{blankRatio}%</span>
+          <span>Schneider-Anteil:</span>
+          <span className="ml-auto font-bold text-right">{blankSessionRatio}%</span>
         </div>
       </div>
 

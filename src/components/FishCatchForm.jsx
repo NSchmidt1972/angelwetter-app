@@ -163,9 +163,7 @@ export default function FishCatchForm({
         entryToSave,
         taken,
         position,
-        anglerName,
-        FERKENSBRUCH_LAT,
-        FERKENSBRUCH_LON
+        anglerName
       );
 
       // Achievements (optional)
@@ -193,7 +191,7 @@ export default function FishCatchForm({
     }
   };
 
-  // Schneidertag speichern
+  // Schneidersession speichern
   const handleBlankSubmit = async () => {
     setLoadingBlank(true);
     try {
@@ -302,7 +300,7 @@ export default function FishCatchForm({
                 disabled={loadingCatch || loadingBlank || savingCatch}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-slate-200/80 dark:bg-slate-800/70 px-4 py-3 text-base font-semibold text-slate-700 dark:text-slate-100 shadow-md shadow-slate-900/20 transition hover:bg-slate-300/90 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ❌ Heute nichts gefangen
+                ❌ nichts gefangen
               </button>
             </div>
 
@@ -315,7 +313,7 @@ export default function FishCatchForm({
         </div>
       </div>
 
-      {/* Schneidertag-Dialog */}
+      {/* Schneidersession-Dialog */}
       <HourDialog
         open={showHourDialog}
         hours={hours}

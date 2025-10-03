@@ -149,7 +149,7 @@ export default function CatchMap() {
     });
   }, [entries, year, month]);
 
-  // Schneidertage rausfiltern = nur Einträge mit Fischname
+  // Schneidersessions (blank) rausfiltern = nur Einträge mit Fischname
   const filteredEntries = useMemo(() => {
     const valid = timeFiltered.filter(e => e.fish?.trim());
     if (!onlyMine) return valid;

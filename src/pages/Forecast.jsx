@@ -23,7 +23,7 @@ export default function Forecast() {
         Diese KI-Berechnung basiert auf aktuellem Wetter und historischen Fängen unter ähnlichen Bedingungen.
       </p>
       <p className="text-xs italic text-center text-gray-600 dark:text-gray-300 mb-6 max-w-xl mx-auto">
-        Bitte auch Schneidertage eintragen – sonst überschätzt die KI die Fangchancen.
+        Bitte auch Schneidersessions eintragen – sonst überschätzt die KI die Fangchancen.
       </p>
 
       <div className="flex justify-center mb-6">
@@ -50,7 +50,7 @@ export default function Forecast() {
                 {renderFishRating(aiPrediction.probability)}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidertag wahrscheinlich"}
+                {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidersession wahrscheinlich"}
               </p>
 
               {aiPrediction.stats && (
@@ -59,7 +59,7 @@ export default function Forecast() {
                   <ul className="ml-2 list-disc list-inside space-y-1">
                     <li>Gesamtanzahl: {aiPrediction.stats.total_samples}</li>
                     <li>🎣 Fänge: {aiPrediction.stats.positive_samples}</li>
-                    <li>❌ Schneidertage: {aiPrediction.stats.negative_samples}</li>
+                    <li>❌ Schneidersessions: {aiPrediction.stats.negative_samples}</li>
                   </ul>
                 </div>
               )}

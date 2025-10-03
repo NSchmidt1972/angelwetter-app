@@ -1,6 +1,33 @@
 // src/services/catchService.js
 import { supabase } from '../supabaseClient';
-//import { getDistanceKm } from '../utils/geo';
+import { getDistanceKm } from '../utils/geo';
+
+const FERKENSBRUCH_LAT = 51.3135;
+const FERKENSBRUCH_LON = 6.256;
+const LOBBERICH_RADIUS_KM = 3.5;
+
+function normalizeLobberichLocation(rawLocation, lat, lon) {
+  const trimmed = typeof rawLocation === 'string' ? rawLocation.trim() : '';
+  const nearFerkensbruch =
+    lat != null &&
+    lon != null &&
+    getDistanceKm(lat, lon, FERKENSBRUCH_LAT, FERKENSBRUCH_LON) <= LOBBERICH_RADIUS_KM;
+
+  if (!trimmed) {
+    return nearFerkensbruch ? 'Lobberich' : null;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('lobberich') || lower.includes('ferkensbruch')) {
+    return 'Lobberich';
+  }
+
+  if (nearFerkensbruch && (lower.startsWith('kreis ') || lower.startsWith('landkreis ') || lower.includes('kreis viersen'))) {
+    return 'Lobberich';
+  }
+
+  return trimmed;
+}
 
 const IS_DEV_BUILD = (() => {
   try {
@@ -18,9 +45,13 @@ const IS_DEV_BUILD = (() => {
  * Speichert den Fang und triggert (optional) einen OneSignal-Push via Edge-Function 'sendCatchPush'.
  * - Geofence kann via localStorage.pushGeofence = 'on'|'off' gesteuert werden (default: 'off').
  */
-export async function saveCatchEntry(entry, taken, position, anglerName, /*FERKENSBRUCH_LAT, FERKENSBRUCH_LON*/) {
+export async function saveCatchEntry(entry, taken, position, anglerName) {
   // 1) Insert
   const payload = { ...entry, taken: !!taken };
+  const locationLat = payload.lat ?? position?.lat ?? null;
+  const locationLon = payload.lon ?? position?.lon ?? null;
+  const normalizedLocation = normalizeLobberichLocation(payload.location_name, locationLat, locationLon);
+  payload.location_name = normalizedLocation;
   const { data, error: insertErr } = await supabase
     .from('fishes')
     .insert([payload])
