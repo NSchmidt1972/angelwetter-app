@@ -235,7 +235,7 @@ export default function FishCatchForm({
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                placeholder="z. B. 35"
+                placeholder="z. B. 35 cm"
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
                 className={inputClasses}
@@ -246,13 +246,13 @@ export default function FishCatchForm({
             {fish === "Karpfen" && (
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                  Gewicht in Kilogramm
+                  Gewicht in Kilogramm (optional)
                 </label>
                 <input
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  placeholder="z. B. 12"
+                  placeholder="z. B. 12 kg"
                   value={weight}
                   onChange={(e) => setWeight(e.target.value)}
                   className={inputClasses}
