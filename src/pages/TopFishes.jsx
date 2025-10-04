@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import PageContainer from '../components/PageContainer';
+import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
 
 const MARILOU_ALIASES = ['marilou boes', 'marilou'];
 
@@ -42,6 +43,8 @@ export default function TopFishes() {
         if (onlyMine) {
           return (f.angler || '').trim() === anglerName;
         }
+
+        if (!isFerkensbruchLocation(f.location_name)) return false;
 
         const fangDatum = new Date(f.timestamp);
         const size = parseFloat(f.size);
@@ -111,7 +114,8 @@ export default function TopFishes() {
       f.size &&
       f.angler &&
       f.fish !== 'Unbekannt' &&
-      !f.blank
+      !f.blank &&
+      (onlyMine || isFerkensbruchLocation(f.location_name))
     )
     .sort((a, b) => {
       const sizeA = parseFloat(a.size);
@@ -191,11 +195,7 @@ export default function TopFishes() {
                   const displayName = formattedNamesMap[nameKey] || f.angler || 'Unbekannt';
                   const isCurrentAngler = nameKey && nameKey.toLowerCase() === anglerNameNorm;
 
-                  // ✅ Ort-Logik: wenn leer oder Lobberich => Ferkensbruch
-                  let ort = (f.location_name || '').trim();
-                  if (!ort || ort.toLowerCase() === 'lobberich') {
-                    ort = 'Ferkensbruch';
-                  }
+                  const ort = formatLocationLabel(f.location_name);
 
                   const sizeNum = parseFloat(f.size);
                   const sizeFormatted = Number.isFinite(sizeNum) ? `${sizeNum.toFixed(1)} cm` : '–';

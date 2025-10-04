@@ -26,6 +26,7 @@ const PREDATOR_LABELS = {
   zander: 'Zander',
   wels: 'Wels',
 };
+const MIN_EFFICIENCY_DAYS = 3;
 
 // ------------------ Helpers (lokal) ------------------
 const PLACE_ALIASES = [
@@ -665,7 +666,7 @@ export default function FunFacts() {
         const ratio = days > 0 ? fish / days : 0;
         return { angler: who, ratio, fish, days };
       })
-      .filter((e) => e.days > 0);
+      .filter((e) => e.days >= MIN_EFFICIENCY_DAYS);
 
     if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
     entries.sort(
@@ -1940,6 +1941,9 @@ const recordHunter = useMemo(() => {
 
           // 14) Effizienz
   <Card key="efficiency" title="🏅 Wer angelt am effizientesten? (Fische pro Fangtag)">
+    <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+      Nur Angler mit mindestens {MIN_EFFICIENCY_DAYS} Fangtagen zählen.
+    </p>
     {mostEfficientAngler.winners.length > 0 ? (
       <ul className="space-y-2">
         {mostEfficientAngler.winners.map((it, idx) => (

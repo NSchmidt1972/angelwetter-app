@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import PageContainer from '../components/PageContainer';
+import { isFerkensbruchLocation } from '@/utils/location';
 
 export default function Leaderboard() {
   const [fishes, setFishes] = useState([]);
@@ -25,7 +26,7 @@ export default function Leaderboard() {
       // lade nur die Felder, die wir hier brauchen
       const { data, error } = await supabase
         .from('fishes')
-        .select('fish,size,angler,timestamp,count_in_stats,under_min_size,out_of_season')
+        .select('fish,size,angler,timestamp,location_name,count_in_stats,under_min_size,out_of_season')
         .eq('count_in_stats', true); // <— Hauptfilter
 
       if (error) {
@@ -65,7 +66,10 @@ export default function Leaderboard() {
     // 0) Falls Flag vorhanden: harte Schranke
     if (typeof f.count_in_stats === 'boolean' && f.count_in_stats === false) return false;
 
-    // 1) Basis-Sichtbarkeit (wie gehabt)
+    // 1) Standort prüfen (nur Ferkensbruch zählt in der Rangliste)
+    if (!isFerkensbruchLocation(f.location_name)) return false;
+
+    // 2) Basis-Sichtbarkeit (wie gehabt)
     const fangDatum = new Date(f.timestamp);
     const istAbNeu = fangDatum >= PUBLIC_FROM;
 
@@ -78,18 +82,18 @@ export default function Leaderboard() {
       ? (eingeloggtVertraut && fangVonVertrautem)
       : istAbNeu;
 
-    // 2) verwertbar (Größe vorhanden > 0)
+    // 3) verwertbar (Größe vorhanden > 0)
     const size = parseFloat(f.size);
     const istVerwertbar =
       f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
 
-    // 3) Marilou-Regel
+    // 4) Marilou-Regel
     const istFangVonMarilou = isMarilouName(f.angler);
     if (istFangVonMarilou) {
       return isCurrentUserMarilou && istVerwertbar;
     }
 
-    // 4) Optionaler Fallback auf Roh-Flags, falls count_in_stats fehlt
+    // 5) Optionaler Fallback auf Roh-Flags, falls count_in_stats fehlt
     if (typeof f.count_in_stats !== 'boolean') {
       if (f.under_min_size === true || f.out_of_season === true) return false;
     }

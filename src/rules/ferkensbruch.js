@@ -3,6 +3,7 @@
 // Mindestmaße (cm)
 export const MIN_SIZES = {
   Aal: 50,
+  Barsch: 18,
   Hecht: 60,
   Karpfen: 35,
   Rotauge: 18,

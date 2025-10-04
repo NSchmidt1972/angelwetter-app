@@ -19,7 +19,9 @@ export const baseNav = [
 
 export function navItemsFor({ isAdmin = false, canAccessBoard = false } = {}) {
   const items = [...baseNav];
-  if (canAccessBoard) items.push({ label: "👥 Vorstand", path: "/vorstand" });
+  if (canAccessBoard) {
+    items.push({ label: "👥 Vorstand", path: "/vorstand" });
+  }
   if (isAdmin) items.push({ label: "🔧 Admin", path: "/admin" });
   return items;
 }

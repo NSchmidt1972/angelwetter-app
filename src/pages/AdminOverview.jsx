@@ -1,7 +1,60 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
 import { formatDateOnly, formatDateTime, parseTimestamp, formatTimeOnly } from '@/utils/dateUtils';
+import { navItemsFor } from '@/config/navItems';
+import { APP_VERSION } from '@/utils/buildInfo';
+
+const PAGE_VIEW_LIMIT = 2000;
+const PAGE_VIEW_RANGE_OPTIONS = [
+  { value: 7, label: 'Letzte 7 Tage' },
+  { value: 30, label: 'Letzte 30 Tage' },
+  { value: 90, label: 'Letzte 90 Tage' },
+];
+
+function normalizePath(value) {
+  if (!value) return '/';
+  const pathOnly = value.split('?')[0].split('#')[0];
+  const ensured = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
+  if (ensured.length > 1 && ensured.endsWith('/')) return ensured.slice(0, -1);
+  return ensured || '/';
+}
+
+function groupPageViews(rows) {
+  const counts = new Map();
+
+  rows.forEach((row) => {
+    const key = row.path || '—';
+    const entry = counts.get(key) || {
+      path: key,
+      total: 0,
+      uniqueAnglers: new Set(),
+      lastSeen: null,
+    };
+
+    entry.total += 1;
+    if (row.angler) entry.uniqueAnglers.add(row.angler);
+
+    const createdAt = row.created_at ? new Date(row.created_at) : null;
+    if (createdAt && (!entry.lastSeen || createdAt > entry.lastSeen)) {
+      entry.lastSeen = createdAt;
+    }
+
+    counts.set(key, entry);
+  });
+
+  return [...counts.values()]
+    .map((entry) => ({
+      path: entry.path,
+      total: entry.total,
+      uniqueAnglers: entry.uniqueAnglers.size,
+      lastSeen: entry.lastSeen,
+    }))
+    .sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total;
+      return (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0);
+    });
+}
 
 export default function AdminOverview() {
   const [weatherUpdatedAt, setWeatherUpdatedAt] = useState(null);
@@ -15,7 +68,60 @@ export default function AdminOverview() {
   const [takenCatches, setTakenCatches] = useState([]);
   const [pushByAngler, setPushByAngler] = useState([]);
   const [pushDeviceSummary, setPushDeviceSummary] = useState([]);
+  const [pageViewRangeDays, setPageViewRangeDays] = useState(30);
+  const [pageViewRows, setPageViewRows] = useState([]);
+  const [pageViewLoading, setPageViewLoading] = useState(false);
+  const [pageViewError, setPageViewError] = useState('');
 
+  const navLabelMap = useMemo(() => {
+    const map = new Map();
+    const addItem = (item) => {
+      if (!item) return;
+      if (item.path) map.set(normalizePath(item.path), item.label);
+      if (Array.isArray(item.children)) item.children.forEach(addItem);
+    };
+
+    navItemsFor({ isAdmin: true, canAccessBoard: true }).forEach(addItem);
+
+    [
+      ['/settings', 'Einstellungen'],
+    ].forEach(([path, label]) => {
+      map.set(normalizePath(path), label);
+    });
+
+    return map;
+  }, []);
+
+  const labelForPath = useCallback(
+    (value) => {
+      if (!value) return '—';
+      if (typeof value !== 'string') return String(value);
+      if (value === '—') return value;
+      if (value.includes('://')) return value;
+      const normalized = normalizePath(value);
+      return navLabelMap.get(normalized) || value;
+    },
+    [navLabelMap],
+  );
+
+  const formatBuildLabel = useCallback((value) => {
+    if (!value || typeof value !== 'string') return null;
+    if (value === 'dev') return 'dev';
+
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})\.(\d{2})(\d{2})(?:\+.+)?$/);
+    if (!match) return value;
+
+    const [, year, month, day, hh, mm] = match;
+    const asDate = new Date(Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hh),
+      Number(mm),
+    ));
+
+    return formatDateTime(asDate);
+  }, []);
 
   const formatDateTimeLabel = (value) => {
     const parsed = parseTimestamp(value);
@@ -34,6 +140,69 @@ export default function AdminOverview() {
     if (!parsed) return 'unbekannt';
     return formatTimeOnly(parsed);
   };
+
+  const pageViewAggregates = useMemo(
+    () => groupPageViews(pageViewRows).map((entry) => ({
+      ...entry,
+      label: labelForPath(entry.path),
+    })),
+    [pageViewRows, labelForPath],
+  );
+  const pageViewTotal = pageViewRows.length;
+  const pageViewAverage = pageViewAggregates.length > 0
+    ? (pageViewTotal / pageViewAggregates.length).toFixed(1)
+    : '0.0';
+  const currentBuildLabel = useMemo(
+    () => (APP_VERSION ? String(APP_VERSION).trim() : null),
+    [],
+  );
+  const pageViewLastEvents = useMemo(
+    () => pageViewRows.slice(0, 20).map((row, idx) => {
+      const metadata = row && typeof row === 'object' ? row.metadata : null;
+      const metadataObj = metadata && typeof metadata === 'object' ? metadata : null;
+      const build = metadataObj?.build || metadataObj?.version || null;
+
+      return {
+        ...row,
+        label: labelForPath(row.path),
+        buildLabel: build,
+        buildDisplay: formatBuildLabel(build),
+        matchesCurrentBuild: (() => {
+          const trimmed = build ? String(build).trim() : '';
+          return Boolean(trimmed) && Boolean(currentBuildLabel) && trimmed === currentBuildLabel;
+        })(),
+        key: `${row.created_at || idx}-${row.session_id || 'sess'}`,
+      };
+    }),
+    [pageViewRows, labelForPath, formatBuildLabel, currentBuildLabel],
+  );
+  const pageViewTopAnglers = useMemo(() => {
+    const stats = new Map();
+
+    pageViewRows.forEach((row) => {
+      const rawName = typeof row?.angler === 'string' ? row.angler.trim() : '';
+      if (!rawName) return;
+      const name = rawName;
+      const entry = stats.get(name) || { name, total: 0, lastSeen: null };
+      entry.total += 1;
+
+      const createdAt = row?.created_at ? new Date(row.created_at) : null;
+      if (createdAt && (!entry.lastSeen || createdAt > entry.lastSeen)) {
+        entry.lastSeen = createdAt;
+      }
+
+      stats.set(name, entry);
+    });
+
+    return [...stats.values()]
+      .sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total;
+        const timeDiff = (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0);
+        if (timeDiff !== 0) return timeDiff;
+        return a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
+      })
+      .slice(0, 20);
+  }, [pageViewRows]);
 
   useEffect(() => {
     async function loadData() {
@@ -179,6 +348,41 @@ export default function AdminOverview() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadPageViews() {
+      setPageViewLoading(true);
+      setPageViewError('');
+
+      const since = new Date(Date.now() - pageViewRangeDays * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data, error } = await supabase
+        .from('page_views')
+        .select('path, full_path, angler, session_id, created_at, metadata')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_VIEW_LIMIT);
+
+      if (!active) return;
+
+      if (error) {
+        console.error('PageViews: Laden fehlgeschlagen', error);
+        setPageViewError(error.message || 'Page-Views konnten nicht geladen werden.');
+        setPageViewRows([]);
+      } else {
+        setPageViewRows(Array.isArray(data) ? data : []);
+      }
+
+      setPageViewLoading(false);
+    }
+
+    loadPageViews();
+    return () => {
+      active = false;
+    };
+  }, [pageViewRangeDays]);
+
 
   const Section = ({ title, value, children }) => (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
@@ -303,6 +507,161 @@ export default function AdminOverview() {
         ) : (
           <div className={fallbackTextClass}>Keine externen Fänge</div>
         )}
+      </Section>
+
+      <Section
+        title="📊 Seitenaufrufe"
+        value={pageViewLoading ? 'Lade…' : `${pageViewTotal} Aufrufe`}
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+            <label className="flex items-center gap-2">
+              Zeitraum
+              <select
+                value={pageViewRangeDays}
+                onChange={(event) => setPageViewRangeDays(Number(event.target.value))}
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-900"
+              >
+                {PAGE_VIEW_RANGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span>Seiten: {pageViewAggregates.length}</span>
+            <span>Ø je Seite: {pageViewAverage}</span>
+          </div>
+
+          {pageViewError ? (
+            <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200">
+              {pageViewError}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6">
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Aktivste Angler</h4>
+                {pageViewLoading ? (
+                  <div className={fallbackTextClass}>Lädt…</div>
+                ) : pageViewTopAnglers.length === 0 ? (
+                  <div className={fallbackTextClass}>Keine Aufrufe im Zeitraum.</div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Angler</th>
+                          <th className="px-3 py-2 text-right">Aufrufe</th>
+                          <th className="px-3 py-2 text-right">Zuletzt aktiv</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {pageViewTopAnglers.map((entry) => (
+                          <tr key={entry.name} className="hover:bg-gray-50 dark:hover:bg-gray-900">
+                            <td className="px-3 py-2 text-xs sm:text-sm">{entry.name}</td>
+                            <td className="px-3 py-2 text-right font-semibold text-blue-700 dark:text-blue-300">{entry.total}</td>
+                            <td className="px-3 py-2 text-right text-xs sm:text-sm">
+                              {entry.lastSeen ? formatDateTimeLabel(entry.lastSeen) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Beliebteste Seiten</h4>
+                {pageViewLoading ? (
+                  <div className={fallbackTextClass}>Lädt…</div>
+                ) : pageViewAggregates.length === 0 ? (
+                  <div className={fallbackTextClass}>Keine Daten im Zeitraum.</div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Menüpunkt</th>
+                          <th className="px-3 py-2 text-right">Aufrufe</th>
+                          <th className="px-3 py-2 text-right">Unique</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {pageViewAggregates.slice(0, 20).map((row) => (
+                          <tr key={row.path} className="hover:bg-gray-50 dark:hover:bg-gray-900">
+                            <td className="px-3 py-2 text-xs sm:text-sm">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-medium text-gray-800 dark:text-gray-100">{row.label}</span>
+                                {row.label !== row.path && row.path && row.path !== '—' && (
+                                  <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500">{row.path}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right font-semibold text-green-700 dark:text-green-300">{row.total}</td>
+                            <td className="px-3 py-2 text-right">{row.uniqueAnglers}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Letzte Ereignisse</h4>
+                {pageViewLoading ? (
+                  <div className={fallbackTextClass}>Lädt…</div>
+                ) : pageViewLastEvents.length === 0 ? (
+                  <div className={fallbackTextClass}>Keine Aufrufe im Zeitraum.</div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Zeit</th>
+                          <th className="px-3 py-2 text-left">Menüpunkt</th>
+                          <th className="px-3 py-2 text-left">Build</th>
+                          <th className="px-3 py-2 text-left">Angler</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {pageViewLastEvents.map((row) => (
+                          <tr key={row.key} className="hover:bg-gray-50 dark:hover:bg-gray-900">
+                            <td className="px-3 py-2 text-xs sm:text-sm">{formatDateTimeLabel(row.created_at)}</td>
+                            <td className="px-3 py-2 text-xs sm:text-sm">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-medium text-gray-800 dark:text-gray-100">{row.label || '—'}</span>
+                                {row.label !== row.path && row.path && row.path !== '—' && (
+                                  <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500">{row.path}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-xs sm:text-sm">
+                              {row.buildDisplay || row.buildLabel ? (
+                                <span
+                                  className={`font-mono text-xs ${row.matchesCurrentBuild
+                                    ? 'text-green-600 dark:text-green-300 font-semibold'
+                                    : row.buildDisplay
+                                      ? 'text-gray-800 dark:text-gray-200'
+                                      : 'text-gray-500 dark:text-gray-400'
+                                  }`}
+                                >
+                                  {row.buildDisplay || row.buildLabel}
+                                </span>
+                              ) : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-xs sm:text-sm">{row.angler || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </Section>
 
 
