@@ -1,11 +1,40 @@
-import { useEffect, useRef, useState } from "react";
-import { waitForControllerChange } from "@/utils/sw";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { waitForControllerChange, requestWorkerBuildInfo } from "@/utils/sw";
 
 export function useServiceWorkerUpdate() {
   const [updateReady, setUpdateReady] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [waitingBuild, setWaitingBuild] = useState(null);
+  const [waitingBuildResolved, setWaitingBuildResolved] = useState(false);
   const regRef = useRef(null);
   const reloadRequestedRef = useRef(false);
+  const waitingRequestIdRef = useRef(0);
+
+  const resolveWaitingBuild = useCallback(async (worker) => {
+    const requestId = ++waitingRequestIdRef.current;
+
+    if (!worker) {
+      if (waitingRequestIdRef.current === requestId) {
+        setWaitingBuild(null);
+        setWaitingBuildResolved(true);
+      }
+      return;
+    }
+
+    setWaitingBuildResolved(false);
+
+    try {
+      const info = await requestWorkerBuildInfo(worker).catch(() => null);
+      if (waitingRequestIdRef.current !== requestId) return;
+      setWaitingBuild(info || null);
+      setWaitingBuildResolved(true);
+    } catch (error) {
+      console.warn('[SW] Build-Info konnte nicht geladen werden:', error);
+      if (waitingRequestIdRef.current !== requestId) return;
+      setWaitingBuild(null);
+      setWaitingBuildResolved(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -18,19 +47,35 @@ export function useServiceWorkerUpdate() {
         const reg = await navigator.serviceWorker.getRegistration();
         if (!reg || cancel) return;
         regRef.current = reg;
-        setUpdateReady(Boolean(reg.waiting));
+        const waiting = Boolean(reg.waiting);
+        setUpdateReady(waiting);
+        if (waiting) {
+          resolveWaitingBuild(reg.waiting);
+        } else {
+          setWaitingBuild(null);
+          setWaitingBuildResolved(true);
+        }
 
         reg.addEventListener("updatefound", () => {
           const installing = reg.installing;
           if (!installing) return;
           installing.addEventListener("statechange", () => {
             if (installing.state === "installed") {
-              setUpdateReady(Boolean(reg.waiting));
+              const hasWaiting = Boolean(reg.waiting);
+              setUpdateReady(hasWaiting);
+              if (hasWaiting) {
+                resolveWaitingBuild(reg.waiting);
+              } else {
+                setWaitingBuild(null);
+                setWaitingBuildResolved(true);
+              }
             }
           });
         });
 
         const onControllerChange = () => {
+          setWaitingBuild(null);
+          setWaitingBuildResolved(true);
           setUpdateReady(false);
           if (reloadRequestedRef.current) {
             reloadRequestedRef.current = false;
@@ -44,6 +89,9 @@ export function useServiceWorkerUpdate() {
           if (document.visibilityState === "visible") {
             try {
               await reg.update();
+              if (reg.waiting) {
+                resolveWaitingBuild(reg.waiting);
+              }
             } catch (error) {
               console.warn('[SW] Update beim Sichtbarwerden fehlgeschlagen:', error);
             }
@@ -60,7 +108,39 @@ export function useServiceWorkerUpdate() {
       if (offControllerChange) offControllerChange();
       if (visibilityHandler) document.removeEventListener("visibilitychange", visibilityHandler);
     };
-  }, []);
+  }, [resolveWaitingBuild]);
+
+  useEffect(() => {
+    if (!updateReady) {
+      setWaitingBuild(null);
+      setWaitingBuildResolved(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const reg = regRef.current || (await navigator.serviceWorker.getRegistration());
+        if (!reg || cancelled) return;
+        if (!reg.waiting) {
+          setWaitingBuild(null);
+          setWaitingBuildResolved(true);
+          return;
+        }
+        resolveWaitingBuild(reg.waiting);
+      } catch {
+        if (!cancelled) {
+          setWaitingBuild(null);
+          setWaitingBuildResolved(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [updateReady, resolveWaitingBuild]);
 
   const applyUpdateNow = async () => {
     if (updating) return;
@@ -83,6 +163,8 @@ export function useServiceWorkerUpdate() {
         try {
           await waitForControllerChange(3000);
           setUpdateReady(false);
+          setWaitingBuild(null);
+          setWaitingBuildResolved(true);
           return true;
         } catch (error) {
           reloadRequestedRef.current = false;
@@ -96,7 +178,14 @@ export function useServiceWorkerUpdate() {
       try {
         await reg.update();
         if (reg.waiting && await skip()) return;
-        setUpdateReady(Boolean(reg.waiting));
+        const hasWaiting = Boolean(reg.waiting);
+        setUpdateReady(hasWaiting);
+        if (hasWaiting) {
+          await resolveWaitingBuild(reg.waiting);
+        } else {
+          setWaitingBuild(null);
+          setWaitingBuildResolved(true);
+        }
       } catch (error) {
         console.warn('[SW] Manuelles Update fehlgeschlagen:', error);
       }
@@ -121,5 +210,5 @@ export function useServiceWorkerUpdate() {
     }
   };
 
-  return { updateReady, updating, applyUpdateNow, regRef };
+  return { updateReady, updating, applyUpdateNow, regRef, waitingBuild, waitingBuildResolved };
 }

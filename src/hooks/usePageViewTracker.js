@@ -2,45 +2,13 @@ import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
 import { APP_VERSION, GIT_COMMIT } from '@/utils/buildInfo';
+import {
+  getOrCreatePageViewSessionId,
+  getStoredAnglerName,
+  isExcludedAngler,
+} from '@/utils/pageViewClient';
 
-const STORAGE_KEY = 'aw_page_view_session';
 const MIN_INTERVAL_MS = 5000;
-
-function getSessionId() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const storage = window.sessionStorage;
-    if (!storage) return null;
-    let value = storage.getItem(STORAGE_KEY);
-    if (!value) {
-      const generate = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? () => crypto.randomUUID()
-        : () => `sess-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-      value = generate();
-      storage.setItem(STORAGE_KEY, value);
-    }
-    return value;
-  } catch (error) {
-    console.warn('Session-ID konnte nicht erzeugt werden:', error);
-    return null;
-  }
-}
-
-function getAnglerName() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const name = (window.localStorage.getItem('anglerName') || '').trim();
-    return name || null;
-  } catch (error) {
-    console.warn('Anglername konnte nicht gelesen werden:', error);
-    return null;
-  }
-}
-
-function isExcludedAngler(name) {
-  if (!name) return false;
-  return name.trim().toLowerCase() === 'nicol schmidt';
-}
 
 export function usePageViewTracker({ enabled = true } = {}) {
   const location = useLocation();
@@ -60,14 +28,14 @@ export function usePageViewTracker({ enabled = true } = {}) {
 
     lastPingRef.current = { href, at: now };
 
-    const angler = getAnglerName();
+    const angler = getStoredAnglerName();
     if (isExcludedAngler(angler)) return;
 
     const payload = {
       path,
       full_path: href,
       angler,
-      session_id: getSessionId(),
+      session_id: getOrCreatePageViewSessionId(),
       created_at: new Date().toISOString(),
     };
 

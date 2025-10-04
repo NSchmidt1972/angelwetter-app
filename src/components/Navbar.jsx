@@ -13,6 +13,7 @@ import usePushStatus from "@/hooks/usePushStatus";
 import { navItemsFor } from "@/config/navItems";
 import NavLink from "@/components/NavLink";
 import VersionInfo from "@/components/VersionInfo";
+import { getOrCreatePageViewSessionId, getStoredAnglerName } from "@/utils/pageViewClient";
 
 
 function SettingsMenuToggle({ open, onToggle, onNavigate }) {
@@ -216,7 +217,14 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
   // ⛔️ WICHTIG: Hooks IMMER zuerst – ohne Bedingungen/Returns
   const { dark, toggle } = useDarkMode();
   const showHamburger = useResponsiveMenu();
-  const { updateReady, updating, applyUpdateNow } = useServiceWorkerUpdate();
+  const {
+    updateReady,
+    updating,
+    applyUpdateNow,
+    waitingBuild,
+    waitingBuildResolved,
+  } = useServiceWorkerUpdate();
+  const [latestBuilds, setLatestBuilds] = useState({ status: "idle", builds: [] });
 
   // Lokaler UI-State
   const [open, setOpen] = useState(false);                 // Mobile-Overlay
@@ -285,6 +293,119 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     }
   }, [showMenu]);
 
+  useEffect(() => {
+    if (!updateReady) {
+      setLatestBuilds({ status: "idle", builds: [] });
+      return;
+    }
+
+    let active = true;
+
+    (async () => {
+      setLatestBuilds({ status: "loading", builds: [] });
+
+      const buildsFromRows = (rows) => {
+        if (!Array.isArray(rows)) return [];
+        return rows
+          .map((row) => {
+            const metadata = row && typeof row === "object" ? row.metadata : null;
+            const metaObj = metadata && typeof metadata === "object" ? metadata : null;
+            const raw = metaObj?.build || metaObj?.version || null;
+            if (!raw) return null;
+            const trimmed = String(raw).trim();
+            return trimmed || null;
+          })
+          .filter(Boolean);
+      };
+
+      try {
+        const sessionId = getOrCreatePageViewSessionId();
+        const anglerName = getStoredAnglerName();
+
+        let rows = [];
+        let lastError = null;
+
+        if (sessionId) {
+          const { data, error } = await supabase
+            .from("page_views")
+            .select("metadata, created_at")
+            .eq("session_id", sessionId)
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          if (error) {
+            lastError = error;
+          } else if (Array.isArray(data)) {
+            rows = data;
+          }
+        }
+
+        if (rows.length === 0 && anglerName) {
+          const { data, error } = await supabase
+            .from("page_views")
+            .select("metadata, created_at")
+            .eq("angler", anglerName)
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          if (error) {
+            lastError = error;
+          } else if (Array.isArray(data)) {
+            rows = data;
+          }
+        }
+
+        if (!active) return;
+
+        if (lastError) {
+          setLatestBuilds({ status: "error", builds: [] });
+          return;
+        }
+
+        const builds = buildsFromRows(rows);
+        setLatestBuilds({ status: "success", builds });
+      } catch (error) {
+        if (!active) return;
+        console.warn("PageView Build-Abgleich fehlgeschlagen:", error);
+        setLatestBuilds({ status: "error", builds: [] });
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [updateReady, waitingBuild?.version, waitingBuild?.commit]);
+
+  const waitingBuildVersion = (() => {
+    if (!waitingBuild || typeof waitingBuild !== "object") return null;
+    const raw = waitingBuild.version || waitingBuild.build || null;
+    if (!raw) return null;
+    const trimmed = String(raw).trim();
+    return trimmed || null;
+  })();
+
+  const seenBuilds = latestBuilds.builds;
+  const hasSeenWaitingBuild = waitingBuildVersion && seenBuilds.includes(waitingBuildVersion);
+
+  const shouldShowUpdateBanner = (() => {
+    if (!updateReady) return false;
+    if (!waitingBuildResolved) return false;
+
+    const status = latestBuilds.status;
+
+    if (!waitingBuildVersion) {
+      if (status === "loading") return false;
+      if (status === "error") return true;
+      if (status === "success") return true;
+      return false;
+    }
+
+    if (status === "loading") return false;
+    if (status === "error") return true;
+    if (status === "success") return !hasSeenWaitingBuild;
+    return false;
+  })();
+
 
   // ✅ EARLY RETURN ERST NACH ALLEN HOOKS
   if (!user) return null;
@@ -312,7 +433,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
         className="bg-white dark:bg-gray-900 shadow-md fixed top-0 left-0 right-0 z-[1200] text-black dark:text-white"
         style={{ paddingTop: "env(safe-area-inset-top)", overflow: "visible" }}
       >
-        {updateReady && (
+        {shouldShowUpdateBanner && (
           <div className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 border-b border-emerald-200 dark:border-emerald-800 px-4 py-2 text-sm flex flex-wrap items-center justify-center gap-3">
             <span className="font-semibold">Neue Version verfügbar.</span>
             <button
@@ -448,7 +569,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
                 <div className="border-t border-gray-200 dark:border-gray-700 mt-1 px-4 py-2">
                   <VersionInfo />
 
-                  {updateReady ? (
+                  {shouldShowUpdateBanner ? (
                     <button
                       type="button"
                       onClick={applyUpdateNow}

@@ -1,6 +1,6 @@
 // <reference lib="webworker" />
 /* eslint-env serviceworker */
-/* global importScripts */
+/* global importScripts, __BUILD_INFO__ */
 
 /* 👇 1) OneSignal SDK MUSS als erstes geladen werden */
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
@@ -65,3 +65,22 @@ registerRoute(
     plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 365 })]
   })
 );
+
+self.addEventListener('message', (event) => {
+  const data = event && event.data;
+  if (!data || typeof data !== 'object') return;
+  if (data.type !== 'GET_BUILD_INFO') return;
+
+  const payload = (typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__) || null;
+  const [port] = event.ports || [];
+
+  if (port) {
+    port.postMessage({ type: 'BUILD_INFO', payload });
+    return;
+  }
+
+  const source = event.source;
+  if (source && typeof source.postMessage === 'function') {
+    source.postMessage({ type: 'BUILD_INFO', payload });
+  }
+});

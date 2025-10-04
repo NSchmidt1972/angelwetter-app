@@ -163,7 +163,8 @@ export default function FishCatchForm({
         entryToSave,
         taken,
         position,
-        anglerName
+        anglerName,
+        { region }
       );
 
       // Achievements (optional)

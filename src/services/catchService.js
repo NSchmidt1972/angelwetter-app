@@ -6,7 +6,7 @@ const FERKENSBRUCH_LAT = 51.3135;
 const FERKENSBRUCH_LON = 6.256;
 const LOBBERICH_RADIUS_KM = 3.5;
 
-function normalizeLobberichLocation(rawLocation, lat, lon) {
+function normalizeLobberichLocation(rawLocation, lat, lon, { forceLobberich = false } = {}) {
   const trimmed = typeof rawLocation === 'string' ? rawLocation.trim() : '';
   const nearFerkensbruch =
     lat != null &&
@@ -23,6 +23,10 @@ function normalizeLobberichLocation(rawLocation, lat, lon) {
   }
 
   if (nearFerkensbruch && (lower.startsWith('kreis ') || lower.startsWith('landkreis ') || lower.includes('kreis viersen'))) {
+    return 'Lobberich';
+  }
+
+  if (forceLobberich) {
     return 'Lobberich';
   }
 
@@ -45,12 +49,20 @@ const IS_DEV_BUILD = (() => {
  * Speichert den Fang und triggert (optional) einen OneSignal-Push via Edge-Function 'sendCatchPush'.
  * - Geofence kann via localStorage.pushGeofence = 'on'|'off' gesteuert werden (default: 'off').
  */
-export async function saveCatchEntry(entry, taken, position, anglerName) {
+export async function saveCatchEntry(entry, taken, position, anglerName, options = {}) {
   // 1) Insert
   const payload = { ...entry, taken: !!taken };
   const locationLat = payload.lat ?? position?.lat ?? null;
   const locationLon = payload.lon ?? position?.lon ?? null;
-  const normalizedLocation = normalizeLobberichLocation(payload.location_name, locationLat, locationLon);
+  const isFerkensbruchRegion = typeof options.region === 'string'
+    ? options.region.toLowerCase() === 'ferkensbruch'
+    : false;
+  const normalizedLocation = normalizeLobberichLocation(
+    payload.location_name,
+    locationLat,
+    locationLon,
+    { forceLobberich: isFerkensbruchRegion },
+  );
   payload.location_name = normalizedLocation;
   const { data, error: insertErr } = await supabase
     .from('fishes')
