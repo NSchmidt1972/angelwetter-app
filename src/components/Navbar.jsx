@@ -312,6 +312,26 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
         className="bg-white dark:bg-gray-900 shadow-md fixed top-0 left-0 right-0 z-[1200] text-black dark:text-white"
         style={{ paddingTop: "env(safe-area-inset-top)", overflow: "visible" }}
       >
+        {updateReady && (
+          <div className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 border-b border-emerald-200 dark:border-emerald-800 px-4 py-2 text-sm flex flex-wrap items-center justify-center gap-3">
+            <span className="font-semibold">Neue Version verfügbar.</span>
+            <button
+              type="button"
+              onClick={applyUpdateNow}
+              disabled={updating}
+              className="inline-flex items-center gap-1 rounded bg-emerald-500 text-white px-3 py-1 text-xs font-semibold uppercase tracking-wide shadow-sm transition hover:bg-emerald-600 disabled:opacity-60"
+            >
+              {updating ? 'Aktualisiere…' : 'Jetzt neu laden'}
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center text-xs text-emerald-700 dark:text-emerald-200 underline underline-offset-4"
+            >
+              Später
+            </button>
+          </div>
+        )}
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           {/* Links: Navigation */}
           <div className="flex items-center gap-4">

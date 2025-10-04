@@ -72,6 +72,7 @@ export default function AdminOverview() {
   const [pageViewRows, setPageViewRows] = useState([]);
   const [pageViewLoading, setPageViewLoading] = useState(false);
   const [pageViewError, setPageViewError] = useState('');
+  const [pageViewLastLimit, setPageViewLastLimit] = useState(20);
 
   const navLabelMap = useMemo(() => {
     const map = new Map();
@@ -157,7 +158,7 @@ export default function AdminOverview() {
     [],
   );
   const pageViewLastEvents = useMemo(
-    () => pageViewRows.slice(0, 20).map((row, idx) => {
+    () => pageViewRows.slice(0, pageViewLastLimit).map((row, idx) => {
       const metadata = row && typeof row === 'object' ? row.metadata : null;
       const metadataObj = metadata && typeof metadata === 'object' ? metadata : null;
       const build = metadataObj?.build || metadataObj?.version || null;
@@ -174,7 +175,7 @@ export default function AdminOverview() {
         key: `${row.created_at || idx}-${row.session_id || 'sess'}`,
       };
     }),
-    [pageViewRows, labelForPath, formatBuildLabel, currentBuildLabel],
+    [pageViewRows, labelForPath, formatBuildLabel, currentBuildLabel, pageViewLastLimit],
   );
   const pageViewTopAnglers = useMemo(() => {
     const stats = new Map();
@@ -382,6 +383,10 @@ export default function AdminOverview() {
       active = false;
     };
   }, [pageViewRangeDays]);
+
+  useEffect(() => {
+    setPageViewLastLimit(20);
+  }, [pageViewRangeDays, pageViewRows.length]);
 
 
   const Section = ({ title, value, children }) => (
@@ -656,6 +661,17 @@ export default function AdminOverview() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+                {pageViewRows.length > pageViewLastLimit && (
+                  <div className="mt-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setPageViewLastLimit((limit) => Math.min(limit + 20, pageViewRows.length))}
+                      className="inline-flex items-center justify-center rounded border border-blue-500 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-600 transition hover:bg-blue-50 dark:border-blue-400 dark:text-blue-300 dark:hover:bg-blue-400/10"
+                    >
+                      Mehr anzeigen
+                    </button>
                   </div>
                 )}
               </div>
