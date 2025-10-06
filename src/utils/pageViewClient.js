@@ -33,6 +33,6 @@ export function getStoredAnglerName() {
 }
 
 export function isExcludedAngler(name) {
-  if (!name) return false;
-  return name.trim().toLowerCase() === 'nicol schmidt';
+  void name;
+  return false;
 }

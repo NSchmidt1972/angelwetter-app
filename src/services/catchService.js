@@ -14,6 +14,7 @@ function normalizeLobberichLocation(rawLocation, lat, lon, { forceLobberich = fa
     getDistanceKm(lat, lon, FERKENSBRUCH_LAT, FERKENSBRUCH_LON) <= LOBBERICH_RADIUS_KM;
 
   if (!trimmed) {
+    if (forceLobberich) return 'Lobberich';
     return nearFerkensbruch ? 'Lobberich' : null;
   }
 
@@ -26,7 +27,7 @@ function normalizeLobberichLocation(rawLocation, lat, lon, { forceLobberich = fa
     return 'Lobberich';
   }
 
-  if (forceLobberich) {
+  if (forceLobberich && nearFerkensbruch) {
     return 'Lobberich';
   }
 

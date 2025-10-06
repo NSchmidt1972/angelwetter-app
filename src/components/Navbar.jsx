@@ -1,5 +1,5 @@
 // src/components/Navbar.jsx
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import { supabase } from "@/supabaseClient";
@@ -13,7 +13,10 @@ import usePushStatus from "@/hooks/usePushStatus";
 import { navItemsFor } from "@/config/navItems";
 import NavLink from "@/components/NavLink";
 import VersionInfo from "@/components/VersionInfo";
-import { getOrCreatePageViewSessionId, getStoredAnglerName } from "@/utils/pageViewClient";
+import { APP_VERSION } from "@/utils/buildInfo";
+
+const ADMIN_BUILD_OWNER = "Nicol Schmidt";
+const CURRENT_BUILD_VERSION = (APP_VERSION && String(APP_VERSION).trim()) || null;
 
 
 function SettingsMenuToggle({ open, onToggle, onNavigate }) {
@@ -224,7 +227,8 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     waitingBuild,
     waitingBuildResolved,
   } = useServiceWorkerUpdate();
-  const [latestBuilds, setLatestBuilds] = useState({ status: "idle", builds: [] });
+  const [adminBuild, setAdminBuild] = useState({ status: "idle", build: null });
+  const adminBuildRequestIdRef = useRef(0);
 
   // Lokaler UI-State
   const [open, setOpen] = useState(false);                 // Mobile-Overlay
@@ -293,118 +297,81 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     }
   }, [showMenu]);
 
-  useEffect(() => {
-    if (!updateReady) {
-      setLatestBuilds({ status: "idle", builds: [] });
-      return;
-    }
+  const fetchAdminBuild = useCallback(async () => {
+    const requestId = adminBuildRequestIdRef.current + 1;
+    adminBuildRequestIdRef.current = requestId;
 
-    let active = true;
+    setAdminBuild((prev) => {
+      if (prev.status === "success") return prev;
+      return { status: "loading", build: prev.build || null };
+    });
 
-    (async () => {
-      setLatestBuilds({ status: "loading", builds: [] });
+    try {
+      const { data, error } = await supabase
+        .from("page_views")
+        .select("metadata, created_at")
+        .eq("angler", ADMIN_BUILD_OWNER)
+        .order("created_at", { ascending: false })
+        .limit(10);
 
-      const buildsFromRows = (rows) => {
-        if (!Array.isArray(rows)) return [];
-        return rows
-          .map((row) => {
-            const metadata = row && typeof row === "object" ? row.metadata : null;
-            const metaObj = metadata && typeof metadata === "object" ? metadata : null;
-            const raw = metaObj?.build || metaObj?.version || null;
-            if (!raw) return null;
-            const trimmed = String(raw).trim();
-            return trimmed || null;
-          })
-          .filter(Boolean);
-      };
+      if (adminBuildRequestIdRef.current !== requestId) return;
 
-      try {
-        const sessionId = getOrCreatePageViewSessionId();
-        const anglerName = getStoredAnglerName();
-
-        let rows = [];
-        let lastError = null;
-
-        if (sessionId) {
-          const { data, error } = await supabase
-            .from("page_views")
-            .select("metadata, created_at")
-            .eq("session_id", sessionId)
-            .order("created_at", { ascending: false })
-            .limit(5);
-
-          if (error) {
-            lastError = error;
-          } else if (Array.isArray(data)) {
-            rows = data;
-          }
-        }
-
-        if (rows.length === 0 && anglerName) {
-          const { data, error } = await supabase
-            .from("page_views")
-            .select("metadata, created_at")
-            .eq("angler", anglerName)
-            .order("created_at", { ascending: false })
-            .limit(5);
-
-          if (error) {
-            lastError = error;
-          } else if (Array.isArray(data)) {
-            rows = data;
-          }
-        }
-
-        if (!active) return;
-
-        if (lastError) {
-          setLatestBuilds({ status: "error", builds: [] });
-          return;
-        }
-
-        const builds = buildsFromRows(rows);
-        setLatestBuilds({ status: "success", builds });
-      } catch (error) {
-        if (!active) return;
-        console.warn("PageView Build-Abgleich fehlgeschlagen:", error);
-        setLatestBuilds({ status: "error", builds: [] });
+      if (error) {
+        console.warn("Admin-Build konnte nicht geladen werden:", error);
+        setAdminBuild((prev) => {
+          if (prev.status === "success") return prev;
+          return { status: "error", build: prev.build || null };
+        });
+        return;
       }
-    })();
 
-    return () => {
-      active = false;
-    };
-  }, [updateReady, waitingBuild?.version, waitingBuild?.commit]);
+      const buildFromRows = (() => {
+        if (!Array.isArray(data)) return null;
+        for (const row of data) {
+          const metadata = row && typeof row === "object" ? row.metadata : null;
+          const metaObj = metadata && typeof metadata === "object" ? metadata : null;
+          const raw = metaObj?.build || metaObj?.version || null;
+          if (!raw) continue;
+          const trimmed = String(raw).trim();
+          if (trimmed) return trimmed;
+        }
+        return null;
+      })();
 
-  const waitingBuildVersion = (() => {
-    if (!waitingBuild || typeof waitingBuild !== "object") return null;
-    const raw = waitingBuild.version || waitingBuild.build || null;
-    if (!raw) return null;
-    const trimmed = String(raw).trim();
-    return trimmed || null;
-  })();
-
-  const seenBuilds = latestBuilds.builds;
-  const hasSeenWaitingBuild = waitingBuildVersion && seenBuilds.includes(waitingBuildVersion);
-
-  const shouldShowUpdateBanner = (() => {
-    if (!updateReady) return false;
-    if (!waitingBuildResolved) return false;
-
-    const status = latestBuilds.status;
-
-    if (!waitingBuildVersion) {
-      if (status === "loading") return false;
-      if (status === "error") return true;
-      if (status === "success") return true;
-      return false;
+      setAdminBuild({ status: "success", build: buildFromRows });
+    } catch (error) {
+      if (adminBuildRequestIdRef.current !== requestId) return;
+      console.warn("Admin-Build konnte nicht geladen werden:", error);
+      setAdminBuild((prev) => {
+        if (prev.status === "success") return prev;
+        return { status: "error", build: prev.build || null };
+      });
     }
+  }, []);
 
-    if (status === "loading") return false;
-    if (status === "error") return true;
-    if (status === "success") return !hasSeenWaitingBuild;
-    return false;
-  })();
+  useEffect(() => {
+    if (typeof window === "undefined") return () => {};
+    fetchAdminBuild();
+    const interval = window.setInterval(fetchAdminBuild, 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [fetchAdminBuild]);
+
+  useEffect(() => {
+    fetchAdminBuild();
+  }, [updateReady, waitingBuild?.version, waitingBuild?.commit, fetchAdminBuild]);
+
+  const adminBuildVersion = adminBuild.build || null;
+  const hasAdminNewerBuild = Boolean(
+    adminBuild.status === "success" &&
+    adminBuildVersion &&
+    CURRENT_BUILD_VERSION &&
+    adminBuildVersion !== CURRENT_BUILD_VERSION
+  );
+
+  const shouldShowBannerFromServiceWorker = updateReady && waitingBuildResolved;
+  const shouldShowBannerFromAdmin = hasAdminNewerBuild;
+
+  const shouldShowUpdateBanner = shouldShowBannerFromServiceWorker || shouldShowBannerFromAdmin;
 
 
   // ✅ EARLY RETURN ERST NACH ALLEN HOOKS
