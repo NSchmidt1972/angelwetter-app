@@ -1,5 +1,5 @@
 // src/components/Navbar.jsx
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import { supabase } from "@/supabaseClient";
@@ -13,10 +13,6 @@ import usePushStatus from "@/hooks/usePushStatus";
 import { navItemsFor } from "@/config/navItems";
 import NavLink from "@/components/NavLink";
 import VersionInfo from "@/components/VersionInfo";
-import { APP_VERSION } from "@/utils/buildInfo";
-
-const ADMIN_BUILD_OWNER = "Nicol Schmidt";
-const CURRENT_BUILD_VERSION = (APP_VERSION && String(APP_VERSION).trim()) || null;
 
 
 function SettingsMenuToggle({ open, onToggle, onNavigate }) {
@@ -224,11 +220,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     updateReady,
     updating,
     applyUpdateNow,
-    waitingBuild,
-    waitingBuildResolved,
   } = useServiceWorkerUpdate();
-  const [adminBuild, setAdminBuild] = useState({ status: "idle", build: null });
-  const adminBuildRequestIdRef = useRef(0);
 
   // Lokaler UI-State
   const [open, setOpen] = useState(false);                 // Mobile-Overlay
@@ -297,81 +289,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     }
   }, [showMenu]);
 
-  const fetchAdminBuild = useCallback(async () => {
-    const requestId = adminBuildRequestIdRef.current + 1;
-    adminBuildRequestIdRef.current = requestId;
-
-    setAdminBuild((prev) => {
-      if (prev.status === "success") return prev;
-      return { status: "loading", build: prev.build || null };
-    });
-
-    try {
-      const { data, error } = await supabase
-        .from("page_views")
-        .select("metadata, created_at")
-        .eq("angler", ADMIN_BUILD_OWNER)
-        .order("created_at", { ascending: false })
-        .limit(10);
-
-      if (adminBuildRequestIdRef.current !== requestId) return;
-
-      if (error) {
-        console.warn("Admin-Build konnte nicht geladen werden:", error);
-        setAdminBuild((prev) => {
-          if (prev.status === "success") return prev;
-          return { status: "error", build: prev.build || null };
-        });
-        return;
-      }
-
-      const buildFromRows = (() => {
-        if (!Array.isArray(data)) return null;
-        for (const row of data) {
-          const metadata = row && typeof row === "object" ? row.metadata : null;
-          const metaObj = metadata && typeof metadata === "object" ? metadata : null;
-          const raw = metaObj?.build || metaObj?.version || null;
-          if (!raw) continue;
-          const trimmed = String(raw).trim();
-          if (trimmed) return trimmed;
-        }
-        return null;
-      })();
-
-      setAdminBuild({ status: "success", build: buildFromRows });
-    } catch (error) {
-      if (adminBuildRequestIdRef.current !== requestId) return;
-      console.warn("Admin-Build konnte nicht geladen werden:", error);
-      setAdminBuild((prev) => {
-        if (prev.status === "success") return prev;
-        return { status: "error", build: prev.build || null };
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return () => {};
-    fetchAdminBuild();
-    const interval = window.setInterval(fetchAdminBuild, 60 * 1000);
-    return () => window.clearInterval(interval);
-  }, [fetchAdminBuild]);
-
-  useEffect(() => {
-    fetchAdminBuild();
-  }, [updateReady, waitingBuild?.version, waitingBuild?.commit, fetchAdminBuild]);
-
-  const adminBuildVersion = adminBuild.build || null;
-  const hasAdminNewerBuild = Boolean(
-    adminBuild.status === "success" &&
-    adminBuildVersion &&
-    CURRENT_BUILD_VERSION &&
-    adminBuildVersion !== CURRENT_BUILD_VERSION
-  );
-
-  const shouldShowBannerFromServiceWorker = updateReady && waitingBuildResolved;
-  const shouldShowBannerFromAdmin = hasAdminNewerBuild;
-
-  const shouldShowUpdateBanner = shouldShowBannerFromServiceWorker || shouldShowBannerFromAdmin;
+  const shouldShowUpdateBanner = updateReady && !updating;
 
 
   // ✅ EARLY RETURN ERST NACH ALLEN HOOKS
@@ -400,26 +318,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
         className="bg-white dark:bg-gray-900 shadow-md fixed top-0 left-0 right-0 z-[1200] text-black dark:text-white"
         style={{ paddingTop: "env(safe-area-inset-top)", overflow: "visible" }}
       >
-        {shouldShowUpdateBanner && (
-          <div className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 border-b border-emerald-200 dark:border-emerald-800 px-4 py-2 text-sm flex flex-wrap items-center justify-center gap-3">
-            <span className="font-semibold">Neue Version verfügbar.</span>
-            <button
-              type="button"
-              onClick={applyUpdateNow}
-              disabled={updating}
-              className="inline-flex items-center gap-1 rounded bg-emerald-500 text-white px-3 py-1 text-xs font-semibold uppercase tracking-wide shadow-sm transition hover:bg-emerald-600 disabled:opacity-60"
-            >
-              {updating ? 'Aktualisiere…' : 'Jetzt neu laden'}
-            </button>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center text-xs text-emerald-700 dark:text-emerald-200 underline underline-offset-4"
-            >
-              Später
-            </button>
-          </div>
-        )}
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           {/* Links: Navigation */}
           <div className="flex items-center gap-4">
