@@ -1,50 +1,22 @@
 // src/pages/Home.jsx
-import { useEffect, useState, useCallback } from 'react';
 import WeatherNow from '@/components/weather/WeatherNow';
-import { supabase } from '@/supabaseClient';
+import { useWeatherCache } from '@/hooks/useWeatherCache';
 
 export default function Home() {
-  const [weatherData, setWeatherData] = useState(null);
-  const [error, setError] = useState(null);
-
-  const loadWeatherFromSupabase = async () => {
-    const { data, error } = await supabase
-      .from('weather_cache')
-      .select('data, updated_at')
-      .eq('id', 'latest')
-      .single();
-
-    if (error || !data) {
-      console.error('Fehler beim Laden der Wetterdaten:', error);
-      setError('⚠️ Wetterdaten konnten nicht geladen werden.');
-      return;
-    }
-
-    setWeatherData({
-      data: data.data,
-      savedAt: new Date(data.updated_at).getTime(),
-    });
-    setError(null);
-  };
-
-  useEffect(() => {
-    loadWeatherFromSupabase();
-  }, []);
-
-  const handleRefresh = useCallback(() => {
-    loadWeatherFromSupabase();
-  }, []);
+  const { weather, loading, error, refresh } = useWeatherCache();
+  const weatherData = weather;
+  const errorMessage = error ? '⚠️ Wetterdaten konnten nicht geladen werden.' : null;
 
   return (
     <div className="p-4 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans">
-      {!weatherData && !error && (
+      {!weatherData && loading && (
         <p className="text-gray-500 dark:text-gray-400 text-center">
           Lade Wetterdaten…
         </p>
       )}
-      {error && <p className="text-red-600 text-center">{error}</p>}
+      {errorMessage && <p className="text-red-600 text-center">{errorMessage}</p>}
       {weatherData && (
-        <WeatherNow data={weatherData} onRefresh={handleRefresh} />
+        <WeatherNow data={weatherData} onRefresh={() => refresh()} />
       )}
     </div>
   );

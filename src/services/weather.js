@@ -2,7 +2,7 @@
 import { fetchWeather } from '../api/weather';
 import { getDistanceKm } from '../utils/geo';
 
-export async function loadWeatherForPosition(position, fallbackCoords, setWeatherData) {
+export async function loadWeatherForPosition(position, fallbackCoords, onWeatherUpdate) {
   let useCoords = null;
   if (position?.lat != null && position?.lon != null) {
     const distance = getDistanceKm(position.lat, position.lon, fallbackCoords.lat, fallbackCoords.lon);
@@ -23,8 +23,8 @@ export async function loadWeatherForPosition(position, fallbackCoords, setWeathe
     moon_phase: data.daily?.[0]?.moon_phase ?? null
   };
 
-  if (setWeatherData) {
-    setWeatherData({ data, savedAt: Date.now() });
+  if (onWeatherUpdate) {
+    onWeatherUpdate({ data, savedAt: Date.now() });
   }
 
   return weather;

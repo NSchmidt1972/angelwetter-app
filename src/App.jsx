@@ -5,6 +5,7 @@ import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 import PushInit from '@/components/PushInit';
 import AppRoutes from '@/AppRoutes';
+import { WeatherProvider } from '@/hooks/useWeatherCache';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
@@ -72,7 +73,6 @@ function AppContent() {
     const cached = readProfileCache();
     return !(cached && cached.name);
   });
-  const [weatherData, setWeatherData] = useState(null);
   const [imageLoaded, setImageLoaded] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [minSplashDone, setMinSplashDone] = useState(false);
@@ -213,41 +213,6 @@ function AppContent() {
     };
   }, [user]);
 
-  // Wetter aus Supabase Cache
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchWeatherFromSupabase = async () => {
-      const { data, error } = await supabase
-        .from('weather_cache')
-        .select('data, updated_at')
-        .eq('id', 'latest')
-        .single();
-
-      if (error) {
-        console.warn('⚠️ Wetter konnte nicht aus Supabase geladen werden:', error.message);
-        return;
-      }
-
-      if (!cancelled) {
-        setWeatherData({
-          data: data.data,
-          savedAt: new Date(data.updated_at).getTime(),
-        });
-      }
-    };
-
-    const cancelInitial = scheduleLater(() => {
-      if (!cancelled) fetchWeatherFromSupabase();
-    }, 400);
-    const interval = setInterval(fetchWeatherFromSupabase, 5 * 60 * 1000);
-    return () => {
-      cancelled = true;
-      cancelInitial?.();
-      clearInterval(interval);
-    };
-  }, []);
-
   if (authLoading || nameLoading || user === undefined || showSplash) {
     return (
       <>
@@ -279,14 +244,14 @@ function AppContent() {
   return (
     <>
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
-        <AppRoutes
-          isLoggedIn={isLoggedIn}
-          isAdmin={isAdmin}
-          canAccessBoard={canAccessBoard}
-          anglerName={anglerName}
-          weatherData={weatherData}
-          setWeatherData={setWeatherData}
-        />
+        <WeatherProvider>
+          <AppRoutes
+            isLoggedIn={isLoggedIn}
+            isAdmin={isAdmin}
+            canAccessBoard={canAccessBoard}
+            anglerName={anglerName}
+          />
+        </WeatherProvider>
       </Suspense>
     </>
   );

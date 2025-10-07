@@ -24,6 +24,7 @@ import FishSelect from "@/components/form/FishSelect";
 import PhotoPicker from "@/components/form/PhotoPicker";
 import HourDialog from "@/components/dialogs/HourDialog";
 import TakenDialog from "@/components/dialogs/TakenDialog";
+import { useWeatherCache } from "@/hooks/useWeatherCache";
 
 // Achievements (optional/best-effort)
 import { supabase } from "@/supabaseClient";
@@ -34,7 +35,6 @@ const FERKENSBRUCH_LAT = 51.3135;
 const FERKENSBRUCH_LON = 6.256;
 
 export default function FishCatchForm({
-  setWeatherData,
   showEffect,                // Achievement-Effekt triggern
   anglerName: propAnglerName // optional vorgegeben
 }) {
@@ -64,6 +64,7 @@ export default function FishCatchForm({
   // Misc
   const navigate = useNavigate();
   const { position } = useGeoPosition();
+  const { updateWeather } = useWeatherCache();
 
   // Achievement-Layer aus dem Router-Kontext, falls Prop nicht gesetzt ist
   const outletContext = useOutletContext() ?? {};
@@ -110,7 +111,7 @@ export default function FishCatchForm({
       const currentWeather = await loadWeatherForPosition(
         position,
         { lat: FERKENSBRUCH_LAT, lon: FERKENSBRUCH_LON },
-        setWeatherData
+        updateWeather
       );
 
       // Foto verarbeiten/hochladen (optional)

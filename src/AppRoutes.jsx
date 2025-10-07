@@ -57,8 +57,6 @@ export default function AppRoutes({
   isAdmin,
   canAccessBoard,
   anglerName,
-  weatherData,
-  setWeatherData,
 }) {
   const isRecoveryLink = typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
 
@@ -80,8 +78,6 @@ export default function AppRoutes({
             element={
               <FishCatchForm
                 anglerName={anglerName}
-                weatherData={weatherData}
-                setWeatherData={setWeatherData}
               />
             }
           />
@@ -91,7 +87,7 @@ export default function AppRoutes({
           <Route path="top-fishes"   element={<TopFishes />} />
           <Route path="calendar"     element={<Calendar />} />
           <Route path="map"          element={<MapView />} />
-          <Route path="forecast"     element={<Forecast weatherData={weatherData} />} />
+          <Route path="forecast"     element={<Forecast />} />
           <Route path="regeln"       element={<Regulations />} />
           <Route path="fun"          element={<FunFacts />} />
           <Route
