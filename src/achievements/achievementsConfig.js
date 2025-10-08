@@ -337,4 +337,66 @@ export const achievements = [
       return prevDayCount === 0;
     },
   },
+  {
+    id: "top10_entry",
+    title: (ctx) => `Top 10 – ${ctx?.fish ?? "Neue Bestmarke"}!`,
+    message: (ctx) => {
+      const rank = ctx?.rank ?? 10;
+      const fish = ctx?.fish ?? "deine Art";
+      if (rank === 1) return `Unglaublich! Platz 1 bei ${fish}! 👑`;
+      if (rank <= 5) return `Mega! Neuer Platz ${rank} bei ${fish}! 🏅`;
+      return `Glückwunsch! ${fish} jetzt in den Top 10 (#${rank})! 🎖️`;
+    },
+    icon: "🌟",
+    check: async ({ supabase, lastCatch }) => {
+      const name = normalizeName(lastCatch?.angler);
+      const size = parseFloat(lastCatch?.size);
+      const fish = (lastCatch?.fish || "").trim();
+      if (!name || !fish || Number.isNaN(size) || size <= 0) return false;
+
+      const { data, error } = await supabase
+        .from("fishes")
+        .select("id, angler, fish, size, timestamp, blank")
+        .eq("fish", fish)
+        .eq("blank", false);
+      if (error || !Array.isArray(data) || data.length === 0) return false;
+
+      const sorted = data
+        .map((entry) => ({
+          id: entry.id,
+          angler: normalizeName(entry.angler),
+          size: parseFloat(entry.size),
+          timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : 0,
+        }))
+        .filter((entry) => entry.size > 0)
+        .sort(
+          (a, b) =>
+            b.size - a.size ||
+            a.timestamp - b.timestamp
+        );
+
+      let rank = null;
+      for (let i = 0; i < sorted.length; i += 1) {
+        const entry = sorted[i];
+        if (entry.angler === name && Math.abs(entry.size - size) < 0.0001) {
+          rank = i + 1;
+          break;
+        }
+      }
+
+      if (rank == null || rank > 10) return false;
+
+      const previous = sorted
+        .slice(0, rank - 1)
+        .find((entry) => entry.angler === name && entry.size < size);
+
+      if (rank <= 5 || rank === 1) {
+        return { fish, rank };
+      }
+
+      return previous
+        ? { fish, rank }
+        : false;
+    },
+  },
 ];
