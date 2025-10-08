@@ -101,6 +101,26 @@ export const achievements = [
     },
   },
 
+  {
+    id: "club_fish_500",
+    title: (ctx) => `Vereinsmeilenstein: ${ctx?.count ?? 500} Fänge!`,
+    message: (ctx) => {
+      const count = ctx?.count ?? 500;
+      if (count === 500) return "🎉 Petri, der 500 Fisch in unserer App!";
+      if (count === 1000) return "🥳 1.000 Fänge – was für eine Community-Leistung!";
+      return `🚀 Bereits ${count} Vereinsfänge – starkes Teamwork!`;
+    },
+    icon: "🎣",
+    needsCount: {
+      table: "fishes",
+      threshold: 500,
+      repeatEvery: 500,
+      filters: () => [
+        ["blank", "eq", false],
+      ],
+    },
+  },
+
   // ========= Erste gefangene Art (pro User) =========
   {
     id: "first_species",
@@ -122,7 +142,7 @@ export const achievements = [
   // ========= Persönliche Bestlänge je Fischart =========
   {
     id: "personal_best_species",
-    title: "Persönliche Bestlänge!",
+    title: "Personel Best!",
     message: (ctx) => `Neuer Rekord ${ctx?.fish}: ${ctx?.size} cm! 🚀`,
     icon: "📏",
     check: async ({ supabase, lastCatch }) => {
