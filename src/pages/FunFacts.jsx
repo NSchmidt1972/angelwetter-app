@@ -427,6 +427,59 @@ export default function FunFacts() {
     return { bestCount, bestMonths, ranking, topTen };
   }, [statsFishes]);
 
+  // ---------- 8a+) Meiste Top-10-Fische pro Angler
+  const topTenAnglers = useMemo(() => {
+    const list = mostTopTenFishesMonth.topTen || [];
+    if (!Array.isArray(list) || list.length === 0) {
+      return { ranking: [], top3: [], max: 0 };
+    }
+
+    const stats = new Map();
+    list.forEach(({ fish, size }, index) => {
+      if (!fish) return;
+      const rawName = (fish.angler || 'Unbekannt').trim();
+      if (!rawName) return;
+      const key = rawName;
+      const entry = stats.get(key) || {
+        angler: rawName,
+        count: 0,
+        positions: [],
+        bestSize: -Infinity,
+        bestFish: null,
+      };
+      entry.count += 1;
+      entry.positions.push(index + 1);
+      if (typeof size === 'number' && size > entry.bestSize) {
+        entry.bestSize = size;
+        entry.bestFish = fish;
+      }
+      stats.set(key, entry);
+    });
+
+    const ranking = Array.from(stats.values())
+      .map((entry) => ({
+        ...entry,
+        bestSize: Number.isFinite(entry.bestSize) ? entry.bestSize : null,
+        positions: entry.positions.sort((a, b) => a - b),
+      }))
+      .sort(
+        (a, b) =>
+          b.count - a.count ||
+          (b.bestSize ?? 0) - (a.bestSize ?? 0) ||
+          a.angler.localeCompare(b.angler, 'de')
+      );
+
+    const max = ranking.length > 0 ? ranking[0].count : 0;
+    const leaders = ranking.filter((entry) => entry.count === max);
+
+    return {
+      ranking,
+      top3: ranking.slice(0, 3),
+      max,
+      leaders,
+    };
+  }, [mostTopTenFishesMonth.topTen]);
+
   // ---------- 8b) Monate mit den durchschnittlich größten Fischen
   const topMonthsByAvgSize = useMemo(() => {
     if (statsFishes.length === 0) return { items: [] };
@@ -1493,6 +1546,127 @@ const recordHunter = useMemo(() => {
   return { winners, ranking };
 }, [statsFishes]);
 
+  // ---------- FunCard Champion – wer wird am häufigsten genannt? ----------
+  const funCardChampion = useMemo(() => {
+    const counts = new Map();
+    const add = (name, weight = 1) => {
+      const trimmed = (name || '').trim();
+      if (!trimmed) return;
+      if (/^unbekannt$/i.test(trimmed)) return;
+      counts.set(trimmed, (counts.get(trimmed) || 0) + weight);
+    };
+    const addList = (source, selector, options = {}) => {
+      if (!source) return;
+      const pick = typeof selector === 'function' ? selector : (item) => item?.angler;
+      const arr = Array.isArray(source) ? source : [];
+      const { limit, weight = 1 } = options;
+      arr.slice(0, limit ?? arr.length).forEach((item) => {
+        const value = pick(item);
+        if (!value) return;
+        if (Array.isArray(value)) {
+          value.forEach((val) => add(val, weight));
+        } else {
+          add(value, weight);
+        }
+      });
+    };
+
+    addList(mostInOneDay?.items);
+    addList(biggest?.items);
+    addList(smallest?.items);
+    addList(mostInOneHour?.items);
+    addList(mostSpeciesInOneDay?.items);
+    addList(mostMonsterFishes?.items);
+    addList(mostFishesDay?.days, (day) => (Array.isArray(day?.anglers) ? day.anglers : []));
+    addList(mostSpeciesInOneHour?.items);
+    addList(mostPlacesAngler?.winners);
+    addList(predatorKing?.winners);
+    addList(heaviestFish?.items);
+    addList(mostEfficientAngler?.winners);
+    addList(mostRotaugen?.winners);
+    addList(mostAtFullMoon?.winners);
+    addList(nightOwls?.winners);
+    addList(nightOwls?.ranking, (entry) => entry?.angler, { limit: 5 });
+    addList(earlyBird?.winners);
+    addList(mostInRain?.winners);
+    addList(sunshineOnly?.winners);
+    addList(topTenAnglers?.leaders, (entry) => entry?.angler);
+    addList(topTenAnglers?.top3, (entry) => entry?.angler);
+    addList(averageSizeByAngler?.top3);
+    addList(longestBreakBetweenCatchDays?.winners);
+    addList(longestCatchStreak?.winners);
+    addList(fishPairs?.top3, (pair) => [pair?.a, pair?.b]);
+    if (fishPairs?.lauraNicol) {
+      addList([fishPairs.lauraNicol], (pair) => [pair?.a, pair?.b]);
+    }
+    addList(zanderQueen?.winners, (entry) => entry?.angler);
+    if (eelWizard?.angler) add(eelWizard.angler);
+    if (grundelChampion?.angler) add(grundelChampion.angler);
+    addList(foreignAnglers?.top3, (entry) => entry?.angler);
+    addList(schneiderKoenig?.winners);
+    addList(hottestCatch?.items);
+    addList(frostCatch?.winners);
+    addList(frostCatch?.ranking, (entry) => entry?.angler, { limit: 5 });
+    addList(extremeWeatherCatch?.ranking, (entry) => entry?.fish?.angler, { limit: 3 });
+    addList(angelQueen?.winners, (entry) => entry?.angler);
+    addList(angelQueen?.ranking, (entry) => entry?.angler);
+    addList(recordHunter?.winners, (entry) => entry?.angler);
+    addList(recordHunter?.ranking, (entry) => entry?.angler);
+    addList(photoArtist?.winners, (entry) => entry?.angler);
+    addList(photoArtist?.ranking, (entry) => entry?.angler);
+
+    const ranking = Array.from(counts.entries())
+      .map(([angler, count]) => ({ angler, count }))
+      .sort(
+        (a, b) =>
+          b.count - a.count ||
+          a.angler.localeCompare(b.angler, 'de')
+      );
+    const totalMentions = ranking.reduce((sum, entry) => sum + entry.count, 0);
+    const max = ranking.length > 0 ? ranking[0].count : 0;
+    return {
+      ranking,
+      top3: ranking.slice(0, 3),
+      totalMentions,
+      max,
+    };
+  }, [
+    mostInOneDay,
+    biggest,
+    smallest,
+    mostInOneHour,
+    mostSpeciesInOneDay,
+    mostMonsterFishes,
+    mostFishesDay,
+    mostSpeciesInOneHour,
+    mostPlacesAngler,
+    predatorKing,
+    heaviestFish,
+    mostEfficientAngler,
+    mostRotaugen,
+    mostAtFullMoon,
+    nightOwls,
+    earlyBird,
+    mostInRain,
+    sunshineOnly,
+    topTenAnglers,
+    averageSizeByAngler,
+    longestBreakBetweenCatchDays,
+    longestCatchStreak,
+    fishPairs,
+    zanderQueen,
+    eelWizard,
+    grundelChampion,
+    foreignAnglers,
+    schneiderKoenig,
+    hottestCatch,
+    frostCatch,
+    extremeWeatherCatch,
+    angelQueen,
+    recordHunter,
+    photoArtist,
+  ]);
+
 
   // ---------- Karten zusammenstellen (Seed wird IMMER verwendet) ----------
   const cards = useMemo(
@@ -1735,6 +1909,64 @@ const recordHunter = useMemo(() => {
               </>
             ) : (
               <p>Zu wenig Top-10-Fänge (mit Größenangabe) vorhanden.</p>
+            )}
+          </Card>,
+
+          // 8a+) Meiste Top-10-Fische pro Angler
+          <Card key="topTenAnglers" title="🎣 Wer hat die meisten Top-10-Fische?">
+            {topTenAnglers.top3.length > 0 ? (
+              <>
+                <p className="mb-2">
+                  <strong>{topTenAnglers.max}</strong> Top-10-Fisch{topTenAnglers.max === 1 ? '' : 'e'} – Spitze:{' '}
+                  {topTenAnglers.leaders.map((entry) => entry.angler).join(', ')}
+                </p>
+                <ol className="space-y-2">
+                  {topTenAnglers.top3.map((entry, idx) => (
+                    <li key={entry.angler} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <span className="w-6 text-sm tabular-nums text-gray-500 dark:text-gray-400">
+                            {idx + 1}.
+                          </span>
+                          <span className="font-medium text-green-700 dark:text-green-300">
+                            {entry.angler}
+                          </span>
+                        </div>
+                        {entry.positions.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {entry.positions.slice(0, 5).map((pos, i) => (
+                              <Pill key={i}>#{pos}</Pill>
+                            ))}
+                            {entry.positions.length > 5 && (
+                              <Pill>+{entry.positions.length - 5}</Pill>
+                            )}
+                          </div>
+                        )}
+                        {entry.bestFish && entry.bestSize != null && entry.bestFish.timestamp && (
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Bester Fang: {entry.bestFish.fish} • {Math.round(entry.bestSize)} cm •{' '}
+                            {formatDateTimeDE(entry.bestFish.timestamp)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                        {entry.count}x
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                {topTenAnglers.ranking.length > 3 && (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Weitere Platzierungen:{' '}
+                    {topTenAnglers.ranking
+                      .slice(3, 8)
+                      .map((entry) => entry.angler)
+                      .join(', ')}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>Zu wenig Top-10-Fänge vorhanden.</p>
             )}
           </Card>,
 
@@ -2715,6 +2947,73 @@ const recordHunter = useMemo(() => {
   )}
 </Card>,
 
+// ---------- Card: FunCard-Champion
+<Card key="funCardChampion" title="🏆 Wer ist der FunCard-Champion?">
+  {funCardChampion.top3.length > 0 && funCardChampion.max > 0 ? (
+    <>
+      <p className="mb-2">
+        <strong>{funCardChampion.max}</strong> Nennungen – Spitze:{' '}
+        {funCardChampion.ranking
+          .filter((entry) => entry.count === funCardChampion.max)
+          .map((entry) => entry.angler)
+          .join(', ')}
+      </p>
+
+      <ol className="space-y-2">
+        {funCardChampion.top3.map((entry, idx) => {
+          const isWinner = entry.count === funCardChampion.max;
+          const share =
+            funCardChampion.totalMentions > 0
+              ? Math.round((entry.count / funCardChampion.totalMentions) * 100)
+              : 0;
+          return (
+            <li key={entry.angler} className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="w-6 text-sm tabular-nums text-gray-500 dark:text-gray-400">
+                  {idx + 1}.
+                </span>
+                <span
+                  className={`font-medium ${
+                    isWinner
+                      ? 'text-pink-700 dark:text-pink-300'
+                      : 'text-green-700 dark:text-green-300'
+                  }`}
+                >
+                  {entry.angler} {isWinner ? '👑' : ''}
+                </span>
+              </div>
+              <div className="text-right">
+                <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                  {entry.count}x
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {share}% der Nennungen
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      {funCardChampion.ranking.length > 3 && (
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Auf den Plätzen:{' '}
+          {funCardChampion.ranking
+            .slice(3, 7)
+            .map((entry) => entry.angler)
+            .join(', ')}
+        </p>
+      )}
+
+      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        Basis: {funCardChampion.totalMentions} Namensnennungen (exkl. Champion-Karte).
+      </p>
+    </>
+  ) : (
+    <p className="text-gray-600 dark:text-gray-300">Keine auswertbaren Nennungen.</p>
+  )}
+</Card>,
+
 
 
         ],
@@ -2731,6 +3030,7 @@ const recordHunter = useMemo(() => {
       mostFishesDay,
       mostFishesMonth,
       mostTopTenFishesMonth,
+      topTenAnglers,
       topMonthsByAvgSize,
       mostFishesWeekday,
       mostSpeciesInOneHour,
@@ -2761,6 +3061,7 @@ const recordHunter = useMemo(() => {
       angelQueen,
       recordHunter,
       photoArtist,
+      funCardChampion,
       averageSizeByAngler.top3
     ]
   );
