@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react';
-import {
-  formatDateDE,
-  formatDateTimeDE,
-  formatDayLabelDE,
-  formatDayShortDE,
-  formatTimeDE,
-} from '../../utils/formatters';
+import { formatDayLabelDE } from '../../utils/formatters';
 import { monthLabel } from '../../utils/dateUtils';
 import { PREDATOR_LABELS, MIN_EFFICIENCY_DAYS } from './constants';
+import {
+  formatDateSafe,
+  formatDateTimeSafe,
+  formatDayShortSafe,
+  formatTimeSafe,
+} from './utils';
 
 const Card = React.memo(function Card({ title, children }) {
   return (
@@ -26,7 +26,28 @@ const Pill = ({ children }) => (
   </span>
 );
 
-export default function FunFactsCards({ seed, shuffle, data }) {
+const SectionCard = ({ number, title, count, countLabel = 'Einträge', children }) => (
+  <Card title={`${String(number).padStart(2, '0')} · ${title}`}>
+    {count != null && count > 1 && (
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        ({count} {countLabel})
+      </p>
+    )}
+    {children}
+  </Card>
+);
+
+const GROUP_LABELS = {
+  HIGHLIGHTS: 'Highlights & Rekorde',
+  CALENDAR: 'Kalender & Hotspots',
+  WEATHER: 'Zeit & Wetter',
+  SPECIES: 'Arten & Spezialist:innen',
+  ENDURANCE: 'Serien & Ausdauer',
+  BLANKS: 'Blanks & Rückschläge',
+  COMMUNITY: 'Community Awards',
+};
+
+export default function FunFactsCards({ data }) {
   const {
     mostInOneDay,
     biggest,
@@ -72,38 +93,8 @@ export default function FunFactsCards({ seed, shuffle, data }) {
     funCardChampion,
   } = data;
 
-  const formatDateTimeSafe = (value, fallback = 'Datum unbekannt') => {
-    if (!value) return fallback;
-    const date = value instanceof Date ? value : new Date(value);
-    if (!Number.isFinite(date.getTime())) return fallback;
-    return formatDateTimeDE(date);
-  };
-
-  const formatTimeSafe = (value, fallback = '–') => {
-    if (!value) return fallback;
-    const date = value instanceof Date ? value : new Date(value);
-    if (!Number.isFinite(date.getTime())) return fallback;
-    return formatTimeDE(date);
-  };
-
-  const formatDayShortSafe = (value, fallback = '–') => {
-    if (!value) return fallback;
-    const date = value instanceof Date ? value : new Date(value);
-    if (!Number.isFinite(date.getTime())) return fallback;
-    return formatDayShortDE(date);
-  };
-
-  const formatDateSafe = (value, fallback = 'Datum unbekannt') => {
-    if (!value) return fallback;
-    const date = value instanceof Date ? value : new Date(value);
-    if (!Number.isFinite(date.getTime())) return fallback;
-    return formatDateDE(date);
-  };
-
   const cards = useMemo(
-    () =>
-      shuffle(
-        [
+    () => [
           // 1) Meiste Fische an einem Tag
           <Card key="day" title="Wer hat die meisten Fische an einem Tag gefangen?">
             <p className="mb-2">
@@ -1445,15 +1436,12 @@ export default function FunFactsCards({ seed, shuffle, data }) {
   ) : (
     <p className="text-gray-600 dark:text-gray-300">Keine auswertbaren Nennungen.</p>
   )}
-</Card>,
+          </Card>,
 
 
 
         ],
-        seed
-      ),
     [
-      seed,
       mostInOneDay,
       biggest,
       smallest,
@@ -1499,9 +1487,147 @@ export default function FunFactsCards({ seed, shuffle, data }) {
     ]
   );
 
+  const sections = useMemo(() => {
+    const descriptors = [
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostInOneDay?.items?.length ?? 0) || null, countLabel: 'Rekorde' },
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (biggest?.items?.length ?? 0) || null, countLabel: 'Rekordfänge' },
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (smallest?.items?.length ?? 0) || null, countLabel: 'Fänge' },
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostInOneHour?.items?.length ?? 0) || null, countLabel: 'Rekorde' },
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostSpeciesInOneDay?.items?.length ?? 0) || null, countLabel: 'Rekorde' },
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostMonsterFishes?.items?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.CALENDAR, count: (mostFishesDay?.days?.length ?? 0) || null, countLabel: 'Tage' },
+      { group: GROUP_LABELS.CALENDAR, count: (mostFishesMonth?.months?.length ?? 0) || null, countLabel: 'Monate' },
+      { group: GROUP_LABELS.CALENDAR, count: (mostTopTenFishesMonth?.bestMonths?.length ?? 0) || null, countLabel: 'Monate' },
+      { group: GROUP_LABELS.CALENDAR, count: (topTenAnglers?.top3?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.CALENDAR, count: (topMonthsByAvgSize?.items?.length ?? 0) || null, countLabel: 'Monate' },
+      { group: GROUP_LABELS.CALENDAR, count: (mostFishesWeekday?.items?.length ?? 0) || null, countLabel: 'Tage' },
+      { group: GROUP_LABELS.WEATHER, count: (mostSpeciesInOneHour?.items?.length ?? 0) || null, countLabel: 'Rekorde' },
+      { group: GROUP_LABELS.CALENDAR, count: (mostPlacesAngler?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (predatorKing?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (heaviestFish?.items?.length ?? 0) || null, countLabel: 'Fänge' },
+      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostEfficientAngler?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.SPECIES, count: (mostRotaugen?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.WEATHER, count: (mostAtFullMoon?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.WEATHER, count: (nightOwls?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.WEATHER, count: (earlyBird?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.WEATHER, count: (mostInRain?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.WEATHER, count: (sunshineOnly?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.SPECIES, count: (topThreeSpecies?.items?.length ?? 0) || null, countLabel: 'Arten' },
+      { group: GROUP_LABELS.SPECIES, count: (averageSizeByAngler?.top3?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.ENDURANCE, count: (longestBreakBetweenCatchDays?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.ENDURANCE, count: (longestCatchStreak?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.ENDURANCE, count: (fishPairs?.top3?.length ?? 0) || null, countLabel: 'Paare' },
+      { group: GROUP_LABELS.SPECIES, count: (zanderQueen?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.SPECIES, count: eelWizard ? 1 : null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.SPECIES, count: grundelChampion ? 1 : null, countLabel: 'Champion' },
+      { group: GROUP_LABELS.SPECIES, count: (foreignAnglers?.top3?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.BLANKS, count: (schneiderKoenig?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.BLANKS, count: (worstBlankMonth?.winners?.length ?? 0) || null, countLabel: 'Monate' },
+      { group: GROUP_LABELS.WEATHER, count: (hottestCatch?.items?.length ?? 0) || null, countLabel: 'Fänge' },
+      { group: GROUP_LABELS.WEATHER, count: (frostCatch?.winners?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.WEATHER, count: (extremeWeatherCatch?.ranking?.length ?? 0) || null, countLabel: 'Fänge' },
+      {
+        group: GROUP_LABELS.ENDURANCE,
+        count: (overallAvgPerAnglerDay?.totalAnglerDays ?? 0) || null,
+        countLabel: 'Angler-Tage',
+      },
+      { group: GROUP_LABELS.COMMUNITY, count: (angelQueen?.ranking?.length ?? 0) || null, countLabel: 'Anglerinnen' },
+      { group: GROUP_LABELS.COMMUNITY, count: (recordHunter?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.COMMUNITY, count: (photoArtist?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
+      { group: GROUP_LABELS.COMMUNITY, count: (funCardChampion?.ranking?.length ?? 0) || null, countLabel: 'Angler:innen' },
+    ];
+
+    const grouped = [];
+    const byGroup = new Map();
+    let counter = 0;
+
+    cards.forEach((card, idx) => {
+      if (!React.isValidElement(card)) return;
+      const descriptor = descriptors[idx] || {};
+      const groupTitle = descriptor.group || GROUP_LABELS.HIGHLIGHTS;
+      let section = byGroup.get(groupTitle);
+      if (!section) {
+        section = { title: groupTitle, cards: [] };
+        byGroup.set(groupTitle, section);
+        grouped.push(section);
+      }
+      counter += 1;
+      section.cards.push(
+        <SectionCard
+          key={card.key ?? `card-${counter}`}
+          number={counter}
+          title={card.props.title}
+          count={descriptor.count}
+          countLabel={descriptor.countLabel}
+        >
+          {card.props.children}
+        </SectionCard>
+      );
+    });
+
+    return grouped;
+  }, [
+    cards,
+    mostInOneDay,
+    biggest,
+    smallest,
+    mostInOneHour,
+    mostSpeciesInOneDay,
+    mostMonsterFishes,
+    mostFishesDay,
+    mostFishesMonth,
+    mostTopTenFishesMonth,
+    topTenAnglers,
+    topMonthsByAvgSize,
+    mostFishesWeekday,
+    mostSpeciesInOneHour,
+    mostPlacesAngler,
+    predatorKing,
+    heaviestFish,
+    mostEfficientAngler,
+    mostRotaugen,
+    mostAtFullMoon,
+    nightOwls,
+    earlyBird,
+    mostInRain,
+    sunshineOnly,
+    topThreeSpecies,
+    averageSizeByAngler,
+    longestBreakBetweenCatchDays,
+    longestCatchStreak,
+    fishPairs,
+    zanderQueen,
+    eelWizard,
+    grundelChampion,
+    foreignAnglers,
+    schneiderKoenig,
+    worstBlankMonth,
+    hottestCatch,
+    frostCatch,
+    extremeWeatherCatch,
+    overallAvgPerAnglerDay,
+    angelQueen,
+    recordHunter,
+    photoArtist,
+    funCardChampion,
+  ]);
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-      {cards}
+    <div className="space-y-10 max-w-5xl mx-auto">
+      {sections.map((section) => (
+        <section key={section.title} className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-2xl font-semibold text-green-700 dark:text-green-300">
+              {section.title}
+            </h3>
+            <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {section.cards.length} Themen
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {section.cards}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

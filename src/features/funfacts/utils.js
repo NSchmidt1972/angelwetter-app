@@ -1,4 +1,10 @@
 import { PLACE_ALIASES } from './constants';
+import {
+  formatDateDE,
+  formatDateTimeDE,
+  formatDayShortDE,
+  formatTimeDE,
+} from '../../utils/formatters';
 
 export function normalizePlace(fish) {
   const raw = (fish?.location_name ?? '').toString().trim();
@@ -40,4 +46,33 @@ export function getWeatherDescription(fish, fallbackLower) {
   if (candidates.length > 0) return ucfirst(candidates[0]);
   if (typeof fallbackLower === 'string' && fallbackLower.trim()) return ucfirst(fallbackLower.trim());
   return null;
+}
+
+function toDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value : null;
+  }
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
+export function formatDateSafe(value, fallback = 'Datum unbekannt') {
+  const date = toDate(value);
+  return date ? formatDateDE(date) : fallback;
+}
+
+export function formatDateTimeSafe(value, fallback = 'Datum unbekannt') {
+  const date = toDate(value);
+  return date ? formatDateTimeDE(date) : fallback;
+}
+
+export function formatTimeSafe(value, fallback = '–') {
+  const date = toDate(value);
+  return date ? formatTimeDE(date) : fallback;
+}
+
+export function formatDayShortSafe(value, fallback = '–') {
+  const date = toDate(value);
+  return date ? formatDayShortDE(date) : fallback;
 }

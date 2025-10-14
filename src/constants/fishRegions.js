@@ -7,7 +7,7 @@ export const REGION_LABELS = {
   holland: "Niederlande (Binnen & Polder)",
   northsea_de: "Nordsee (DE)",
   baltic_de: "Ostsee (DE)",
-  med: "Mittelmeer",
+  med: "Mittelmeer (Kreta)",
   norway: "Norwegen (Salzwasser)",
 };
 
@@ -27,9 +27,31 @@ const HOLLAND_FISH = [
 ];
 
 const MEDITERRANEAN_FISH = [
-"Dorade (Goldbrasse)", "Wolfsbarsch (Seebarsch)", "Makrele", "Sardine", "Barrakuda",
-"Amberjack (Bernsteinfisch)", "Bonito", "Tintenfisch", "Thunfisch", "Oktopus", "Rotbarbe",
-"Zackenbarsch", "Meeräsche",
+  "Amberjack (Bernsteinfisch) (Seriola dumerili – Μαγιάτικο)",
+  "Barrakuda (Sphyraena viridensis – Λούτσος)",
+  "Bluefish (Blaufisch) (Pomatomus saltatrix – Γαύρος ή Λαυράκι της θάλασσας)",
+  "Bonito (Sarda sarda – Πελές ή Παλαμίδα)",
+  "Comber (Serranus cabrilla – Σαργομπαλάς)",
+  "Dorade (Goldbrasse) (Sparus aurata – Τσιπούρα)",
+  "Fagri (Rotbrasse) (Pagrus pagrus – Φαγκρί)",
+  "Feuerfisch (Pterois miles – Λεοντόψαρο)",
+  "Makrele (Scomber scombrus – Σκουμπρί)",
+  "Meeräsche (Mugil cephalus – Κέφαλος)",
+  "Meerjunker (Coris julis – Γαϊδουρόψαρο)",
+  "Oktopus (Octopus vulgaris – Χταπόδι)",
+  "Pandora (Pagellus erythrinus – Λυθρίνι)",
+  "Petermännchen (Trachinus draco – Δράκαινα)",
+  "Rotbarbe (Mullus surmuletus – Μπαρμπούνι)",
+  "Rotzahn-Doktorfisch (Skaros) (Sparisoma cretense – Σκάρος)",
+  "Sardine (Sardina pilchardus – Σαρδέλα)",
+  "Scharfbrasse (Diplodus puntazzo – Σαργός)",
+  "Sepia (Sepia officinalis – Σουπιά)",
+  "Skorpionfisch (Scorpaena notata – Σκορπίδι)",
+  "Thunfisch (Thunnus thynnus – Τόνος)",
+  "Tintenfisch (Kalmar) (Loligo vulgaris – Καλαμάρι)",
+  "Weißbrasse (Diplodus sargus – Σπάρος)",
+  "Wolfsbarsch (Seebarsch) (Dicentrarchus labrax – Λαβράκι)",
+  "Zackenbarsch (Epinephelus costae – Σφυρίδα)"
 ];
 
 const NORWAY_FISH = [

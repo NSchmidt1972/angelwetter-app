@@ -1,5 +1,4 @@
 // src/pages/FunFacts.jsx
-import { useState } from 'react';
 import PageContainer from '../components/PageContainer';
 import FunFactsCards from '../features/funfacts/FunFactsCards';
 import { useFunFactsData } from '../features/funfacts/useFunFactsData';
@@ -7,22 +6,7 @@ import { useFunFactsData } from '../features/funfacts/useFunFactsData';
 const PUBLIC_FROM = new Date('2025-06-01');
 const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
 
-function useStableShuffleSeed() {
-  const [seed] = useState(() => Math.random());
-  return seed;
-}
-
-function shuffleStable(array, seed) {
-  let s = Math.floor(seed * 1e9) || 1;
-  const rand = () => ((s = (s * 48271) % 0x7fffffff) / 0x7fffffff);
-  return array
-    .map((item) => ({ item, rnd: rand() }))
-    .sort((a, b) => a.rnd - b.rnd)
-    .map(({ item }) => item);
-}
-
 export default function FunFacts() {
-  const seed = useStableShuffleSeed();
   const funFacts = useFunFactsData({ PUBLIC_FROM, vertraute });
   const { validFishes, loading, loadError } = funFacts;
 
@@ -49,7 +33,7 @@ export default function FunFacts() {
           Keine Fänge in der aktuellen Sichtbarkeit.
         </div>
       ) : (
-        <FunFactsCards seed={seed} shuffle={shuffleStable} data={funFacts} />
+        <FunFactsCards data={funFacts} />
       )}
     </PageContainer>
   );
