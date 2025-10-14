@@ -26,13 +26,8 @@ const Pill = ({ children }) => (
   </span>
 );
 
-const SectionCard = ({ number, title, count, countLabel = 'Einträge', children }) => (
+const SectionCard = ({ number, title, children }) => (
   <Card title={`${String(number).padStart(2, '0')} · ${title}`}>
-    {count != null && count > 1 && (
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-        ({count} {countLabel})
-      </p>
-    )}
     {children}
   </Card>
 );
@@ -41,10 +36,55 @@ const GROUP_LABELS = {
   HIGHLIGHTS: 'Highlights & Rekorde',
   CALENDAR: 'Kalender & Hotspots',
   WEATHER: 'Zeit & Wetter',
-  SPECIES: 'Arten & Spezialist:innen',
+  SPECIES: 'Arten & Spezialisten',
   ENDURANCE: 'Serien & Ausdauer',
   BLANKS: 'Blanks & Rückschläge',
   COMMUNITY: 'Community Awards',
+};
+
+const CARD_GROUPS = {
+  day: GROUP_LABELS.HIGHLIGHTS,
+  biggest: GROUP_LABELS.HIGHLIGHTS,
+  smallest: GROUP_LABELS.HIGHLIGHTS,
+  hour: GROUP_LABELS.HIGHLIGHTS,
+  speciesDay: GROUP_LABELS.HIGHLIGHTS,
+  monster: GROUP_LABELS.HIGHLIGHTS,
+  predator: GROUP_LABELS.HIGHLIGHTS,
+  heavy: GROUP_LABELS.HIGHLIGHTS,
+  efficiency: GROUP_LABELS.HIGHLIGHTS,
+  topTenAnglers: GROUP_LABELS.HIGHLIGHTS,
+  mostFishesDay: GROUP_LABELS.CALENDAR,
+  monthMax: GROUP_LABELS.CALENDAR,
+  monthTopTen: GROUP_LABELS.CALENDAR,
+  monthAvgSize: GROUP_LABELS.CALENDAR,
+  weekday: GROUP_LABELS.CALENDAR,
+  places: GROUP_LABELS.CALENDAR,
+  speciesHour: GROUP_LABELS.WEATHER,
+  fullmoon: GROUP_LABELS.WEATHER,
+  'night-count': GROUP_LABELS.WEATHER,
+  early: GROUP_LABELS.WEATHER,
+  rain: GROUP_LABELS.WEATHER,
+  sunny: GROUP_LABELS.WEATHER,
+  hottestCatch: GROUP_LABELS.WEATHER,
+  frostCatch: GROUP_LABELS.WEATHER,
+  extremeWeather: GROUP_LABELS.WEATHER,
+  rotauge: GROUP_LABELS.SPECIES,
+  top3: GROUP_LABELS.SPECIES,
+  'avg-size': GROUP_LABELS.SPECIES,
+  zander: GROUP_LABELS.SPECIES,
+  eel: GROUP_LABELS.SPECIES,
+  grundel: GROUP_LABELS.SPECIES,
+  foreign: GROUP_LABELS.SPECIES,
+  pause: GROUP_LABELS.ENDURANCE,
+  streak: GROUP_LABELS.ENDURANCE,
+  buddies: GROUP_LABELS.ENDURANCE,
+  overallAvg: GROUP_LABELS.ENDURANCE,
+  schneiderKing: GROUP_LABELS.BLANKS,
+  worstBlankMonth: GROUP_LABELS.BLANKS,
+  queen: GROUP_LABELS.COMMUNITY,
+  'record-hunter': GROUP_LABELS.COMMUNITY,
+  'photo-artist': GROUP_LABELS.COMMUNITY,
+  funCardChampion: GROUP_LABELS.COMMUNITY,
 };
 
 export default function FunFactsCards({ data }) {
@@ -121,6 +161,98 @@ export default function FunFactsCards({ data }) {
                 </li>
               ))}
             </ul>
+          </Card>,
+
+          <Card
+            key="predator"
+            title="👑 Wer ist der Raubfisch-König? (Gesamtlänge: Barsch, Aal, Hecht, Zander, Wels)"
+          >
+            {predatorKing.winners.length > 0 ? (
+              <ul className="space-y-2">
+                {predatorKing.winners.map((it, idx) => (
+                  <li key={idx} className="flex items-start justify-between gap-3">
+                    <div className="max-w-[70%]">
+                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {Object.entries(it.perSpecies)
+                          .sort((a, b) => b[1].sum - a[1].sum)
+                          .map(([sp, data]) => {
+                            const avg = data.count > 0 ? Math.round(data.sum / data.count) : 0;
+                            const countLabel = data.count === 1 ? '1 Fang' : `${data.count} Fänge`;
+                            return (
+                              <Pill key={sp}>
+                                {PREDATOR_LABELS[sp] ?? sp} · {countLabel} · Ø {avg} cm
+                              </Pill>
+                            );
+                          })}
+                      </div>
+                    </div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                      {Math.round(it.sum)} cm
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Keine Daten</p>
+            )}
+          </Card>,
+
+          <Card key="heavy" title="🏋️ Wer hat das dickste Ding gefangen? (max Gewicht)">
+            {heaviestFish ? (
+              <>
+                <p className="mb-2">
+                  Schwerster Fang:{' '}
+                  <b className="text-green-700 dark:text-green-300">
+                    {heaviestFish.weight.toFixed(1)} kg
+                  </b>
+                </p>
+                <ul className="space-y-2">
+                  {heaviestFish.items.map((f) => (
+                    <li key={f.id} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          {f.fish}
+                          {parseFloat(f.size) > 0 ? ` • ${parseFloat(f.size).toFixed(0)} cm` : ''} •{' '}
+                          {formatDateTimeSafe(f.timestamp)}
+                        </div>
+                      </div>
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                        {parseFloat(f.weight).toFixed(1)} kg
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>Keine Gewichtsangaben vorhanden.</p>
+            )}
+          </Card>,
+
+          <Card key="efficiency" title="🏅 Wer angelt am effizientesten? (Fische pro Fangtag)">
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+              Nur Angler mit mindestens {MIN_EFFICIENCY_DAYS} Fangtagen zählen.
+            </p>
+            {mostEfficientAngler.winners.length > 0 ? (
+              <ul className="space-y-2">
+                {mostEfficientAngler.winners.map((it, idx) => (
+                  <li key={idx} className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-300">
+                        {it.fish} Fische auf {it.days} Fangtage
+                      </div>
+                    </div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                      {it.ratio.toLocaleString('de-DE', { maximumFractionDigits: 2 })} / Tag
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Keine Daten</p>
+            )}
           </Card>,
 
           // 2) Größter Fisch
@@ -248,6 +380,65 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
 
+          <Card key="topTenAnglers" title="🎣 Wer hat die meisten Top-10-Fische?">
+            {topTenAnglers.top3.length > 0 ? (
+              <>
+                <p className="mb-2">
+                  <strong>{topTenAnglers.max}</strong> Top-10-Fisch{topTenAnglers.max === 1 ? '' : 'e'} – Spitze:{' '}
+                  {topTenAnglers.leaders.map((entry) => entry.angler).join(', ')}
+                </p>
+                <ol className="space-y-2">
+                  {topTenAnglers.top3.map((entry, idx) => (
+                    <li key={entry.angler} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <span className="w-6 text-sm tabular-nums text-gray-500 dark:text-gray-400">
+                            {idx + 1}.
+                          </span>
+                          <span className="font-medium text-green-700 dark:text-green-300">
+                            {entry.angler}
+                          </span>
+                        </div>
+                        {entry.positions.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {entry.positions.slice(0, 5).map((pos, i) => (
+                              <Pill key={`${pos.species}-${pos.rank}-${i}`}>
+                                {pos.species} #{pos.rank}
+                              </Pill>
+                            ))}
+                            {entry.positions.length > 5 && (
+                              <Pill>+{entry.positions.length - 5}</Pill>
+                            )}
+                          </div>
+                        )}
+                        {entry.bestFish && entry.bestSize != null && entry.bestFish.timestamp && (
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Bester Fang: {entry.bestFish.fish} • {Math.round(entry.bestSize)} cm •{' '}
+                            {formatDateTimeSafe(entry.bestFish.timestamp)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                        {entry.count}x
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                {topTenAnglers.ranking.length > 3 && (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Weitere Platzierungen:{' '}
+                    {topTenAnglers.ranking
+                      .slice(3, 8)
+                      .map((entry) => entry.angler)
+                      .join(', ')}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>Zu wenig Top-10-Fänge vorhanden.</p>
+            )}
+          </Card>,
+
           // 7) Tag mit den meisten Fischen
           <Card key="mostFishesDay" title="📅 An welchem Tag wurden die meisten Fische gefangen?">
             {mostFishesDay.count > 0 ? (
@@ -334,66 +525,6 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
 
-          // 8a+) Meiste Top-10-Fische pro Angler
-          <Card key="topTenAnglers" title="🎣 Wer hat die meisten Top-10-Fische?">
-            {topTenAnglers.top3.length > 0 ? (
-              <>
-                <p className="mb-2">
-                  <strong>{topTenAnglers.max}</strong> Top-10-Fisch{topTenAnglers.max === 1 ? '' : 'e'} – Spitze:{' '}
-                  {topTenAnglers.leaders.map((entry) => entry.angler).join(', ')}
-                </p>
-                <ol className="space-y-2">
-                  {topTenAnglers.top3.map((entry, idx) => (
-                    <li key={entry.angler} className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <span className="w-6 text-sm tabular-nums text-gray-500 dark:text-gray-400">
-                            {idx + 1}.
-                          </span>
-                          <span className="font-medium text-green-700 dark:text-green-300">
-                            {entry.angler}
-                          </span>
-                        </div>
-                        {entry.positions.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {entry.positions.slice(0, 5).map((pos, i) => (
-                              <Pill key={`${pos.species}-${pos.rank}-${i}`}>
-                                {pos.species} #{pos.rank}
-                              </Pill>
-                            ))}
-                            {entry.positions.length > 5 && (
-                              <Pill>+{entry.positions.length - 5}</Pill>
-                            )}
-                          </div>
-                        )}
-                        {entry.bestFish && entry.bestSize != null && entry.bestFish.timestamp && (
-                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Bester Fang: {entry.bestFish.fish} • {Math.round(entry.bestSize)} cm •{' '}
-                            {formatDateTimeSafe(entry.bestFish.timestamp)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                        {entry.count}x
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-                {topTenAnglers.ranking.length > 3 && (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Weitere Platzierungen:{' '}
-                    {topTenAnglers.ranking
-                      .slice(3, 8)
-                      .map((entry) => entry.angler)
-                      .join(', ')}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p>Zu wenig Top-10-Fänge vorhanden.</p>
-            )}
-          </Card>,
-
           // 8b) Monate mit den größten Durchschnitts-Fischen
           <Card key="monthAvgSize" title="📏 Welche Monate bringen die größten Ø-Fische?">
             {topMonthsByAvgSize.items.length > 0 ? (
@@ -459,40 +590,6 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
 
-          // 10) Meiste Fischarten in 1 Stunde
-          <Card key="speciesHour" title="Wer hat die meisten Fischarten in 1 Stunde gefangen?">
-            {mostSpeciesInOneHour.count > 0 ? (
-              <>
-                <p className="mb-2">
-                  <strong>{mostSpeciesInOneHour.count}</strong> verschiedene Arten – Rekordhalter:
-                </p>
-                <ul className="space-y-2">
-                  {mostSpeciesInOneHour.items.map((it, idx) => (
-                    <li key={idx} className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">{it.hourLabel}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                          Insgesamt in dieser Stunde: <b>{it.totalThatHour}</b> Fänge
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {it.species.map((s) => (
-                            <Pill key={s}>{s}</Pill>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                        {mostSpeciesInOneHour.count} Arten
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p>Keine Daten</p>
-            )}
-          </Card>,
-
           // 11) Orte
           <Card key="places" title="🧭 Wer hat an den meisten unterschiedlichen Orten geangelt?">
             {mostPlacesAngler.count > 0 ? (
@@ -525,117 +622,36 @@ export default function FunFactsCards({ data }) {
               <p>Keine Daten</p>
             )}
           </Card>,
-
-          // 12) Raubfisch-König
-          <Card
-            key="predator"
-            title="👑 Wer ist der Raubfisch-König? (Gesamtlänge: Barsch, Aal, Hecht, Zander, Wels)"
-          >
-            {predatorKing.winners.length > 0 ? (
-              <ul className="space-y-2">
-                {predatorKing.winners.map((it, idx) => (
-                  <li key={idx} className="flex items-start justify-between gap-3">
-                    <div className="max-w-[70%]">
-                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {Object.entries(it.perSpecies)
-                          .sort((a, b) => b[1].sum - a[1].sum)
-                          .map(([sp, data]) => {
-                            const avg = data.count > 0 ? Math.round(data.sum / data.count) : 0;
-                            const countLabel = data.count === 1 ? '1 Fang' : `${data.count} Fänge`;
-                            return (
-                              <Pill key={sp}>
-                                {PREDATOR_LABELS[sp] ?? sp} · {countLabel} · Ø {avg} cm
-                              </Pill>
-                            );
-                          })}
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {Math.round(it.sum)} cm
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>Keine Daten</p>
-            )}
-          </Card>,
-
-          // 13) Dickstes Ding (Gewicht)
-          <Card key="heavy" title="🏋️ Wer hat das dickste Ding gefangen? (max Gewicht)">
-            {heaviestFish ? (
+          <Card key="speciesHour" title="Wer hat die meisten Fischarten in 1 Stunde gefangen?">
+            {mostSpeciesInOneHour.count > 0 ? (
               <>
                 <p className="mb-2">
-                  Schwerster Fang:{' '}
-                  <b className="text-green-700 dark:text-green-300">
-                    {heaviestFish.weight.toFixed(1)} kg
-                  </b>
+                  <strong>{mostSpeciesInOneHour.count}</strong> verschiedene Arten – Rekordhalter:
                 </p>
                 <ul className="space-y-2">
-                  {heaviestFish.items.map((f) => (
-                    <li key={f.id} className="flex items-start justify-between gap-3">
+                  {mostSpeciesInOneHour.items.map((it, idx) => (
+                    <li key={idx} className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">
-                          {f.fish}
-                          {parseFloat(f.size) > 0 ? ` • ${parseFloat(f.size).toFixed(0)} cm` : ''} •{' '}
-                          {formatDateTimeSafe(f.timestamp)}
+                        <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">{it.hourLabel}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                          Insgesamt in dieser Stunde: <b>{it.totalThatHour}</b> Fänge
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {it.species.map((s) => (
+                            <Pill key={s}>{s}</Pill>
+                          ))}
                         </div>
                       </div>
                       <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                        {parseFloat(f.weight).toFixed(1)} kg
+                        {mostSpeciesInOneHour.count} Arten
                       </div>
                     </li>
                   ))}
                 </ul>
               </>
             ) : (
-              <p>Keine Gewichtsangaben vorhanden.</p>
-            )}
-          </Card>,
-
-          // 14) Effizienz
-          <Card key="efficiency" title="🏅 Wer angelt am effizientesten? (Fische pro Fangtag)">
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-              Nur Angler mit mindestens {MIN_EFFICIENCY_DAYS} Fangtagen zählen.
-            </p>
-            {mostEfficientAngler.winners.length > 0 ? (
-              <ul className="space-y-2">
-                {mostEfficientAngler.winners.map((it, idx) => (
-                  <li key={idx} className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">
-                        {it.fish} Fische auf {it.days} Fangtage
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {it.ratio.toLocaleString('de-DE', { maximumFractionDigits: 2 })} / Tag
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
               <p>Keine Daten</p>
-            )}
-          </Card>,
-
-          // 15) Rotaugen
-          <Card key="rotauge" title="🐟 Wer fängt beim ASV Rotauge die meisten Rotaugen?">
-            {mostRotaugen.winners.length > 0 ? (
-              <ul className="space-y-2">
-                {mostRotaugen.winners.map((it, idx) => (
-                  <li key={idx} className="flex items-center justify-between">
-                    <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {it.count}x
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>Keine Rotaugen gefangen.</p>
             )}
           </Card>,
 
@@ -780,6 +796,23 @@ export default function FunFactsCards({ data }) {
             </p>
           </Card>,
 
+          <Card key="rotauge" title="🐟 Wer fängt beim ASV Rotauge die meisten Rotaugen?">
+            {mostRotaugen.winners.length > 0 ? (
+              <ul className="space-y-2">
+                {mostRotaugen.winners.map((it, idx) => (
+                  <li key={idx} className="flex items-center justify-between">
+                    <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                      {it.count}x
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Keine Rotaugen gefangen.</p>
+            )}
+          </Card>,
+
           // 21) Top 3 Arten
           <Card key="top3" title="🐟 Welche drei Fischarten werden am meisten gefangen?">
             {topThreeSpecies.items.length > 0 ? (
@@ -835,84 +868,6 @@ export default function FunFactsCards({ data }) {
               </ol>
             ) : (
               <p>Keine auswertbaren Fänge.</p>
-            )}
-          </Card>,
-
-          // 22) Längste Pause
-          <Card key="pause" title="⏳ Wer muss sich am längsten zwischen den Fangtagen ausruhen?">
-            {longestBreakBetweenCatchDays.winners.length > 0 ? (
-              <ul className="space-y-2">
-                {longestBreakBetweenCatchDays.winners.map((it, idx) => (
-                  <li key={idx} className="flex items-start justify-between gap-3">
-                    <div className="max-w-[70%]">
-                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">
-                        Pause von {formatDayShortSafe(`${it.from}T00:00:00`)} bis {formatDayShortSafe(`${it.to}T00:00:00`)}
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {it.gap} Tage
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>Keine auswertbaren Pausen (zu wenige Fangtage je Angler).</p>
-            )}
-          </Card>,
-
-          // 23) Längste Serie
-          <Card key="streak" title="🔥 Wer hat die längste Fangserie hingelegt? (aufeinanderfolgende Fangtage)">
-            {longestCatchStreak.winners.length > 0 ? (
-              <ul className="space-y-2">
-                {longestCatchStreak.winners.map((it, idx) => (
-                  <li key={idx} className="flex items-start justify-between gap-3">
-                    <div className="max-w-[70%]">
-                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">
-                        Serie von {it.len} Tag{it.len === 1 ? '' : 'en'}: {formatDayShortSafe(`${it.from}T00:00:00`)} – {formatDayShortSafe(`${it.to}T00:00:00`)}
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {it.len} Tage
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>Keine auswertbaren Serien.</p>
-            )}
-          </Card>,
-
-          // 24) Paare
-          <Card key="buddies" title="👥 Wer fängt gern zusammen? (Top 3 Paare)">
-            {fishPairs.lauraNicol ? (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 italic">
-                😉 Referenz: Laura & Nicol – {fishPairs.lauraNicol.count} Fische
-              </p>
-            ) : (
-              <p className="text-xs text-gray-400 mb-3 italic">
-                😉 Referenz: Laura & Nicol – noch keine gemeinsamen Fänge
-              </p>
-            )}
-
-            {fishPairs.top3.length > 0 ? (
-              <ul className="space-y-3">
-                {fishPairs.top3.map((p, idx) => (
-                  <li key={idx} className="flex items-start justify-between gap-3">
-                    <div className="max-w-[70%]">
-                      <div className="text-green-700 dark:text-green-300 font-medium">
-                        {p.a} &amp; {p.b}
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {p.count}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>Keine gemeinsamen Fänge gefunden.</p>
             )}
           </Card>,
 
@@ -1021,6 +976,106 @@ export default function FunFactsCards({ data }) {
               </ul>
             ) : (
               <p>Alle bleiben brav am Ferkensbruch 😉</p>
+            )}
+          </Card>,
+
+          // 22) Längste Pause
+          <Card key="pause" title="⏳ Wer muss sich am längsten zwischen den Fangtagen ausruhen?">
+            {longestBreakBetweenCatchDays.winners.length > 0 ? (
+              <ul className="space-y-2">
+                {longestBreakBetweenCatchDays.winners.map((it, idx) => (
+                  <li key={idx} className="flex items-start justify-between gap-3">
+                    <div className="max-w-[70%]">
+                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-300">
+                        Pause von {formatDayShortSafe(`${it.from}T00:00:00`)} bis {formatDayShortSafe(`${it.to}T00:00:00`)}
+                      </div>
+                    </div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                      {it.gap} Tage
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Keine auswertbaren Pausen (zu wenige Fangtage je Angler).</p>
+            )}
+          </Card>,
+
+          // 23) Längste Serie
+          <Card key="streak" title="🔥 Wer hat die längste Fangserie hingelegt? (aufeinanderfolgende Fangtage)">
+            {longestCatchStreak.winners.length > 0 ? (
+              <ul className="space-y-2">
+                {longestCatchStreak.winners.map((it, idx) => (
+                  <li key={idx} className="flex items-start justify-between gap-3">
+                    <div className="max-w-[70%]">
+                      <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-300">
+                        Serie von {it.len} Tag{it.len === 1 ? '' : 'en'}: {formatDayShortSafe(`${it.from}T00:00:00`)} – {formatDayShortSafe(`${it.to}T00:00:00`)}
+                      </div>
+                    </div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                      {it.len} Tage
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Keine auswertbaren Serien.</p>
+            )}
+          </Card>,
+
+          // 24) Paare
+          <Card key="buddies" title="👥 Wer fängt gern zusammen? (Top 3 Paare)">
+            {fishPairs.lauraNicol ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 italic">
+                😉 Referenz: Laura & Nicol – {fishPairs.lauraNicol.count} Fische
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 mb-3 italic">
+                😉 Referenz: Laura & Nicol – noch keine gemeinsamen Fänge
+              </p>
+            )}
+
+            {fishPairs.top3.length > 0 ? (
+              <ul className="space-y-3">
+                {fishPairs.top3.map((p, idx) => (
+                  <li key={idx} className="flex items-start justify-between gap-3">
+                    <div className="max-w-[70%]">
+                      <div className="text-green-700 dark:text-green-300 font-medium">
+                        {p.a} &amp; {p.b}
+                      </div>
+                    </div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                      {p.count}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Keine gemeinsamen Fänge gefunden.</p>
+            )}
+          </Card>,
+
+          <Card key="overallAvg" title="📊 Ø Fische pro Angler-Tag (gesamt)">
+            {overallAvgPerAnglerDay.totalAnglerDays > 0 ? (
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <div className="text-3xl font-bold text-green-700 dark:text-green-300">
+                    {overallAvgPerAnglerDay.avg.toFixed(2)}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Ø Fische pro Angler-Tag
+                  </div>
+                </div>
+                <div className="text-xs text-right text-gray-500 dark:text-gray-400">
+                  Basis: {overallAvgPerAnglerDay.totalAnglerDays} Angler-Tage,
+                  <br />
+                  {overallAvgPerAnglerDay.totalFishes} Fänge
+                </div>
+              </div>
+            ) : (
+              <p>Keine Daten</p>
             )}
           </Card>,
 
@@ -1213,29 +1268,6 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
 
-          // 33) 📊 Ø Fische pro Angler-Tag (gesamt)
-          <Card key="overallAvg" title="📊 Ø Fische pro Angler-Tag (gesamt)">
-            {overallAvgPerAnglerDay.totalAnglerDays > 0 ? (
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <div className="text-3xl font-bold text-green-700 dark:text-green-300">
-                    {overallAvgPerAnglerDay.avg.toFixed(2)}
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Ø Fische pro Angler-Tag
-                  </div>
-                </div>
-                <div className="text-xs text-right text-gray-500 dark:text-gray-400">
-                  Basis: {overallAvgPerAnglerDay.totalAnglerDays} Angler-Tage,
-                  <br />
-                  {overallAvgPerAnglerDay.totalFishes} Fänge
-                </div>
-              </div>
-            ) : (
-              <p>Keine Daten</p>
-            )}
-          </Card>,
-
           // ---------- Card: Angel-Queen
 <Card key="queen" title="Wer ist unsere Angel-Queen?">
   {angelQueen.ranking.length === 0 ? (
@@ -1339,8 +1371,7 @@ export default function FunFactsCards({ data }) {
   ) : (
     <>
       <p className="mb-2">
-        <strong>{photoArtist.winners[0].total}</strong> Fotos – Sieger
-        {photoArtist.winners.length > 1 ? "innen" : ""}:{' '}
+        <strong>{photoArtist.winners[0].total}</strong> Fotos – Sieger:{' '}
         {photoArtist.winners.map((w) => w.angler).join(' & ')} 📸
       </p>
 
@@ -1531,10 +1562,10 @@ export default function FunFactsCards({ data }) {
         count: (overallAvgPerAnglerDay?.totalAnglerDays ?? 0) || null,
         countLabel: 'Angler-Tage',
       },
-      { group: GROUP_LABELS.COMMUNITY, count: (angelQueen?.ranking?.length ?? 0) || null, countLabel: 'Anglerinnen' },
+      { group: GROUP_LABELS.COMMUNITY, count: (angelQueen?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
       { group: GROUP_LABELS.COMMUNITY, count: (recordHunter?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
       { group: GROUP_LABELS.COMMUNITY, count: (photoArtist?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.COMMUNITY, count: (funCardChampion?.ranking?.length ?? 0) || null, countLabel: 'Angler:innen' },
+      { group: GROUP_LABELS.COMMUNITY, count: (funCardChampion?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
     ];
 
     const grouped = [];
@@ -1557,8 +1588,6 @@ export default function FunFactsCards({ data }) {
           key={card.key ?? `card-${counter}`}
           number={counter}
           title={card.props.title}
-          count={descriptor.count}
-          countLabel={descriptor.countLabel}
         >
           {card.props.children}
         </SectionCard>
