@@ -366,7 +366,9 @@ export default function FunFactsCards({ seed, shuffle, data }) {
                         {entry.positions.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {entry.positions.slice(0, 5).map((pos, i) => (
-                              <Pill key={i}>#{pos}</Pill>
+                              <Pill key={`${pos.species}-${pos.rank}-${i}`}>
+                                {pos.species} #{pos.rank}
+                              </Pill>
                             ))}
                             {entry.positions.length > 5 && (
                               <Pill>+{entry.positions.length - 5}</Pill>
@@ -877,11 +879,11 @@ export default function FunFactsCards({ seed, shuffle, data }) {
                     <div className="max-w-[70%]">
                       <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
                       <div className="text-sm text-gray-600 dark:text-gray-300">
-                        Serie von {it.length} Tag{it.length === 1 ? '' : 'en'}: {formatDayShortSafe(`${it.from}T00:00:00`)} – {formatDayShortSafe(`${it.to}T00:00:00`)}
+                        Serie von {it.len} Tag{it.len === 1 ? '' : 'en'}: {formatDayShortSafe(`${it.from}T00:00:00`)} – {formatDayShortSafe(`${it.to}T00:00:00`)}
                       </div>
                     </div>
                     <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {it.length} Tage
+                      {it.len} Tage
                     </div>
                   </li>
                 ))}
@@ -1352,7 +1354,7 @@ export default function FunFactsCards({ seed, shuffle, data }) {
       </p>
 
       <ul className="space-y-2">
-        {photoArtist.ranking.map((it, idx) => {
+        {photoArtist.ranking.slice(0, 5).map((it, idx) => {
           const isWinner = it.total === photoArtist.winners[0].total;
           return (
             <li key={idx} className="flex items-start justify-between gap-3">

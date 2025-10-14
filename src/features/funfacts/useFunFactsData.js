@@ -10,7 +10,6 @@ import {
 } from '../../utils/weatherParsing';
 import {
   formatDateDE,
-  formatDayLabelDE,
   formatTimeDE,
 } from '../../utils/formatters';
 import {
@@ -24,6 +23,7 @@ import {
 import { getWeatherDescription, normalizePlace } from './utils';
 
 const FEMALE_FIRSTNAMES = new Set(['laura', 'marilou', 'julia']);
+const WEEKDAY_LABELS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
 const vertrauteDefaults = ['Nicol Schmidt', 'Laura Rittlinger'];
 
@@ -255,7 +255,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
 
   const mostTopTenFishesMonth = useMemo(() => {
     if (statsFishes.length === 0) {
-      return { bestCount: 0, bestMonths: [], ranking: [], topTen: [] };
+      return { bestCount: 0, bestMonths: [], ranking: [], topEntries: [], topTen: [] };
     }
 
     const withSize = statsFishes
@@ -264,32 +264,53 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
           typeof fish.size === 'number'
             ? fish.size
             : parseFloat(String(fish.size ?? '').replace(',', '.'));
+        const size = Number.isFinite(rawSize) ? rawSize : null;
+        const species = (fish.fish || '').trim() || 'Unbekannt';
         return {
           fish,
-          size: Number.isFinite(rawSize) ? rawSize : null,
+          size,
+          species,
         };
       })
       .filter((entry) => entry.size != null && entry.size > 0);
 
     if (withSize.length === 0) {
-      return { bestCount: 0, bestMonths: [], ranking: [], topTen: [] };
+      return { bestCount: 0, bestMonths: [], ranking: [], topEntries: [], topTen: [] };
     }
 
-    const sortedBySize = [...withSize].sort((a, b) => {
-      if (b.size !== a.size) return b.size - a.size;
-
-      const timeA = new Date(a.fish.timestamp).getTime();
-      const timeB = new Date(b.fish.timestamp).getTime();
-      if (Number.isFinite(timeA) && Number.isFinite(timeB)) return timeA - timeB;
-      if (Number.isFinite(timeA)) return -1;
-      if (Number.isFinite(timeB)) return 1;
-      return 0;
+    const bySpecies = new Map();
+    withSize.forEach((entry) => {
+      const list = bySpecies.get(entry.species) || [];
+      list.push(entry);
+      bySpecies.set(entry.species, list);
     });
 
-    const topTen = sortedBySize.slice(0, 10);
-    const monthCounts = new Map();
+    const topEntries = [];
+    bySpecies.forEach((list, species) => {
+      const sorted = list
+        .slice()
+        .sort((a, b) => {
+          if (b.size !== a.size) return b.size - a.size;
+          const timeA = new Date(a.fish.timestamp).getTime();
+          const timeB = new Date(b.fish.timestamp).getTime();
+          if (Number.isFinite(timeA) && Number.isFinite(timeB)) return timeA - timeB;
+          if (Number.isFinite(timeA)) return -1;
+          if (Number.isFinite(timeB)) return 1;
+          return 0;
+        })
+        .slice(0, 10);
 
-    topTen.forEach(({ fish }) => {
+      sorted.forEach((entry, index) => {
+        topEntries.push({
+          ...entry,
+          species,
+          speciesRank: index + 1,
+        });
+      });
+    });
+
+    const monthCounts = new Map();
+    topEntries.forEach(({ fish }) => {
       const dt = new Date(fish.timestamp);
       if (Number.isNaN(dt.getTime())) return;
       const key = monthKey(dt);
@@ -298,7 +319,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
 
     const months = Array.from(monthCounts.entries()).map(([month, count]) => ({ month, count }));
     if (months.length === 0) {
-      return { bestCount: 0, bestMonths: [], ranking: [], topTen };
+      return { bestCount: 0, bestMonths: [], ranking: [], topEntries, topTen: topEntries };
     }
 
     const bestCount = Math.max(...months.map((m) => m.count));
@@ -307,46 +328,59 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
       .sort((a, b) => a.month.localeCompare(b.month));
     const ranking = [...months].sort((a, b) => b.count - a.count || a.month.localeCompare(b.month));
 
-    return { bestCount, bestMonths, ranking, topTen };
+    return { bestCount, bestMonths, ranking, topEntries, topTen: topEntries };
   }, [statsFishes]);
 
   const topTenAnglers = useMemo(() => {
-    const list = mostTopTenFishesMonth.topTen || [];
+    const list =
+      mostTopTenFishesMonth.topEntries ||
+      mostTopTenFishesMonth.topTen ||
+      [];
     if (!Array.isArray(list) || list.length === 0) {
-      return { ranking: [], top3: [], max: 0 };
+      return { ranking: [], top3: [], max: 0, leaders: [] };
     }
 
     const stats = new Map();
-    list.forEach(({ fish, size }, index) => {
+    list.forEach(({ fish, size, species, speciesRank }) => {
       if (!fish) return;
       const rawName = (fish.angler || 'Unbekannt').trim();
       if (!rawName) return;
-      const key = rawName;
-      const entry = stats.get(key) || {
+      const entry = stats.get(rawName) || {
         angler: rawName,
         count: 0,
         positions: [],
         bestSize: -Infinity,
         bestFish: null,
+        bestRank: Infinity,
       };
       entry.count += 1;
-      entry.positions.push(index + 1);
+      entry.positions.push({ species, rank: speciesRank });
       if (typeof size === 'number' && size > entry.bestSize) {
         entry.bestSize = size;
         entry.bestFish = fish;
       }
-      stats.set(key, entry);
+      if (typeof speciesRank === 'number' && speciesRank < entry.bestRank) {
+        entry.bestRank = speciesRank;
+      }
+      stats.set(rawName, entry);
     });
 
     const ranking = Array.from(stats.values())
       .map((entry) => ({
         ...entry,
         bestSize: Number.isFinite(entry.bestSize) ? entry.bestSize : null,
-        positions: entry.positions.sort((a, b) => a - b),
+        positions: entry.positions
+          .slice()
+          .sort(
+            (a, b) =>
+              (a.rank ?? Infinity) - (b.rank ?? Infinity) ||
+              a.species.localeCompare(b.species, 'de'),
+          ),
       }))
       .sort(
         (a, b) =>
           b.count - a.count ||
+          (a.bestRank ?? Infinity) - (b.bestRank ?? Infinity) ||
           (b.bestSize ?? 0) - (a.bestSize ?? 0) ||
           a.angler.localeCompare(b.angler, 'de'),
       );
@@ -360,7 +394,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
       max,
       leaders,
     };
-  }, [mostTopTenFishesMonth.topTen]);
+  }, [mostTopTenFishesMonth.topEntries, mostTopTenFishesMonth.topTen]);
 
   const topMonthsByAvgSize = useMemo(() => {
     if (statsFishes.length === 0) return { items: [] };
@@ -435,7 +469,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     const items = counts.map((count, day) => ({
       day,
       count,
-      label: formatDayLabelDE(day),
+      label: WEEKDAY_LABELS[day] ?? `Wochentag ${day}`,
       isBest: count === max,
     }));
 
@@ -471,7 +505,9 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
       const [angler, hourLabel] = key.split('__');
       const species = Array.from(speciesByKey[key]).sort();
       const totalThatHour = (listByKey[key] || []).length;
-      return { angler, hourLabel, species, totalThatHour };
+      const [dayPart, timePart] = hourLabel.split(' ');
+      const label = `${formatDateDE(`${dayPart}T00:00:00`)} ${timePart} Uhr`;
+      return { angler, hourLabel: label, species, totalThatHour };
     });
 
     return { count: best, items };
@@ -837,17 +873,27 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
 
     const entries = Object.entries(daysByAngler).map(([angler, daySet]) => {
       const days = [...daySet].sort();
-      if (days.length < 2) return { angler, gap: 0, lastGap: 0, days: daySet.size };
+      if (days.length < 2) {
+        return { angler, gap: 0, lastGap: 0, days: daySet.size };
+      }
+
       let maxGap = 0;
+      let gapStart = days[0];
+      let gapEnd = days[0];
       let lastGap = 0;
+
       for (let i = 1; i < days.length; i += 1) {
         const prev = new Date(`${days[i - 1]}T00:00:00`);
         const curr = new Date(`${days[i]}T00:00:00`);
         const diff = (curr - prev) / (1000 * 60 * 60 * 24);
-        if (diff > maxGap) maxGap = diff;
+        if (diff > maxGap) {
+          maxGap = diff;
+          gapStart = days[i - 1];
+          gapEnd = days[i];
+        }
         lastGap = diff;
       }
-      return { angler, gap: maxGap, lastGap, days: daySet.size };
+      return { angler, gap: maxGap, from: gapStart, to: gapEnd, lastGap, days: daySet.size };
     });
 
     const filtered = entries.filter(Boolean);
@@ -877,25 +923,45 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
       (daysByAngler[who] ||= new Set()).add(day);
     });
 
+    const parseDay = (value) => new Date(`${value}T00:00:00`);
+
     const entries = Object.entries(daysByAngler).map(([angler, daySet]) => {
-      const days = [...daySet]
-        .map((d) => new Date(`${d}T00:00:00`))
-        .filter((d) => !Number.isNaN(d.getTime()))
-        .sort((a, b) => a - b);
-      if (days.length === 0) return { angler, len: 0, total: 0 };
+      const dayStrings = [...daySet].sort();
+      if (dayStrings.length === 0) return null;
 
       let maxLen = 1;
-      let current = 1;
-      for (let i = 1; i < days.length; i += 1) {
-        const diff = (days[i] - days[i - 1]) / (1000 * 60 * 60 * 24);
+      let bestStart = dayStrings[0];
+      let bestEnd = dayStrings[0];
+
+      let currentLen = 1;
+      let currentStart = dayStrings[0];
+
+      for (let i = 1; i < dayStrings.length; i += 1) {
+        const prev = parseDay(dayStrings[i - 1]);
+        const curr = parseDay(dayStrings[i]);
+        const diff = (curr - prev) / (1000 * 60 * 60 * 24);
+
         if (diff === 1) {
-          current += 1;
-          if (current > maxLen) maxLen = current;
+          currentLen += 1;
         } else {
-          current = 1;
+          currentLen = 1;
+          currentStart = dayStrings[i];
+        }
+
+        if (currentLen > maxLen) {
+          maxLen = currentLen;
+          bestStart = currentStart;
+          bestEnd = dayStrings[i];
         }
       }
-      return { angler, len: maxLen, total: days.length };
+
+      return {
+        angler,
+        len: maxLen,
+        total: dayStrings.length,
+        from: bestStart,
+        to: bestEnd,
+      };
     });
 
     const filtered = entries.filter(Boolean);
