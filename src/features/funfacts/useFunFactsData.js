@@ -672,6 +672,26 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     return { max, winners, ranking: entries };
   }, [statsFishes]);
 
+  const mostAtNewMoon = useMemo(() => {
+    const counts = {};
+    const isNewMoon = (phase, eps = 0.06) =>
+      phase != null && (phase <= eps || phase >= 1 - eps);
+
+    statsFishes.forEach((f) => {
+      const phase = extractMoonPhase(f);
+      if (!isNewMoon(phase)) return;
+      const who = (f.angler || 'Unbekannt').trim();
+      counts[who] = (counts[who] || 0) + 1;
+    });
+
+    const entries = Object.entries(counts).map(([angler, count]) => ({ angler, count }));
+    if (entries.length === 0) return { max: 0, winners: [], ranking: [] };
+    entries.sort((a, b) => b.count - a.count || a.angler.localeCompare(b.angler));
+    const max = entries[0].count;
+    const winners = entries.filter((e) => e.count === max);
+    return { max, winners, ranking: entries };
+  }, [statsFishes]);
+
   const nightOwls = useMemo(() => {
     if (statsFishes.length === 0) return { winners: [], ranking: [], total: 0 };
 
@@ -1045,6 +1065,35 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     return { winners, maxSize };
   }, [statsFishes]);
 
+  const pikeMaster = useMemo(() => {
+    const onlyPike = statsFishes
+      .map((f) => ({
+        f,
+        size: typeof f.size === 'number' ? f.size : parseFloat(f.size),
+        fishName: (f.fish || '').trim().toLowerCase(),
+      }))
+      .filter(
+        (x) =>
+          (x.fishName === 'hecht' || x.fishName.includes('hecht')) &&
+          !Number.isNaN(x.size) &&
+          x.size > 0,
+      );
+
+    if (onlyPike.length === 0) return { winners: [], maxSize: null };
+
+    const maxSize = Math.max(...onlyPike.map((x) => x.size));
+    const winners = onlyPike
+      .filter((x) => Math.abs(x.size - maxSize) < 1e-6)
+      .map((x) => ({
+        angler: (x.f.angler || 'Unbekannt').trim() || 'Unbekannt',
+        fish: x.f,
+        size: x.size,
+      }))
+      .sort((a, b) => a.angler.localeCompare(b.angler, 'de'));
+
+    return { winners, maxSize };
+  }, [statsFishes]);
+
   const eelWizard = useMemo(() => {
     const onlyEels = statsFishes.filter((f) => f.fish?.trim().toLowerCase() === 'aal');
     if (onlyEels.length === 0) return null;
@@ -1333,6 +1382,43 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     return { avg, totalAnglerDays, totalFishes };
   }, [statsFishes]);
 
+  const avgPerAnglerDayByMonth = useMemo(() => {
+    if (statsFishes.length === 0) {
+      return { months: [], maxAvg: 0 };
+    }
+
+    const perMonth = new Map();
+    statsFishes.forEach((f) => {
+      const timestamp = new Date(f.timestamp);
+      if (Number.isNaN(timestamp.getTime())) return;
+
+      const month = monthKey(timestamp);
+      const dayKey = localDayKey(timestamp);
+      const angler = (f.angler || 'Unbekannt').trim() || 'Unbekannt';
+      const key = `${angler}|${dayKey}`;
+
+      const dayCounts = perMonth.get(month) || new Map();
+      dayCounts.set(key, (dayCounts.get(key) || 0) + 1);
+      perMonth.set(month, dayCounts);
+    });
+
+    const months = Array.from(perMonth.entries())
+      .map(([month, counts]) => {
+        let totalFishes = 0;
+        counts.forEach((cnt) => {
+          totalFishes += cnt;
+        });
+        const totalAnglerDays = counts.size;
+        const avg = totalAnglerDays ? totalFishes / totalAnglerDays : 0;
+        return { month, avg, totalAnglerDays, totalFishes };
+      })
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    const maxAvg = months.reduce((max, entry) => Math.max(max, entry.avg), 0);
+
+    return { months, maxAvg };
+  }, [statsFishes]);
+
   const angelQueen = useMemo(() => {
     if (statsFishes.length === 0) return { winners: [], ranking: [] };
 
@@ -1476,7 +1562,9 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     addList(heaviestFish?.items, (item) => item?.angler);
     addList(mostEfficientAngler.winners, (item) => item?.angler);
     addList(mostRotaugen.winners, (item) => item?.angler);
+    addList(pikeMaster.winners, (item) => item?.angler);
     addList(mostAtFullMoon.winners, (item) => item?.angler);
+    addList(mostAtNewMoon.winners, (item) => item?.angler);
     addList(nightOwls.winners, (item) => item?.angler);
     addList(earlyBird.winners, (item) => item?.angler);
     addList(mostInRain.winners, (item) => item?.angler);
@@ -1534,7 +1622,9 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     heaviestFish,
     mostEfficientAngler,
     mostRotaugen,
+    pikeMaster,
     mostAtFullMoon,
+    mostAtNewMoon,
     nightOwls,
     earlyBird,
     mostInRain,
@@ -1554,6 +1644,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     frostCatch,
     extremeWeatherCatch,
     overallAvgPerAnglerDay,
+    avgPerAnglerDayByMonth,
     angelQueen,
     photoArtist,
     recordHunter,
@@ -1584,6 +1675,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     mostEfficientAngler,
     mostRotaugen,
     mostAtFullMoon,
+    mostAtNewMoon,
     nightOwls,
     earlyBird,
     mostInRain,
@@ -1594,6 +1686,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     longestCatchStreak,
     fishPairs,
     zanderQueen,
+    pikeMaster,
     eelWizard,
     grundelChampion,
     foreignAnglers,
@@ -1603,6 +1696,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     frostCatch,
     extremeWeatherCatch,
     overallAvgPerAnglerDay,
+    avgPerAnglerDayByMonth,
     angelQueen,
     photoArtist,
     recordHunter,

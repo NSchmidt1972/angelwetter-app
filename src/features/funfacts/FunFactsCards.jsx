@@ -61,6 +61,7 @@ const CARD_GROUPS = {
   places: GROUP_LABELS.CALENDAR,
   speciesHour: GROUP_LABELS.WEATHER,
   fullmoon: GROUP_LABELS.WEATHER,
+  newmoon: GROUP_LABELS.WEATHER,
   'night-count': GROUP_LABELS.WEATHER,
   early: GROUP_LABELS.WEATHER,
   rain: GROUP_LABELS.WEATHER,
@@ -72,6 +73,7 @@ const CARD_GROUPS = {
   top3: GROUP_LABELS.SPECIES,
   'avg-size': GROUP_LABELS.SPECIES,
   zander: GROUP_LABELS.SPECIES,
+  hecht: GROUP_LABELS.SPECIES,
   eel: GROUP_LABELS.SPECIES,
   grundel: GROUP_LABELS.SPECIES,
   foreign: GROUP_LABELS.SPECIES,
@@ -79,6 +81,7 @@ const CARD_GROUPS = {
   streak: GROUP_LABELS.ENDURANCE,
   buddies: GROUP_LABELS.ENDURANCE,
   overallAvg: GROUP_LABELS.ENDURANCE,
+  'avg-per-month': GROUP_LABELS.ENDURANCE,
   schneiderKing: GROUP_LABELS.BLANKS,
   worstBlankMonth: GROUP_LABELS.BLANKS,
   queen: GROUP_LABELS.COMMUNITY,
@@ -107,7 +110,9 @@ export default function FunFactsCards({ data }) {
     heaviestFish,
     mostEfficientAngler,
     mostRotaugen,
+    pikeMaster,
     mostAtFullMoon,
+    mostAtNewMoon,
     nightOwls,
     earlyBird,
     mostInRain,
@@ -127,6 +132,7 @@ export default function FunFactsCards({ data }) {
     frostCatch,
     extremeWeatherCatch,
     overallAvgPerAnglerDay,
+    avgPerAnglerDayByMonth,
     angelQueen,
     recordHunter,
     photoArtist,
@@ -676,6 +682,26 @@ export default function FunFactsCards({ data }) {
             </p>
           </Card>,
 
+          <Card key="newmoon" title="🌑 Wer fängt am meisten bei Neumond?">
+            {mostAtNewMoon.winners.length > 0 ? (
+              <ul className="space-y-2">
+                {mostAtNewMoon.winners.map((it, idx) => (
+                  <li key={idx} className="flex items-center justify-between">
+                    <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                      {it.count}x
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Keine (auswertbaren) Neumond-Fänge.</p>
+            )}
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Hinweis: Es werden nur Fänge gezählt, bei denen in den Wetterdaten eine Mondphase gespeichert ist (Neumond ≈ 0.0 ± 0.06 bzw. 1.0 ± 0.06).
+            </p>
+          </Card>,
+
           // 17) Nachteule – Meiste Nachtfänge
           <Card key="night-count" title="🦉 Wer ist unsere Nachteule?">
             {nightOwls.winners.length > 0 ? (
@@ -796,6 +822,143 @@ export default function FunFactsCards({ data }) {
             </p>
           </Card>,
 
+          // 21) 🔥 Heißester Fang (größter Fisch bei höchster Temperatur)
+          <Card key="hottestCatch" title="🔥 Heißester Fang (größter Fisch bei höchster Temperatur)">
+            {hottestCatch ? (
+              <>
+                <p className="mb-2">
+                  Höchste Temperatur:{' '}
+                  <b className="text-green-700 dark:text-green-300">
+                    {hottestCatch.tempC.toFixed(1)}°C
+                  </b>
+                </p>
+                <ul className="space-y-2">
+                  {hottestCatch.items.map((f) => (
+                    <li key={f.id} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-green-700 dark:text-green-300">
+                          {f.angler}
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          {f.fish} • {formatDateTimeSafe(f.timestamp)}
+                        </div>
+                      </div>
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                        {parseFloat(f.size).toFixed(0)} cm
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>Keine Temperaturdaten vorhanden.</p>
+            )}
+          </Card>,
+
+          // 22) ❄️ Kältester Fang (Frost)
+          <Card key="frostCatch" title="❄️ Kältester Fang: Wer hat bei Frost gefangen? (≤ 0 °C)">
+            {frostCatch.ranking.length > 0 ? (
+              <>
+                <ul className="space-y-2">
+                  {frostCatch.winners.map((it, idx) => (
+                    <li key={idx} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-green-700 dark:text-green-300">
+                          {it.angler}
+                        </div>
+                        {it.sample && (
+                          <div className="text-xs text-gray-600 dark:text-gray-300">
+                            Beispiel: {it.sample.fish} • {parseFloat(it.bestSize).toFixed(0)} cm • {formatDateTimeSafe(it.sample.timestamp)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                          {it.count}x
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Frost-Fänge
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                  Rangliste (Top 5):
+                </div>
+                <ul className="space-y-1">
+                  {frostCatch.ranking.slice(0, 5).map((it, i) => (
+                    <li key={i} className="flex justify-between text-sm">
+                      <span>
+                        {i + 1}. {it.angler}
+                      </span>
+                      <span className="font-semibold">{it.count}x</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>Keine Frost-Fänge gefunden.</p>
+            )}
+          </Card>,
+
+          // 22b) 🌩️ Extremster Wetterfang
+          <Card key="extremeWeather" title="🌩️ Extremster Wetterfang">
+            {extremeWeatherCatch ? (
+              <>
+                <p className="mb-2 text-sm text-gray-600 dark:text-gray-300">
+                  Score basiert auf Temperatur, Wind, Niederschlag & Wetterbeschreibung – je höher, desto ungemütlicher.
+                </p>
+                <ul className="space-y-3">
+                  {extremeWeatherCatch.ranking.slice(0, 3).map((item, idx) => {
+                    const isWinner = Math.abs(item.score - extremeWeatherCatch.bestScore) < 1e-6;
+                    return (
+                      <li key={item.fish.id ?? idx} className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div
+                            className={`font-medium ${
+                              isWinner
+                                ? 'text-pink-700 dark:text-pink-300'
+                                : 'text-green-700 dark:text-green-300'
+                            }`}
+                          >
+                            {item.fish.angler || 'Unbekannt'} {isWinner ? '👑' : ''}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-300">
+                            {item.fish.fish} • {parseFloat(item.fish.size).toFixed(0)} cm • {formatDateTimeSafe(item.fish.timestamp)}
+                          </div>
+                          {item.weatherDesc && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Wetter: {item.weatherDesc}
+                            </div>
+                          )}
+                          {item.highlights.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {item.highlights.map((text, i) => (
+                                <Pill key={i}>{text}</Pill>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                            Score {Math.round(item.score)}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            höher = ungemütlicher
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : (
+              <p className="text-gray-600 dark:text-gray-300">Noch keine Wetterdaten verfügbar.</p>
+            )}
+          </Card>,
+
           <Card key="rotauge" title="🐟 Wer fängt beim ASV Rotauge die meisten Rotaugen?">
             {mostRotaugen.winners.length > 0 ? (
               <ul className="space-y-2">
@@ -871,7 +1034,38 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
 
-          // 25) Wer ist die Zander-Queen?
+          // 25) Wer ist der Hecht-Meister?
+          <Card key="hecht" title="🛶 Wer ist der Hecht-Meister?">
+            {pikeMaster.winners.length > 0 && pikeMaster.maxSize ? (
+              <>
+                <p className="mb-2 text-sm text-gray-600 dark:text-gray-300">
+                  Größter Hecht:{' '}
+                  <b className="text-green-700 dark:text-green-300">
+                    {pikeMaster.maxSize.toFixed(0)} cm
+                  </b>
+                </p>
+                <ul className="space-y-2">
+                  {pikeMaster.winners.map((it, idx) => (
+                    <li key={idx} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-300">
+                          {formatDateTimeSafe(it.fish.timestamp)}
+                        </div>
+                      </div>
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                        {it.size.toFixed(0)} cm
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-gray-600 dark:text-gray-300">Noch kein Hecht in Sicht.</p>
+            )}
+          </Card>,
+
+          // 26) Wer ist die Zander-Queen?
           <Card key="zander" title="🐊 Wer ist die Zander-Queen?">
             {zanderQueen.winners.length > 0 && zanderQueen.maxSize ? (
               <>
@@ -1079,6 +1273,48 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
 
+          <Card key="avg-per-month" title="📈 Ø Fische pro Angler-Tag nach Monat">
+            {avgPerAnglerDayByMonth.months.length > 0 ? (
+              <div className="space-y-3">
+                {avgPerAnglerDayByMonth.months.map((entry) => {
+                  const ratio =
+                    avgPerAnglerDayByMonth.maxAvg > 0
+                      ? (entry.avg / avgPerAnglerDayByMonth.maxAvg) * 100
+                      : 0;
+                  const width =
+                    entry.avg > 0
+                      ? Math.min(100, Math.max(6, ratio))
+                      : 0;
+                  return (
+                    <div key={entry.month} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-200">
+                        <span>{monthLabel(entry.month)}</span>
+                        <span className="tabular-nums text-xs text-gray-500 dark:text-gray-400">
+                          {entry.avg.toLocaleString('de-DE', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{' '}
+                          Ø
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-green-500 dark:bg-green-400 transition-all"
+                          style={{ width: `${width}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Basis: {entry.totalAnglerDays} Angler-Tage · {entry.totalFishes} Fänge
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p>Keine monatlichen Daten.</p>
+            )}
+          </Card>,
+
           // 29) Schneiderkönig
           <Card key="schneiderKing" title="❌ Wer ist der Schneiderkönig?">
             {schneiderKoenig.winners.length > 0 ? (
@@ -1135,136 +1371,6 @@ export default function FunFactsCards({ data }) {
               </>
             ) : (
               <p>Keine Schneidersessions erfasst.</p>
-            )}
-          </Card>,
-
-          // 31) 🔥 Heißester Fang (größter Fisch bei höchster Temperatur)
-          <Card key="hottestCatch" title="🔥 Heißester Fang (größter Fisch bei höchster Temperatur)">
-            {hottestCatch ? (
-              <>
-                <p className="mb-2">
-                  Höchste Temperatur:{' '}
-                  <b className="text-green-700 dark:text-green-300">
-                    {hottestCatch.tempC.toFixed(1)}°C
-                  </b>
-                </p>
-                <ul className="space-y-2">
-                  {hottestCatch.items.map((f) => (
-                    <li key={f.id} className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-green-700 dark:text-green-300">
-                          {f.angler}
-                        </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">
-                          {f.fish} • {formatDateTimeSafe(f.timestamp)}
-                        </div>
-                      </div>
-                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                        {parseFloat(f.size).toFixed(0)} cm
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p>Keine Temperaturdaten vorhanden.</p>
-            )}
-          </Card>,
-
-          // 32) ❄️ Kältester Fang (Frost)
-          <Card key="frostCatch" title="❄️ Kältester Fang: Wer hat bei Frost gefangen? (≤ 0 °C)">
-            {frostCatch.ranking.length > 0 ? (
-              <>
-                <ul className="space-y-2">
-                  {frostCatch.winners.map((it, idx) => (
-                    <li key={idx} className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-green-700 dark:text-green-300">
-                          {it.angler}
-                        </div>
-                        {it.sample && (
-                          <div className="text-xs text-gray-600 dark:text-gray-300">
-                            Beispiel: {it.sample.fish} • {parseFloat(it.bestSize).toFixed(0)} cm • {formatDateTimeSafe(it.sample.timestamp)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                          {it.count}x
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Frost-Fänge
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                  Rangliste (Top 5):
-                </div>
-                <ul className="space-y-1">
-                  {frostCatch.ranking.slice(0, 5).map((it, i) => (
-                    <li key={i} className="flex justify-between text-sm">
-                      <span>
-                        {i + 1}. {it.angler}
-                      </span>
-                      <span className="font-semibold">{it.count}x</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p>Keine Frost-Fänge gefunden.</p>
-            )}
-          </Card>,
-
-          // 32b) 🌩️ Extremster Wetterfang
-          <Card key="extremeWeather" title="🌩️ Extremster Wetterfang">
-            {extremeWeatherCatch ? (
-              <>
-                <p className="mb-2 text-sm text-gray-600 dark:text-gray-300">
-                  Score basiert auf Temperatur, Wind, Niederschlag & Wetterbeschreibung – je höher, desto ungemütlicher.
-                </p>
-                <ul className="space-y-3">
-                  {extremeWeatherCatch.ranking.slice(0, 3).map((item, idx) => {
-                    const isWinner = Math.abs(item.score - extremeWeatherCatch.bestScore) < 1e-6;
-                    return (
-                      <li key={item.fish.id ?? idx} className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div
-                            className={`font-medium ${
-                              isWinner
-                                ? 'text-pink-700 dark:text-pink-300'
-                                : 'text-green-700 dark:text-green-300'
-                            }`}
-                          >
-                            {item.fish.angler || 'Unbekannt'} {isWinner ? '👑' : ''}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-300">
-                            {item.fish.fish} • {parseFloat(item.fish.size).toFixed(0)} cm • {formatDateTimeSafe(item.fish.timestamp)}
-                          </div>
-                          {item.weatherDesc && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              Wetter: {item.weatherDesc}
-                            </div>
-                          )}
-                          {item.highlights.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {item.highlights.map((text, i) => (
-                                <Pill key={i}>{text}</Pill>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                       
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            ) : (
-              <p className="text-gray-600 dark:text-gray-300">Noch keine Wetterdaten verfügbar.</p>
             )}
           </Card>,
 
@@ -1491,12 +1597,15 @@ export default function FunFactsCards({ data }) {
       heaviestFish,
       mostEfficientAngler,
       mostRotaugen,
+      pikeMaster,
       mostAtFullMoon,
+      mostAtNewMoon,
       nightOwls,
       earlyBird,
       mostInRain,
       sunshineOnly,
       topThreeSpecies,
+      avgPerAnglerDayByMonth,
       longestBreakBetweenCatchDays,
       longestCatchStreak,
       fishPairs,
@@ -1519,127 +1628,33 @@ export default function FunFactsCards({ data }) {
   );
 
   const sections = useMemo(() => {
-    const descriptors = [
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostInOneDay?.items?.length ?? 0) || null, countLabel: 'Rekorde' },
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (biggest?.items?.length ?? 0) || null, countLabel: 'Rekordfänge' },
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (smallest?.items?.length ?? 0) || null, countLabel: 'Fänge' },
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostInOneHour?.items?.length ?? 0) || null, countLabel: 'Rekorde' },
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostSpeciesInOneDay?.items?.length ?? 0) || null, countLabel: 'Rekorde' },
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostMonsterFishes?.items?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.CALENDAR, count: (mostFishesDay?.days?.length ?? 0) || null, countLabel: 'Tage' },
-      { group: GROUP_LABELS.CALENDAR, count: (mostFishesMonth?.months?.length ?? 0) || null, countLabel: 'Monate' },
-      { group: GROUP_LABELS.CALENDAR, count: (mostTopTenFishesMonth?.bestMonths?.length ?? 0) || null, countLabel: 'Monate' },
-      { group: GROUP_LABELS.CALENDAR, count: (topTenAnglers?.top3?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.CALENDAR, count: (topMonthsByAvgSize?.items?.length ?? 0) || null, countLabel: 'Monate' },
-      { group: GROUP_LABELS.CALENDAR, count: (mostFishesWeekday?.items?.length ?? 0) || null, countLabel: 'Tage' },
-      { group: GROUP_LABELS.WEATHER, count: (mostSpeciesInOneHour?.items?.length ?? 0) || null, countLabel: 'Rekorde' },
-      { group: GROUP_LABELS.CALENDAR, count: (mostPlacesAngler?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (predatorKing?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (heaviestFish?.items?.length ?? 0) || null, countLabel: 'Fänge' },
-      { group: GROUP_LABELS.HIGHLIGHTS, count: (mostEfficientAngler?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.SPECIES, count: (mostRotaugen?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.WEATHER, count: (mostAtFullMoon?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.WEATHER, count: (nightOwls?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.WEATHER, count: (earlyBird?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.WEATHER, count: (mostInRain?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.WEATHER, count: (sunshineOnly?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.SPECIES, count: (topThreeSpecies?.items?.length ?? 0) || null, countLabel: 'Arten' },
-      { group: GROUP_LABELS.SPECIES, count: (averageSizeByAngler?.top3?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.ENDURANCE, count: (longestBreakBetweenCatchDays?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.ENDURANCE, count: (longestCatchStreak?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.ENDURANCE, count: (fishPairs?.top3?.length ?? 0) || null, countLabel: 'Paare' },
-      { group: GROUP_LABELS.SPECIES, count: (zanderQueen?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.SPECIES, count: eelWizard ? 1 : null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.SPECIES, count: grundelChampion ? 1 : null, countLabel: 'Champion' },
-      { group: GROUP_LABELS.SPECIES, count: (foreignAnglers?.top3?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.BLANKS, count: (schneiderKoenig?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.BLANKS, count: (worstBlankMonth?.winners?.length ?? 0) || null, countLabel: 'Monate' },
-      { group: GROUP_LABELS.WEATHER, count: (hottestCatch?.items?.length ?? 0) || null, countLabel: 'Fänge' },
-      { group: GROUP_LABELS.WEATHER, count: (frostCatch?.winners?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.WEATHER, count: (extremeWeatherCatch?.ranking?.length ?? 0) || null, countLabel: 'Fänge' },
-      {
-        group: GROUP_LABELS.ENDURANCE,
-        count: (overallAvgPerAnglerDay?.totalAnglerDays ?? 0) || null,
-        countLabel: 'Angler-Tage',
-      },
-      { group: GROUP_LABELS.COMMUNITY, count: (angelQueen?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.COMMUNITY, count: (recordHunter?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.COMMUNITY, count: (photoArtist?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
-      { group: GROUP_LABELS.COMMUNITY, count: (funCardChampion?.ranking?.length ?? 0) || null, countLabel: 'Angler' },
-    ];
-
     const grouped = [];
     const byGroup = new Map();
     let counter = 0;
 
     cards.forEach((card, idx) => {
       if (!React.isValidElement(card)) return;
-      const descriptor = descriptors[idx] || {};
-      const groupTitle = descriptor.group || GROUP_LABELS.HIGHLIGHTS;
+
+      const cardKey = card.key ?? `card-${idx}`;
+      const groupTitle = CARD_GROUPS[cardKey] || GROUP_LABELS.HIGHLIGHTS;
+
       let section = byGroup.get(groupTitle);
       if (!section) {
         section = { title: groupTitle, cards: [] };
         byGroup.set(groupTitle, section);
         grouped.push(section);
       }
+
       counter += 1;
       section.cards.push(
-        <SectionCard
-          key={card.key ?? `card-${counter}`}
-          number={counter}
-          title={card.props.title}
-        >
+        <SectionCard key={cardKey} number={counter} title={card.props.title}>
           {card.props.children}
         </SectionCard>
       );
     });
 
     return grouped;
-  }, [
-    cards,
-    mostInOneDay,
-    biggest,
-    smallest,
-    mostInOneHour,
-    mostSpeciesInOneDay,
-    mostMonsterFishes,
-    mostFishesDay,
-    mostFishesMonth,
-    mostTopTenFishesMonth,
-    topTenAnglers,
-    topMonthsByAvgSize,
-    mostFishesWeekday,
-    mostSpeciesInOneHour,
-    mostPlacesAngler,
-    predatorKing,
-    heaviestFish,
-    mostEfficientAngler,
-    mostRotaugen,
-    mostAtFullMoon,
-    nightOwls,
-    earlyBird,
-    mostInRain,
-    sunshineOnly,
-    topThreeSpecies,
-    averageSizeByAngler,
-    longestBreakBetweenCatchDays,
-    longestCatchStreak,
-    fishPairs,
-    zanderQueen,
-    eelWizard,
-    grundelChampion,
-    foreignAnglers,
-    schneiderKoenig,
-    worstBlankMonth,
-    hottestCatch,
-    frostCatch,
-    extremeWeatherCatch,
-    overallAvgPerAnglerDay,
-    angelQueen,
-    recordHunter,
-    photoArtist,
-    funCardChampion,
-  ]);
+  }, [cards]);
   return (
     <div className="space-y-10 max-w-5xl mx-auto">
       {sections.map((section) => (

@@ -1,5 +1,5 @@
 // src/components/catchlist/CatchList.jsx
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCatches } from '../../hooks/useCatches';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
@@ -12,7 +12,9 @@ import { shareEntry } from '../../utils/share';
 import { windDirection, getMoonDescription } from '../../utils/weather';
 import { supabase } from '@/supabaseClient';
 import { VERTRAUTE } from '@/constants';
+import { REACTION_OPTIONS } from '@/constants/reactions';
 import { isVisibleToUser } from '@/utils/filters';
+import { useReactions } from '@/hooks/useReactions';
 
 export default function CatchList({ anglerName }) {
   const [onlyMine, setOnlyMine] = useState(false);
@@ -32,6 +34,9 @@ export default function CatchList({ anglerName }) {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [modalPhoto, setModalPhoto] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
+  const [activeReactionFish, setActiveReactionFish] = useState(null);
+  const longPressTimer = useRef(null);
+  const reactionMenuRef = useRef(null);
 
   const navigate = useNavigate();
 
@@ -39,6 +44,13 @@ export default function CatchList({ anglerName }) {
 
   const normalizedName = useMemo(() => (anglerName || '').trim(), [anglerName]);
   const isTrusted = useMemo(() => VERTRAUTE.includes(normalizedName), [normalizedName]);
+  const {
+    loadReactionsFor,
+    reactToFish,
+    getReactionsFor,
+    getUserReactionFor,
+    isPending: isReactionPending,
+  } = useReactions(normalizedName);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +116,69 @@ export default function CatchList({ anglerName }) {
     };
   }, [isTrusted, normalizedName]);
 
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const startLongPress = useCallback(
+    (fishId) => {
+      if (!fishId || !normalizedName) return;
+      cancelLongPress();
+      longPressTimer.current = setTimeout(() => {
+        setActiveReactionFish(fishId);
+      }, 550);
+    },
+    [cancelLongPress, normalizedName]
+  );
+
+  const closeReactionMenu = useCallback(() => {
+    setActiveReactionFish(null);
+    cancelLongPress();
+  }, [cancelLongPress]);
+
+  const handleReactionSelect = useCallback(
+    (fishId, reaction) => {
+      closeReactionMenu();
+      reactToFish(fishId, reaction);
+    },
+    [closeReactionMenu, reactToFish]
+  );
+
+  useEffect(() => {
+    return () => cancelLongPress();
+  }, [cancelLongPress]);
+
+  useEffect(() => {
+    if (!catches.length) return;
+    loadReactionsFor(catches.map((entry) => entry.id).filter(Boolean));
+  }, [catches, loadReactionsFor, onlyMine, normalizedName]);
+
+  useEffect(() => {
+    if (!activeReactionFish) return;
+    const handlePointerDown = (event) => {
+      if (reactionMenuRef.current?.contains(event.target)) return;
+      closeReactionMenu();
+    };
+    const handleScroll = (event) => {
+      if (reactionMenuRef.current?.contains(event.target)) return;
+      closeReactionMenu();
+    };
+    const handleResize = () => closeReactionMenu();
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [activeReactionFish, closeReactionMenu]);
+
   return (
     <div className="p-6 bg-white dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
       <div className="space-y-6 max-w-3xl mx-auto">
@@ -151,12 +226,68 @@ export default function CatchList({ anglerName }) {
             });
             const key = entry.id ?? `${entry.angler || 'anon'}-${entry.timestamp}-${entry.fish}-${entry.size}`;
             const topInfo = topBadges[key];
+            const mobileFishName =
+              entry.fish?.split(' (')[0]?.trim() || entry.fish || '';
+            const reactionCounts = getReactionsFor(entry.id);
+            const userReaction = getUserReactionFor(entry.id);
+            const pendingReaction = isReactionPending(entry.id);
+            const hasReactions = Object.keys(reactionCounts || {}).length > 0;
 
             return (
               <li
                 key={key}
-                className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
+                className="relative p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
+                onPointerDown={(e) => {
+                  if (e.pointerType === 'mouse' && e.button !== 0) return;
+                  const targetElement = e.target;
+                  if (
+                    targetElement instanceof HTMLElement &&
+                    targetElement.closest('button, a, input, textarea, select')
+                  ) {
+                    return;
+                  }
+                  startLongPress(entry.id);
+                }}
+                onPointerUp={cancelLongPress}
+                onPointerLeave={cancelLongPress}
+                onPointerCancel={cancelLongPress}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (!normalizedName) return;
+                  setActiveReactionFish(entry.id);
+                }}
               >
+                {activeReactionFish === entry.id && (
+                  <div
+                    ref={reactionMenuRef}
+                    className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-full -mt-2 z-30 max-w-[90vw] rounded-3xl bg-gray-900/95 px-3 py-3 shadow-xl"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2 overflow-x-auto overscroll-contain">
+                      {REACTION_OPTIONS.map((option) => {
+                        const selected = userReaction === option.id;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            disabled={pendingReaction}
+                            onClick={() => handleReactionSelect(entry.id, option.id)}
+                            className={`h-10 w-10 shrink-0 rounded-full text-lg transition ${
+                              selected
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-gray-800 text-white hover:bg-gray-700'
+                            } ${pendingReaction ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            aria-label={option.label}
+                            title={option.label}
+                          >
+                            {option.emoji}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {dateStr} – {timeStr}{' '}
@@ -228,7 +359,10 @@ export default function CatchList({ anglerName }) {
                 </div>
 
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-blue-600 font-medium">{entry.fish}</span>
+                  <span className="text-blue-600 font-medium">
+                    <span className="sm:hidden">{mobileFishName}</span>
+                    <span className="hidden sm:inline">{entry.fish}</span>
+                  </span>
                   <span>{`${entry.size} cm`}</span>
                   {entry.fish?.toLowerCase() === 'karpfen' &&
                     entry.weight != null && (
@@ -254,6 +388,29 @@ export default function CatchList({ anglerName }) {
                   <p className="italic text-sm text-gray-600 dark:text-gray-300 mb-2">
                     {entry.note}
                   </p>
+                )}
+
+                {hasReactions && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    {REACTION_OPTIONS.map((option) => {
+                      const count = reactionCounts?.[option.id];
+                      if (!count) return null;
+                      const mine = userReaction === option.id;
+                      return (
+                        <span
+                          key={`${entry.id}-${option.id}`}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${
+                            mine
+                              ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-200'
+                              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200'
+                          }`}
+                        >
+                          <span>{option.emoji}</span>
+                          <span className="text-xs font-medium">{count}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
                 )}
 
                 {entry.weather && (
