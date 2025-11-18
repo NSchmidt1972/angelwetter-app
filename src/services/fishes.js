@@ -2,7 +2,7 @@
 import { supabase } from '../supabaseClient';
 
 export const baseSelect =
-  'id, angler, fish, size, weight, note, timestamp, weather, photo_url, location_name, is_marilou, blank';
+  'id, angler, fish, size, weight, note, timestamp, weather, photo_url, location_name, lat, lon, is_marilou, blank';
 
 export async function listFishes({ from, to, onlyMine, anglerName }) {
   let q = supabase
@@ -34,8 +34,11 @@ export async function countFishes({ onlyMine, anglerName, fromIso, includeLobber
   return q;
 }
 
-export async function updateFish(id, { fish, size, note, photo_url }) {
-  return supabase.from('fishes').update({ fish, size, note, photo_url }).eq('id', id);
+export async function updateFish(id, { fish, size, note, photo_url, location_name, lat, lon }) {
+  return supabase
+    .from('fishes')
+    .update({ fish, size, note, photo_url, location_name, lat, lon })
+    .eq('id', id);
 }
 export async function deleteFish(id) {
   return supabase.from('fishes').delete().eq('id', id);

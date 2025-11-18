@@ -1,11 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/supabaseClient';
 import { createCatchPDF } from '@/utils/pdfExporter';
+import { isFerkensbruchLocation } from '@/utils/location';
 
 export default function SettingsPage() {
   const [dataFilter, setDataFilter] = useState('recent');
   const [anglerName, setAnglerName] = useState('');
+  const [pdfYear, setPdfYear] = useState(new Date().getFullYear());
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const startYear = 2024;
+    const years = [];
+    for (let year = currentYear; year >= startYear; year -= 1) {
+      years.push(year);
+    }
+    return years;
+  }, []);
 
   useEffect(() => {
     setAnglerName(localStorage.getItem('anglerName') || 'Unbekannt');
@@ -55,9 +65,11 @@ export default function SettingsPage() {
   const exportCatchesAsPDF = async () => {
     const { data, error } = await supabase
       .from('fishes')
-      .select('fish, size, weight, timestamp')
+      .select('fish, size, weight, timestamp, location_name')
       .eq('angler', anglerName)
-      .eq('taken', true);
+      .eq('taken', true)
+      .gte('timestamp', `${pdfYear}-01-01`)
+      .lte('timestamp', `${pdfYear}-12-31T23:59:59`);
 
     if (error) {
       alert('Fehler beim Laden der Fänge');
@@ -65,9 +77,15 @@ export default function SettingsPage() {
       return;
     }
 
+    const ferkensbruchOnly = (data || []).filter((entry) => isFerkensbruchLocation(entry?.location_name));
+    if (ferkensbruchOnly.length === 0) {
+      alert('Keine Entnahmen am Ferkensbruch gefunden.');
+      return;
+    }
+
     try {
-      const pdfBytes = await createCatchPDF(anglerName, data);
-      downloadFile(pdfBytes, `entnahmeliste_${new Date().getFullYear()}.pdf`, 'application/pdf');
+      const pdfBytes = await createCatchPDF(anglerName, ferkensbruchOnly, pdfYear);
+      downloadFile(pdfBytes, `entnahmeliste_${pdfYear}.pdf`, 'application/pdf');
     } catch (err) {
       alert(err.message);
     }
@@ -122,8 +140,24 @@ export default function SettingsPage() {
           </button>
         </div>
 
-        <div className="flex justify-between items-center">
-          <span className="flex items-center gap-2">📄 Entnahmeliste (PDF)</span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col">
+            <span className="flex items-center gap-2">📄 Entnahmeliste (PDF)</span>
+            <label className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Jahr
+              <select
+                value={pdfYear}
+                onChange={(event) => setPdfYear(Number(event.target.value))}
+                className="ml-2 rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-900"
+              >
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <button
             onClick={exportCatchesAsPDF}
             className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"

@@ -64,17 +64,40 @@ export function useCatches(anglerName, onlyMine) {
   const reset = useCallback(() => { setPage(0); }, []);
 
   // editing helpers
-  const updateEntry = useCallback(async ({ entry, fish, size, note, photoFile }) => {
+  const updateEntry = useCallback(async ({ entry, fish, size, note, photoFile, lat, lon, locationName }) => {
     let photo_url = entry.photo_url;
 
     if (photoFile) {
       photo_url = await processAndUploadImage(photoFile, entry.angler || 'Unbekannt');
     }
 
-    const { error } = await svcUpdate(entry.id, { fish, size: parseFloat(size), note, photo_url });
+    const sizeValue = parseFloat(size);
+    const latValue =
+      lat === '' || lat == null ? null : typeof lat === 'number' ? lat : parseFloat(lat);
+    const lonValue =
+      lon === '' || lon == null ? null : typeof lon === 'number' ? lon : parseFloat(lon);
+    const location_name = locationName?.trim() ? locationName.trim() : null;
+
+    const payload = {
+      fish,
+      size: sizeValue,
+      note,
+      photo_url,
+      location_name,
+      lat: latValue,
+      lon: lonValue,
+    };
+
+    const { error } = await svcUpdate(entry.id, payload);
     if (error) throw error;
 
-    setCatches(prev => prev.map(c => c.id === entry.id ? { ...c, fish, size: parseFloat(size), note, photo_url } : c));
+    setCatches(prev =>
+      prev.map(c =>
+        c.id === entry.id
+          ? { ...c, ...payload }
+          : c
+      )
+    );
   }, []);
 
   const deleteEntry = useCallback(async (id) => {

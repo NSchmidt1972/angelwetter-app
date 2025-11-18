@@ -5,12 +5,8 @@ import { formatDateOnly, formatDateTime, parseTimestamp, formatTimeOnly } from '
 import { navItemsFor } from '@/config/navItems';
 import { APP_VERSION } from '@/utils/buildInfo';
 
-const PAGE_VIEW_LIMIT = 2000;
-const PAGE_VIEW_RANGE_OPTIONS = [
-  { value: 7, label: 'Letzte 7 Tage' },
-  { value: 30, label: 'Letzte 30 Tage' },
-  { value: 90, label: 'Letzte 90 Tage' },
-];
+const PAGE_VIEW_LIMIT = 5000;
+const PAGE_VIEW_PAGE_SIZE = 1000;
 const EXCLUDED_PAGE_VIEW_ANGLERS = new Set(['nicol schmidt']);
 
 function normalizePath(value) {
@@ -19,24 +15,6 @@ function normalizePath(value) {
   const ensured = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
   if (ensured.length > 1 && ensured.endsWith('/')) return ensured.slice(0, -1);
   return ensured || '/';
-}
-
-function normalizeProfileRole(role) {
-  if (!role) return null;
-  const normalized = String(role).trim().toLowerCase();
-  if (!normalized) return null;
-  if (normalized === 'gast' || normalized === 'guest') return 'gast';
-  if (normalized === 'tester' || normalized === 'test') return 'tester';
-  if (normalized === 'inactive' || normalized === 'inaktiv') return 'inactive';
-  if (normalized === 'vorstand') return 'vorstand';
-  if (normalized === 'admin') return 'admin';
-  if (normalized === 'mitglied' || normalized === 'member') return 'mitglied';
-  return normalized;
-}
-
-function isGuestOrTesterRole(role) {
-  const normalized = normalizeProfileRole(role);
-  return normalized === 'gast' || normalized === 'tester';
 }
 
 function normalizeName(value) {
@@ -92,11 +70,15 @@ export default function AdminOverview() {
   const [takenCatches, setTakenCatches] = useState([]);
   const [pushByAngler, setPushByAngler] = useState([]);
   const [pushDeviceSummary, setPushDeviceSummary] = useState([]);
-  const [pageViewRangeDays, setPageViewRangeDays] = useState(30);
+  const [pageViewYearStart] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), 0, 1);
+  });
   const [pageViewRows, setPageViewRows] = useState([]);
   const [pageViewLoading, setPageViewLoading] = useState(false);
   const [pageViewError, setPageViewError] = useState('');
   const [pageViewLastLimit, setPageViewLastLimit] = useState(20);
+  const pageViewYearLabel = pageViewYearStart.getFullYear();
 
   const navLabelMap = useMemo(() => {
     const map = new Map();
@@ -166,52 +148,15 @@ export default function AdminOverview() {
     return formatTimeOnly(parsed);
   };
 
-  const guestTesterNames = useMemo(() => {
-    const entries = Array.isArray(allProfiles) ? allProfiles : [];
-    const set = new Set();
-    entries.forEach((profile) => {
-      if (!profile?.name) return;
-      if (!isGuestOrTesterRole(profile?.role)) return;
-      const key = normalizeName(profile.name);
-      if (key) set.add(key);
-    });
-    return set;
-  }, [allProfiles]);
-
   const filteredPageViewRows = useMemo(() => {
     if (!Array.isArray(pageViewRows) || pageViewRows.length === 0) return [];
     return pageViewRows.filter((row) => {
-      const metadataRaw = row && typeof row === 'object' ? row.metadata : null;
-      let metadataObj = null;
-      if (metadataRaw && typeof metadataRaw === 'object' && !Array.isArray(metadataRaw)) {
-        metadataObj = metadataRaw;
-      } else if (typeof metadataRaw === 'string') {
-        try {
-          const parsed = JSON.parse(metadataRaw);
-          if (parsed && typeof parsed === 'object') metadataObj = parsed;
-        } catch (error) {
-          /* ignore invalid JSON */
-        }
-      }
-
-      const metadataRole = metadataObj?.role
-        || metadataObj?.profile_role
-        || metadataObj?.user_role
-        || metadataObj?.angler_role
-        || null;
-      if (isGuestOrTesterRole(metadataRole)) return false;
-
-      if (metadataObj && (metadataObj.guest === true || metadataObj.is_guest === true || metadataObj.tester === true || metadataObj.is_tester === true)) {
-        return false;
-      }
-
       const anglerKey = normalizeName(row?.angler);
-      if (anglerKey && guestTesterNames.has(anglerKey)) return false;
       if (anglerKey && EXCLUDED_PAGE_VIEW_ANGLERS.has(anglerKey)) return false;
 
       return true;
     });
-  }, [pageViewRows, guestTesterNames]);
+  }, [pageViewRows]);
 
   const pageViewAggregates = useMemo(
     () => groupPageViews(filteredPageViewRows).map((entry) => ({
@@ -224,6 +169,28 @@ export default function AdminOverview() {
   const pageViewAverage = pageViewAggregates.length > 0
     ? (pageViewTotal / pageViewAggregates.length).toFixed(1)
     : '0.0';
+  const pageViewMonthlyStats = useMemo(() => {
+    const year = pageViewYearStart.getFullYear();
+    const months = [];
+    for (let month = 0; month < 12; month += 1) {
+      const bucketDate = new Date(year, month, 1);
+      months.push({
+        key: `${year}-${String(month + 1).padStart(2, '0')}`,
+        label: bucketDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
+        total: 0,
+      });
+    }
+    const monthMap = new Map(months.map((entry) => [entry.key, entry]));
+    filteredPageViewRows.forEach((row) => {
+      const createdAt = parseTimestamp(row?.created_at);
+      if (!createdAt) return;
+      if (createdAt.getFullYear() !== year) return;
+      const key = `${year}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+      const bucket = monthMap.get(key);
+      if (bucket) bucket.total += 1;
+    });
+    return months.filter((entry) => entry.total > 0);
+  }, [filteredPageViewRows, pageViewYearStart]);
   const currentBuildLabel = useMemo(
     () => (APP_VERSION ? String(APP_VERSION).trim() : null),
     [],
@@ -427,23 +394,44 @@ export default function AdminOverview() {
       setPageViewLoading(true);
       setPageViewError('');
 
-      const since = new Date(Date.now() - pageViewRangeDays * 24 * 60 * 60 * 1000).toISOString();
+      const since = pageViewYearStart.toISOString();
 
-      const { data, error } = await supabase
-        .from('page_views')
-        .select('path, full_path, angler, session_id, created_at, metadata')
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
-        .limit(PAGE_VIEW_LIMIT);
+      const allRows = [];
+      let rangeStart = 0;
+      let encounteredError = null;
 
-      if (!active) return;
+      while (allRows.length < PAGE_VIEW_LIMIT) {
+        const rangeEnd = rangeStart + PAGE_VIEW_PAGE_SIZE - 1;
+        const { data, error } = await supabase
+          .from('page_views')
+          .select('path, full_path, angler, session_id, created_at, metadata')
+          .gte('created_at', since)
+          .order('created_at', { ascending: false })
+          .range(rangeStart, rangeEnd);
 
-      if (error) {
-        console.error('PageViews: Laden fehlgeschlagen', error);
-        setPageViewError(error.message || 'Page-Views konnten nicht geladen werden.');
+        if (!active) return;
+
+        if (error) {
+          encounteredError = error;
+          break;
+        }
+
+        if (Array.isArray(data) && data.length > 0) {
+          allRows.push(...data);
+          if (data.length < PAGE_VIEW_PAGE_SIZE) break;
+        } else {
+          break;
+        }
+
+        rangeStart += PAGE_VIEW_PAGE_SIZE;
+      }
+
+      if (encounteredError) {
+        console.error('PageViews: Laden fehlgeschlagen', encounteredError);
+        setPageViewError(encounteredError.message || 'Page-Views konnten nicht geladen werden.');
         setPageViewRows([]);
       } else {
-        setPageViewRows(Array.isArray(data) ? data : []);
+        setPageViewRows(allRows.slice(0, PAGE_VIEW_LIMIT));
       }
 
       setPageViewLoading(false);
@@ -453,11 +441,11 @@ export default function AdminOverview() {
     return () => {
       active = false;
     };
-  }, [pageViewRangeDays]);
+  }, [pageViewYearStart]);
 
   useEffect(() => {
     setPageViewLastLimit(20);
-  }, [pageViewRangeDays, filteredPageViewRows.length]);
+  }, [filteredPageViewRows.length]);
 
 
   const Section = ({ title, value, children }) => (
@@ -591,20 +579,7 @@ export default function AdminOverview() {
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
-            <label className="flex items-center gap-2">
-              Zeitraum
-              <select
-                value={pageViewRangeDays}
-                onChange={(event) => setPageViewRangeDays(Number(event.target.value))}
-                className="rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-900"
-              >
-                {PAGE_VIEW_RANGE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <span>Zeitraum: Gesamtjahr {pageViewYearLabel}</span>
             <span>Seiten: {pageViewAggregates.length}</span>
             <span>Ø je Seite: {pageViewAverage}</span>
           </div>
@@ -615,6 +590,34 @@ export default function AdminOverview() {
             </div>
           ) : (
             <div className="flex flex-col gap-6">
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Monatliche Aufrufe ({pageViewYearLabel})</h4>
+                {pageViewLoading ? (
+                  <div className={fallbackTextClass}>Lädt…</div>
+                ) : pageViewMonthlyStats.length === 0 ? (
+                  <div className={fallbackTextClass}>Keine Daten im Zeitraum.</div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Monat</th>
+                          <th className="px-3 py-2 text-right">Aufrufe</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {pageViewMonthlyStats.map((entry) => (
+                          <tr key={entry.key} className="hover:bg-gray-50 dark:hover:bg-gray-900">
+                            <td className="px-3 py-2 capitalize text-xs sm:text-sm">{entry.label}</td>
+                            <td className="px-3 py-2 text-right font-semibold text-blue-700 dark:text-blue-300">{entry.total}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Aktivste Angler</h4>
                 {pageViewLoading ? (

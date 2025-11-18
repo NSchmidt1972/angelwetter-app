@@ -49,7 +49,7 @@ export async function fetchProfiles() {
 export async function fetchFishAggregates() {
   const { data, error } = await supabase
     .from('fishes')
-    .select('fish, taken, location_name, timestamp')
+    .select('fish, taken, location_name, timestamp, size')
     .not('blank', 'is', true)
     .not('fish', 'is', null)
     .neq('fish', '')

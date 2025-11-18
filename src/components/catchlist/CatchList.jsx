@@ -470,7 +470,7 @@ export default function CatchList({ anglerName }) {
           <EditCatchModal
             entry={editingEntry}
             onCancel={() => setEditingEntry(null)}
-            onSave={async ({ fish, size, note, file }) => {
+            onSave={async ({ fish, size, note, file, lat, lon, locationName }) => {
               try {
                 await updateEntry({
                   entry: editingEntry,
@@ -478,6 +478,9 @@ export default function CatchList({ anglerName }) {
                   size,
                   note,
                   photoFile: file,
+                  lat,
+                  lon,
+                  locationName,
                 });
               } finally {
                 setEditingEntry(null);

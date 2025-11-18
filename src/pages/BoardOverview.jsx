@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addWhitelistEmail,
   fetchProfiles,
@@ -17,6 +17,143 @@ const BASE_ROLE_OPTIONS = [
 ];
 
 const ADMIN_OPTION = { value: 'admin', label: 'Admin (nur Nicol Schmidt)' };
+
+const rangeBucket = (key, label, min, max, ageLabel = '') => ({ key, label, min, max, ageLabel });
+
+const SIZE_BUCKETS = {
+  Karpfen: [
+    rangeBucket('karpfen-under', '< 35 cm', null, 35, 'ca. 1-2 Jahre'),
+    rangeBucket('karpfen-35-44', '35 - 44 cm', 35, 45, 'ca. 2-3 Jahre'),
+    rangeBucket('karpfen-45-54', '45 - 54 cm', 45, 55, 'ca. 3-4 Jahre'),
+    rangeBucket('karpfen-55-64', '55 - 64 cm', 55, 65, 'ca. 4-5 Jahre'),
+    rangeBucket('karpfen-65-74', '65 - 74 cm', 65, 75, 'ca. 5-6 Jahre'),
+    rangeBucket('karpfen-75-84', '75 - 84 cm', 75, 85, 'ca. 6-7 Jahre'),
+    rangeBucket('karpfen-85-94', '85 - 94 cm', 85, 95, 'ca. 7-9 Jahre'),
+    rangeBucket('karpfen-95plus', '>= 95 cm', 95, null, '9+ Jahre'),
+  ],
+  Hecht: [
+    rangeBucket('hecht-under', '< 50 cm', null, 50, 'ca. 1 Jahr'),
+    rangeBucket('hecht-50-59', '50 - 59 cm', 50, 60, 'ca. 2 Jahre'),
+    rangeBucket('hecht-60-74', '60 - 74 cm', 60, 75, 'ca. 3-4 Jahre'),
+    rangeBucket('hecht-75-89', '75 - 89 cm', 75, 90, 'ca. 5-6 Jahre'),
+    rangeBucket('hecht-90-109', '90 - 109 cm', 90, 110, 'ca. 7-9 Jahre'),
+    rangeBucket('hecht-110plus', '>= 110 cm', 110, null, '10+ Jahre'),
+  ],
+  Zander: [
+    rangeBucket('zander-under', '< 40 cm', null, 40, '< 1 Jahr'),
+    rangeBucket('zander-40-49', '40 - 49 cm', 40, 50, 'ca. 1-2 Jahre'),
+    rangeBucket('zander-50-59', '50 - 59 cm', 50, 60, 'ca. 2-3 Jahre'),
+    rangeBucket('zander-60-69', '60 - 69 cm', 60, 70, 'ca. 3-4 Jahre'),
+    rangeBucket('zander-70-79', '70 - 79 cm', 70, 80, 'ca. 4-5 Jahre'),
+    rangeBucket('zander-80plus', '>= 80 cm', 80, null, '5+ Jahre'),
+  ],
+  Barsch: [
+    rangeBucket('barsch-under', '< 20 cm', null, 20, '< 1 Jahr'),
+    rangeBucket('barsch-20-24', '20 - 24 cm', 20, 25, 'ca. 1 Jahr'),
+    rangeBucket('barsch-25-29', '25 - 29 cm', 25, 30, 'ca. 2 Jahre'),
+    rangeBucket('barsch-30-34', '30 - 34 cm', 30, 35, 'ca. 3 Jahre'),
+    rangeBucket('barsch-35plus', '>= 35 cm', 35, null, '4+ Jahre'),
+  ],
+  Aal: [
+    rangeBucket('aal-under', '< 50 cm', null, 50, '< 2 Jahre'),
+    rangeBucket('aal-50-59', '50 - 59 cm', 50, 60, 'ca. 2-3 Jahre'),
+    rangeBucket('aal-60-69', '60 - 69 cm', 60, 70, 'ca. 3-4 Jahre'),
+    rangeBucket('aal-70-79', '70 - 79 cm', 70, 80, 'ca. 4-5 Jahre'),
+    rangeBucket('aal-80plus', '>= 80 cm', 80, null, '5+ Jahre'),
+  ],
+  Rotauge: [
+    rangeBucket('rotauge-under', '< 18 cm', null, 18, '< 1 Jahr'),
+    rangeBucket('rotauge-18-24', '18 - 24 cm', 18, 25, 'ca. 1-2 Jahre'),
+    rangeBucket('rotauge-25-29', '25 - 29 cm', 25, 30, 'ca. 2-3 Jahre'),
+    rangeBucket('rotauge-30plus', '>= 30 cm', 30, null, '3+ Jahre'),
+  ],
+  Rotfeder: [
+    rangeBucket('rotfeder-under', '< 18 cm', null, 18, '< 1 Jahr'),
+    rangeBucket('rotfeder-18-24', '18 - 24 cm', 18, 25, 'ca. 1-2 Jahre'),
+    rangeBucket('rotfeder-25-29', '25 - 29 cm', 25, 30, 'ca. 2-3 Jahre'),
+    rangeBucket('rotfeder-30plus', '>= 30 cm', 30, null, '3+ Jahre'),
+  ],
+  Schleie: [
+    rangeBucket('schleie-under', '< 30 cm', null, 30, '< 2 Jahre'),
+    rangeBucket('schleie-30-39', '30 - 39 cm', 30, 40, 'ca. 2-3 Jahre'),
+    rangeBucket('schleie-40-49', '40 - 49 cm', 40, 50, 'ca. 3-4 Jahre'),
+    rangeBucket('schleie-50-59', '50 - 59 cm', 50, 60, 'ca. 5-6 Jahre'),
+    rangeBucket('schleie-60plus', '>= 60 cm', 60, null, '6+ Jahre'),
+  ],
+  Brasse: [
+    rangeBucket('brasse-under', '< 25 cm', null, 25, '< 2 Jahre'),
+    rangeBucket('brasse-25-34', '25 - 34 cm', 25, 35, 'ca. 2-3 Jahre'),
+    rangeBucket('brasse-35-44', '35 - 44 cm', 35, 45, 'ca. 3-4 Jahre'),
+    rangeBucket('brasse-45-54', '45 - 54 cm', 45, 55, 'ca. 4-5 Jahre'),
+    rangeBucket('brasse-55plus', '>= 55 cm', 55, null, '5+ Jahre'),
+  ],
+  Wels: [
+    rangeBucket('wels-under', '< 50 cm', null, 50, '< 1 Jahr'),
+    rangeBucket('wels-50-79', '50 - 79 cm', 50, 80, 'ca. 1-2 Jahre'),
+    rangeBucket('wels-80-99', '80 - 99 cm', 80, 100, 'ca. 2-3 Jahre'),
+    rangeBucket('wels-100-149', '100 - 149 cm', 100, 150, 'ca. 3-5 Jahre'),
+    rangeBucket('wels-150-199', '150 - 199 cm', 150, 200, 'ca. 5-8 Jahre'),
+    rangeBucket('wels-200plus', '>= 200 cm', 200, null, '8+ Jahre'),
+  ],
+};
+
+SIZE_BUCKETS.default = [
+  rangeBucket('default-under', '< 20 cm', null, 20, '< 1 Jahr'),
+  rangeBucket('default-20-29', '20 - 29 cm', 20, 30, 'ca. 1-2 Jahre'),
+  rangeBucket('default-30-39', '30 - 39 cm', 30, 40, 'ca. 2-3 Jahre'),
+  rangeBucket('default-40-49', '40 - 49 cm', 40, 50, 'ca. 3-4 Jahre'),
+  rangeBucket('default-50plus', '>= 50 cm', 50, null, '4+ Jahre'),
+];
+
+function getBucketsForFish(fishName) {
+  if (!fishName) return SIZE_BUCKETS.default;
+  return SIZE_BUCKETS[fishName] || SIZE_BUCKETS.default;
+}
+
+function parseSizeValue(value) {
+  if (value == null) return null;
+  const normalized = Number(String(value).replace(',', '.'));
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
+function buildSizeDistribution(entries = [], fishName = '') {
+  const buckets = getBucketsForFish(fishName).map((bucket) => ({
+    ...bucket,
+    count: 0,
+    takenCount: 0,
+  }));
+  let missingCount = 0;
+
+  entries.forEach((entry) => {
+    const numericSize = parseSizeValue(entry?.size);
+    if (!Number.isFinite(numericSize)) {
+      missingCount += 1;
+      return;
+    }
+
+    const targetBucket = buckets.find((bucket) => {
+      const meetsMin = bucket.min == null || numericSize >= bucket.min;
+      const meetsMax = bucket.max == null || numericSize < bucket.max;
+      return meetsMin && meetsMax;
+    });
+
+    const bucketToUpdate = targetBucket || (buckets.length > 0 ? buckets[buckets.length - 1] : null);
+    if (bucketToUpdate) {
+      bucketToUpdate.count += 1;
+      if (entry?.taken === true) {
+        bucketToUpdate.takenCount += 1;
+      }
+    }
+  });
+
+  const measuredCount = entries.length - missingCount;
+
+  return {
+    buckets,
+    missingCount,
+    measuredCount,
+  };
+}
 
 function normalizeRoleValue(role) {
   if (!role) return 'mitglied';
@@ -89,6 +226,8 @@ export default function BoardOverview() {
   const [fishStats, setFishStats] = useState([]);
   const [fishStatsLoading, setFishStatsLoading] = useState(false);
   const [fishStatsError, setFishStatsError] = useState('');
+  const [selectedFishDetail, setSelectedFishDetail] = useState('');
+  const detailSectionRef = useRef(null);
 
   const stats = useMemo(() => {
     const totalWhitelist = whitelist.length;
@@ -155,6 +294,20 @@ export default function BoardOverview() {
     );
   }, [fishStats]);
 
+  const fishDetailData = useMemo(() => {
+    if (!selectedFishDetail) return null;
+    const entry = fishStats.find((item) => item.fish === selectedFishDetail);
+    if (!entry) return null;
+    const entries = Array.isArray(entry.entries) ? entry.entries : [];
+    const distribution = buildSizeDistribution(entries, entry.fish);
+    return {
+      ...distribution,
+      fish: entry.fish,
+      total: entry.total,
+      taken: entry.taken,
+    };
+  }, [selectedFishDetail, fishStats]);
+
   const canAssignAdmin = useCallback((profile) => {
     if (!profile?.name) return false;
     return String(profile.name).trim().toLowerCase() === 'nicol schmidt';
@@ -202,9 +355,13 @@ export default function BoardOverview() {
         const isUnknown = !entry?.location_name;
         if (!fishName || !isAfterThreshold || (!isLobberich && !isUnknown)) return acc;
 
-        if (!acc[fishName]) acc[fishName] = { fish: fishName, total: 0, taken: 0 };
+        if (!acc[fishName]) acc[fishName] = { fish: fishName, total: 0, taken: 0, entries: [] };
         acc[fishName].total += 1;
         if (entry?.taken === true) acc[fishName].taken += 1;
+        acc[fishName].entries.push({
+          size: entry?.size ?? null,
+          taken: entry?.taken === true,
+        });
         return acc;
       }, {});
 
@@ -225,6 +382,19 @@ export default function BoardOverview() {
     refreshWhitelist();
     refreshFishAggregates();
   }, [refreshProfiles, refreshWhitelist, refreshFishAggregates]);
+
+  useEffect(() => {
+    if (!selectedFishDetail) return;
+    const stillExists = fishStats.some((item) => item.fish === selectedFishDetail);
+    if (!stillExists) setSelectedFishDetail('');
+  }, [selectedFishDetail, fishStats]);
+
+  useEffect(() => {
+    if (!selectedFishDetail) return;
+    if (detailSectionRef.current) {
+      detailSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedFishDetail, fishDetailData]);
 
   const filteredProfiles = useMemo(() => {
     const trimmed = search.trim();
@@ -465,18 +635,19 @@ export default function BoardOverview() {
                 <th className="px-4 py-2 text-left font-semibold">Gefangen gesamt</th>
                 <th className="px-4 py-2 text-left font-semibold">Davon entnommen</th>
                 <th className="px-4 py-2 text-left font-semibold">Entnahmequote</th>
+                <th className="px-4 py-2 text-left font-semibold">Details</th>
               </tr>
             </thead>
             <tbody>
               {fishStatsLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 py-4 text-center text-gray-500">
                     Lädt Fangstatistik...
                   </td>
                 </tr>
               ) : fishStats.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 py-4 text-center text-gray-500">
                     Keine Fänge erfasst.
                   </td>
                 </tr>
@@ -486,6 +657,7 @@ export default function BoardOverview() {
                   const taken = Number(entry?.taken) || 0;
                   const ratio = total > 0 ? Math.max(0, Math.min(1, taken / total)) : 0;
                   const ratioPercent = Math.round(ratio * 100);
+                  const isActive = selectedFishDetail === entry.fish;
 
                   return (
                     <tr key={entry.fish} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
@@ -509,6 +681,22 @@ export default function BoardOverview() {
                           </div>
                         )}
                       </td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedFishDetail((prev) => (prev === entry.fish ? '' : entry.fish))
+                          }
+                          className={`rounded border px-3 py-1 text-xs font-semibold transition ${
+                            isActive
+                              ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
+                              : 'border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-500/50 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                          }`}
+                          aria-pressed={isActive}
+                        >
+                          {isActive ? 'Schließen' : 'Details'}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -516,6 +704,98 @@ export default function BoardOverview() {
             </tbody>
           </table>
         </div>
+
+        {selectedFishDetail && (
+          <div
+            ref={detailSectionRef}
+            className="mt-6 rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-gray-700 dark:border-blue-900/40 dark:bg-blue-900/10 dark:text-gray-200"
+          >
+            {fishDetailData ? (
+              <>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200">
+                      Detailansicht: {fishDetailData.fish}
+                    </h3>
+                   
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {formatNumber(fishDetailData.total)} Meldungen, davon {formatNumber(fishDetailData.taken)} entnommen.
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500">
+                      Altersangaben sind grobe Erfahrungswerte je Art.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFishDetail('')}
+                    className="self-start rounded border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-500/40 dark:text-blue-200 dark:hover:bg-blue-900/30"
+                  >
+                    Schließen
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {fishDetailData.buckets.map((bucket) => {
+                    const hasData = fishDetailData.measuredCount > 0;
+                    const share = hasData && bucket.count > 0
+                      ? formatPercent(bucket.count / fishDetailData.measuredCount)
+                      : '—';
+                    const takenShare =
+                      bucket.count > 0 ? formatPercent((bucket.takenCount || 0) / bucket.count) : '—';
+                    return (
+                      <div
+                        key={`${fishDetailData.fish}-${bucket.key}`}
+                        className="rounded border border-white/60 bg-white/70 p-3 shadow-sm dark:border-blue-900/30 dark:bg-blue-900/30"
+                      >
+                        <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          {bucket.label}
+                        </div>
+                        <div className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                          {formatNumber(bucket.count)}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Anteil: {share}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Entnommen: {formatNumber(bucket.takenCount)} ({takenShare})
+                        </div>
+                        {bucket.ageLabel && (
+                          <div className="mt-1 text-xs text-blue-700 dark:text-blue-200">
+                            Alter: {bucket.ageLabel}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 text-xs text-gray-600 dark:text-gray-400">
+                  {fishDetailData.measuredCount > 0 ? (
+                    <>
+                      {formatNumber(fishDetailData.measuredCount)} Fänge mit Größenangabe bilden die Cluster.
+                      {fishDetailData.missingCount > 0 && (
+                        <> Zusätzlich {formatNumber(fishDetailData.missingCount)} ohne Größenwert.</>
+                      )}
+                    </>
+                  ) : (
+                    <>Noch keine Größenangaben verfügbar. Sobald Werte eingehen, erscheinen hier Cluster.</>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between gap-4">
+                <div>Keine Details verfügbar.</div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFishDetail('')}
+                  className="rounded border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-500/40 dark:text-blue-200 dark:hover:bg-blue-900/30"
+                >
+                  Schließen
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
