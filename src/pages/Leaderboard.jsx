@@ -129,6 +129,8 @@ export default function Leaderboard() {
     })
     .sort((a, b) => b.totalPoints - a.totalPoints);
 
+  const wertungsCount = filteredFishes.length;
+
   if (filteredFishes.length === 0) {
     return (
       <PageContainer>
@@ -144,6 +146,10 @@ export default function Leaderboard() {
       <h2 className="text-3xl font-bold mb-6 text-center text-green-700 dark:text-green-300">
         🏆 Rangliste
       </h2>
+
+      <p className="text-center text-xs text-gray-500 dark:text-gray-400 -mt-4 mb-6">
+        Wertungsfische insgesamt: <span className="font-semibold text-gray-700 dark:text-gray-200">{wertungsCount}</span>
+      </p>
 
       {vertraute.includes(anglerNameLC) && (
         <div className="flex justify-center items-center mb-6">

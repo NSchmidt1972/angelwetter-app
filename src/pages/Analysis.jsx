@@ -71,7 +71,12 @@ export default function Analysis({ anglerName }) {
     loadData();
   }, [anglerName, onlyMine]);
 
-  const totalFishes = fishes.filter(f => f.fish && f.fish.trim() !== '').length;
+  // Basis: gültige Fänge (für Gesamtauswertungen / Monate immer ALLE Fische)
+  const baseValidFishes = fishes.filter(f =>
+    !f.blank && f.fish && f.fish.trim().toLowerCase() !== 'unbekannt'
+  );
+
+  const totalFishes = baseValidFishes.length;
 
   const blankSessions = fishes.filter(f => f.blank === true).length;
 
@@ -88,11 +93,6 @@ export default function Analysis({ anglerName }) {
 
   const totalSessions = blankSessions + catchSessions;
   const blankSessionRatio = totalSessions > 0 ? ((blankSessions / totalSessions) * 100).toFixed(1) : '0.0';
-
-  // Basis: gültige Fänge (für Gesamtauswertungen / Monate immer ALLE Fische)
-  const baseValidFishes = fishes.filter(f =>
-    !f.blank && f.fish && f.fish.trim().toLowerCase() !== 'unbekannt'
-  );
 
   // Wetter-Fischoptionen
   const fishOptions = Array.from(
@@ -139,6 +139,16 @@ export default function Analysis({ anglerName }) {
       });
     }
   }, [selectedYear, currentMonthIndex]);
+
+  const yearTotalStats = selectedYear
+    ? Object.values(yearMonthStats[selectedYear] || {}).reduce((acc, monthStat) => {
+        Object.entries(monthStat).forEach(([fish, count]) => {
+          acc[fish] = (acc[fish] || 0) + count;
+        });
+        return acc;
+      }, {})
+    : {};
+  const yearTotalCount = Object.values(yearTotalStats).reduce((sum, count) => sum + count, 0);
 
   // --- Wetter-Statistiken (auf Basis weatherValidFishes) ---
   const statsReducer = (groupFn) => (map, f) => {
@@ -352,6 +362,26 @@ export default function Analysis({ anglerName }) {
                   </div>
                 );
               })}
+            {yearTotalCount > 0 && (
+              <div
+                className="min-w-[220px] rounded-lg p-4 text-center flex-shrink-0 shadow border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              >
+                <h3 className="text-base font-bold mb-1 text-gray-800 dark:text-gray-100">Gesamt {selectedYear}</h3>
+                <p className="text-xs italic text-gray-500 dark:text-gray-400 mb-2">
+                  (gesamt: {yearTotalCount})
+                </p>
+                <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {Object.entries(yearTotalStats)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([fish, count]) => (
+                      <li key={fish} className="flex justify-between px-2 py-1 text-sm">
+                        <span>{fish}</span>
+                        <span className="font-mono text-gray-700 dark:text-gray-300">{count}</span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}

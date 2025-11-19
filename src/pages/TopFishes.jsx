@@ -108,15 +108,18 @@ export default function TopFishes() {
     setSearchParams(next, { replace: true });
   };
 
-  const top10 = fishes
-    .filter((f) =>
-      f.fish === selectedFish &&
-      f.size &&
-      f.angler &&
-      f.fish !== 'Unbekannt' &&
-      !f.blank &&
-      (onlyMine || isFerkensbruchLocation(f.location_name))
-    )
+  const selectedFishEntries = fishes.filter((f) =>
+    f.fish === selectedFish &&
+    f.size &&
+    f.angler &&
+    f.fish !== 'Unbekannt' &&
+    !f.blank &&
+    (onlyMine || isFerkensbruchLocation(f.location_name))
+  );
+
+  const selectedFishCount = selectedFishEntries.length;
+
+  const top10 = selectedFishEntries
     .sort((a, b) => {
       const sizeA = parseFloat(a.size);
       const sizeB = parseFloat(b.size);
@@ -176,6 +179,10 @@ export default function TopFishes() {
           <h3 className="text-xl font-semibold text-green-700 dark:text-green-300 mb-4 text-center">
             {selectedFish}
           </h3>
+
+          <p className="text-center text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Insgesamt {selectedFishCount} wertungsfähige Fische
+          </p>
 
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm text-left font-mono bg-white dark:bg-gray-800 shadow-md rounded-xl overflow-hidden">

@@ -159,10 +159,24 @@ export default function CatchMap() {
   const bounds = useMemo(() => {
     if (filteredEntries.length === 0) return [];
     return filteredEntries.map(e => [e.lat, e.lon]);
-  }, [filteredEntries]);
+  }, [filteredEntries, onlyMine]);
 
-  const legendFishSet = useMemo(() => {
-    return new Set(filteredEntries.map(e => e.fish?.trim().toLowerCase()).filter(Boolean));
+  const legendFishList = useMemo(() => {
+    const relevantEntries = onlyMine
+      ? filteredEntries
+      : filteredEntries.filter((entry) => isFerkensbruch(entry.lat, entry.lon));
+
+    const map = new Map();
+    relevantEntries.forEach((entry) => {
+      const original = entry.fish?.trim();
+      if (!original) return;
+      const normalized = original.toLowerCase();
+      if (!map.has(normalized)) {
+        map.set(normalized, { label: original, count: 0 });
+      }
+      map.get(normalized).count += 1;
+    });
+    return Array.from(map.entries()).sort((a, b) => b[1].count - a[1].count);
   }, [filteredEntries]);
 
   // 🔧 NEU: Bei "Nur meine" nur zoomen, wenn es mind. einen externen Punkt gibt
@@ -210,12 +224,21 @@ export default function CatchMap() {
         </div>
 
         <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-300 items-center">
-          {[...legendFishSet].map((fish, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <div dangerouslySetInnerHTML={{
-                __html: createSvgIcon(fishColorMap[fish] || '#757575').options.html
-              }} style={{ width: '16px', height: '26px' }} />
-              <span className="capitalize">{fish}</span>
+          {legendFishList.length === 0 && (
+            <span className="text-xs text-gray-500">Keine Fische in der aktuellen Ansicht</span>
+          )}
+          {legendFishList.map(([fishKey, info]) => (
+            <div key={fishKey} className="flex items-center gap-1">
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: createSvgIcon(fishColorMap[fishKey] || '#757575').options.html
+                }}
+                style={{ width: '16px', height: '26px' }}
+              />
+              <span className="capitalize">
+                {info.label}
+                <span className="ml-1 text-[10px] text-gray-500">({info.count})</span>
+              </span>
             </div>
           ))}
         </div>

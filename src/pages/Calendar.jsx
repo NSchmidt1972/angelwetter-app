@@ -60,12 +60,40 @@ export default function FishCalendarMobileView() {
     return <p className="text-center text-gray-500 dark:text-gray-300 mt-6">Lade Kalenderdaten...</p>;
   }
 
+  const overallStats = sortedMonths.reduce(
+    (acc, { days }) => {
+      Object.values(days).forEach((status) => {
+        if (status === '🐟') acc.catchDays += 1;
+        else if (status === '❌') acc.blankDays += 1;
+      });
+      return acc;
+    },
+    { catchDays: 0, blankDays: 0 }
+  );
+
   return (
     <div className="p-4 max-w-md mx-auto space-y-10">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 text-center">
+        <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100 mb-2">Gesamtübersicht</h3>
+        <div className="flex items-center justify-center gap-6 text-sm text-gray-600 dark:text-gray-300">
+          <span>🐟 Fangtage: <span className="font-bold text-gray-800 dark:text-gray-100">{overallStats.catchDays}</span></span>
+          <span>❌ Schneidertage: <span className="font-bold text-gray-800 dark:text-gray-100">{overallStats.blankDays}</span></span>
+        </div>
+      </div>
+
       {sortedMonths.map(({ year, month, days }) => {
         const firstDay = new Date(year, month, 1);
         const startWeekday = (firstDay.getDay() + 6) % 7;
         const numDays = getDaysInMonth(year, month);
+
+        const { catchDays, blankDays } = Object.values(days).reduce(
+          (acc, status) => {
+            if (status === '🐟') acc.catchDays += 1;
+            else if (status === '❌') acc.blankDays += 1;
+            return acc;
+          },
+          { catchDays: 0, blankDays: 0 }
+        );
 
         const dayCells = [];
 
@@ -95,6 +123,10 @@ export default function FishCalendarMobileView() {
             <h2 className="text-lg font-bold text-center text-blue-700 dark:text-blue-300 mb-2">
               📆 {getMonthLabel(year, month)}
             </h2>
+            <p className="text-center text-xs text-gray-500 dark:text-gray-400 mb-2">
+              <span className="mr-4">🐟 Fangtage: <span className="font-semibold text-gray-700 dark:text-gray-200">{catchDays}</span></span>
+              <span>❌ Schneidertage: <span className="font-semibold text-gray-700 dark:text-gray-200">{blankDays}</span></span>
+            </p>
             <div className="grid grid-cols-7 text-center text-sm font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-300 dark:border-gray-600 pb-1">
               <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
             </div>
