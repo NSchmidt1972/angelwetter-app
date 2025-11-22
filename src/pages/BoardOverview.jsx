@@ -204,6 +204,33 @@ function formatPercent(value) {
   }
 }
 
+function formatDecimal(value, fractionDigits = 1) {
+  try {
+    return new Intl.NumberFormat('de-DE', {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(value ?? 0);
+  } catch (error) {
+    console.warn('formatDecimal failed', error);
+    return Number.isFinite(value) ? value.toFixed(fractionDigits) : '0';
+  }
+}
+
+function getLastMonths(count = 12) {
+  const now = new Date();
+  const months = [];
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    months.push({
+      key,
+      date,
+      label: date.toLocaleDateString('de-DE', { month: 'short' }),
+    });
+  }
+  return months;
+}
+
 export default function BoardOverview() {
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -224,6 +251,7 @@ export default function BoardOverview() {
   const [showWhitelist, setShowWhitelist] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
   const [fishStats, setFishStats] = useState([]);
+  const [fishEntries, setFishEntries] = useState([]);
   const [fishStatsLoading, setFishStatsLoading] = useState(false);
   const [fishStatsError, setFishStatsError] = useState('');
   const [selectedFishDetail, setSelectedFishDetail] = useState('');
@@ -308,6 +336,143 @@ export default function BoardOverview() {
     };
   }, [selectedFishDetail, fishStats]);
 
+  const activityStats = useMemo(() => {
+    const months = getLastMonths(12);
+    const monthlyMap = {};
+    const catchSessionsMap = {};
+    const blankSessionsMap = {};
+    months.forEach((m) => {
+      monthlyMap[m.key] = { total: 0, taken: 0 };
+      catchSessionsMap[m.key] = new Set();
+      blankSessionsMap[m.key] = new Set();
+    });
+
+    const now = Date.now();
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const ninetyDaysAgo = now - 90 * 24 * 60 * 60 * 1000;
+
+    const activeAnglersSet = new Set();
+    const session30d = { catch: new Set(), blank: new Set() };
+    let catchesLast30d = 0;
+
+    const topAnglerMap = {};
+    const weekdayCounts = Array(7).fill(0);
+    const hourCounts = Array(24).fill(0);
+
+    fishEntries.forEach((entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return;
+
+      const monthKey = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
+      const monthBucket = monthlyMap[monthKey];
+      if (!monthBucket) return;
+
+      const dateKey = ts.toISOString().slice(0, 10);
+      const angler = entry?.angler ? String(entry.angler).trim() || 'Unbekannt' : 'Unbekannt';
+      const isBlank = entry?.blank === true;
+      const hasFish = entry?.fish && String(entry.fish).trim() !== '' && entry.blank !== true;
+
+      if (isBlank) {
+        blankSessionsMap[monthKey].add(`${angler}__${dateKey}`);
+        if (ts.getTime() >= thirtyDaysAgo) {
+          activeAnglersSet.add(angler);
+          session30d.blank.add(`${angler}__${dateKey}`);
+        }
+        return;
+      }
+
+      if (!hasFish) return;
+
+      monthBucket.total += 1;
+      if (entry?.taken === true) monthBucket.taken += 1;
+      catchSessionsMap[monthKey].add(`${angler}__${dateKey}`);
+
+      if (ts.getTime() >= thirtyDaysAgo) {
+        activeAnglersSet.add(angler);
+        catchesLast30d += 1;
+        session30d.catch.add(`${angler}__${dateKey}`);
+      }
+
+      if (ts.getTime() >= ninetyDaysAgo) {
+        topAnglerMap[angler] = (topAnglerMap[angler] || 0) + 1;
+      }
+
+      const hour = ts.getHours();
+      const weekday = ts.getDay();
+      hourCounts[hour] += 1;
+      weekdayCounts[weekday] += 1;
+    });
+
+    const monthlyCatchSeries = months.map((m) => ({
+      label: m.label,
+      total: monthlyMap[m.key].total,
+      taken: monthlyMap[m.key].taken,
+    }));
+
+    const blankVsCatchSeries = months.map((m) => {
+      const catchSessions = catchSessionsMap[m.key]?.size || 0;
+      const blankSessions = blankSessionsMap[m.key]?.size || 0;
+      return {
+        label: m.label,
+        catchSessions,
+        blankSessions,
+        totalSessions: catchSessions + blankSessions,
+      };
+    });
+
+    const topAnglers = Object.entries(topAnglerMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'de'))
+      .slice(0, 5);
+
+    const weekdayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    const topWeekdays = weekdayCounts
+      .map((count, index) => ({ label: weekdayNames[index], count }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+      .slice(0, 3);
+
+    const topHours = hourCounts
+      .map((count, hour) => ({ label: `${String(hour).padStart(2, '0')}:00`, count }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+      .slice(0, 3);
+
+    const activeAnglersLast30d = activeAnglersSet.size;
+    const avgCatchesPerActive = activeAnglersLast30d > 0 ? catchesLast30d / activeAnglersLast30d : 0;
+
+    const catchSessions30d = session30d.catch.size;
+    const blankSessions30d = session30d.blank.size;
+    const totalSessions30d = catchSessions30d + blankSessions30d;
+    const blankShare30d = totalSessions30d > 0 ? blankSessions30d / totalSessions30d : 0;
+
+    return {
+      monthlyCatchSeries,
+      blankVsCatchSeries,
+      topAnglers,
+      topWeekdays,
+      topHours,
+      activeAnglersLast30d,
+      avgCatchesPerActive,
+      catchSessions30d,
+      blankSessions30d,
+      blankShare30d,
+    };
+  }, [fishEntries]);
+
+  const monthlyMaxTotal = useMemo(() => {
+    if (!activityStats?.monthlyCatchSeries?.length) return 1;
+    return Math.max(1, ...activityStats.monthlyCatchSeries.map((item) => item.total || 0));
+  }, [activityStats]);
+
+  const sessionMaxTotal = useMemo(() => {
+    if (!activityStats?.blankVsCatchSeries?.length) return 1;
+    return Math.max(
+      1,
+      ...activityStats.blankVsCatchSeries.map((item) => item.totalSessions || 0)
+    );
+  }, [activityStats]);
+
   const canAssignAdmin = useCallback((profile) => {
     if (!profile?.name) return false;
     return String(profile.name).trim().toLowerCase() === 'nicol schmidt';
@@ -345,15 +510,23 @@ export default function BoardOverview() {
     try {
       const data = await fetchFishAggregates();
       const threshold = Date.UTC(2025, 5, 1); // 01.06.2025 00:00 UTC
-      const grouped = (Array.isArray(data) ? data : []).reduce((acc, entry) => {
-        const fishName = entry?.fish ? String(entry.fish).trim() : '';
+      const filtered = (Array.isArray(data) ? data : []).filter((entry) => {
         const location = entry?.location_name ? String(entry.location_name).toLowerCase() : '';
         const timestampMs = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
         const isAfterThreshold = Number.isFinite(timestampMs) && timestampMs >= threshold;
 
         const isLobberich = location.includes('lobberich');
         const isUnknown = !entry?.location_name;
-        if (!fishName || !isAfterThreshold || (!isLobberich && !isUnknown)) return acc;
+        if (!isAfterThreshold || (!isLobberich && !isUnknown)) return false;
+        if (entry?.is_marilou === true) return false;
+        return true;
+      });
+
+      setFishEntries(filtered);
+
+      const grouped = filtered.reduce((acc, entry) => {
+        const fishName = entry?.fish ? String(entry.fish).trim() : '';
+        if (!fishName || entry?.blank === true) return acc;
 
         if (!acc[fishName]) acc[fishName] = { fish: fishName, total: 0, taken: 0, entries: [] };
         acc[fishName].total += 1;
@@ -596,6 +769,176 @@ export default function BoardOverview() {
             <p className="mt-1 text-2xl font-semibold">{formatNumber(stats.leadership)}</p>
             <p className="text-xs text-amber-700/80 dark:text-amber-200/70">Mit erweiterten Rechten</p>
           </div>
+        </div>
+      </section>
+
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Aktivität & Nutzung</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Aktive Angler</p>
+            <p className="mt-1 text-2xl font-semibold">
+              {formatNumber(activityStats.activeAnglersLast30d)}
+            </p>
+            <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">letzte 30 Tage</p>
+          </div>
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Ø Fänge / aktiver Angler</p>
+            <p className="mt-1 text-2xl font-semibold">
+              {formatDecimal(activityStats.avgCatchesPerActive)}
+            </p>
+            <p className="text-xs text-blue-700/80 dark:text-blue-200/70">letzte 30 Tage</p>
+          </div>
+          <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Sessions (30 Tage)</p>
+            <p className="mt-1 text-lg font-semibold">
+              {formatNumber(activityStats.catchSessions30d)} Fang / {formatNumber(activityStats.blankSessions30d)} Schneider
+            </p>
+            <p className="text-xs text-amber-700/80 dark:text-amber-200/70">
+              Schneider-Anteil: {formatPercent(activityStats.blankShare30d)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-indigo-800 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Peak-Zeiten</p>
+            {activityStats.topWeekdays.length === 0 && activityStats.topHours.length === 0 ? (
+              <p className="mt-1 text-sm text-indigo-700/80 dark:text-indigo-200/70">Noch keine Daten.</p>
+            ) : (
+              <div className="mt-1 space-y-1 text-sm">
+                {activityStats.topWeekdays.length > 0 && (
+                  <div>Wochentag: {activityStats.topWeekdays.map((d) => d.label).join(', ')}</div>
+                )}
+                {activityStats.topHours.length > 0 && (
+                  <div>Uhrzeit: {activityStats.topHours.map((h) => h.label).join(', ')}</div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-gray-800 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-100">
+            <p className="text-sm font-medium uppercase tracking-wide">Top-Angler (90 Tage)</p>
+            {activityStats.topAnglers.length === 0 ? (
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Noch keine Daten.</p>
+            ) : (
+              <ul className="mt-1 space-y-1 text-sm">
+                {activityStats.topAnglers.map((item) => (
+                  <li key={item.name} className="flex justify-between gap-2">
+                    <span className="truncate">{item.name}</span>
+                    <span className="font-semibold">{formatNumber(item.count)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Zeitverlauf Fänge (12 Monate)</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Gesamtfänge und Entnahmen im Vergleich je Monat.
+            </p>
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Skala relativ zum stärksten Monat.
+          </div>
+        </div>
+
+        <div className="mt-6">
+          {activityStats.monthlyCatchSeries.length === 0 ? (
+            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
+              Noch keine Daten vorhanden.
+            </div>
+          ) : (
+            <div className="flex h-56 items-end gap-3 overflow-x-auto pb-2">
+              {activityStats.monthlyCatchSeries.map((item) => {
+                const totalHeight = Math.max(0, (item.total / monthlyMaxTotal) * 100);
+                const takenHeight =
+                  item.total > 0 ? Math.max(0, (item.taken / monthlyMaxTotal) * 100) : 0;
+                return (
+                  <div
+                    key={`monthly-${item.label}`}
+                    className="flex min-w-[46px] flex-col items-center justify-end gap-2"
+                  >
+                    <div className="relative flex h-44 w-10 items-end rounded bg-blue-100/80 dark:bg-blue-900/40">
+                      <div
+                        className="absolute bottom-0 left-0 right-0 rounded-t bg-blue-400/80 dark:bg-blue-500"
+                        style={{ height: `${Math.min(100, totalHeight)}%` }}
+                        aria-hidden
+                      />
+                      <div
+                        className="absolute bottom-0 left-0 right-0 rounded-t bg-blue-700 dark:bg-blue-400"
+                        style={{ height: `${Math.min(100, takenHeight)}%` }}
+                        aria-hidden
+                      />
+                    </div>
+                    <div className="text-center text-xs text-gray-700 dark:text-gray-300">
+                      <div className="font-semibold">{item.label}</div>
+                      <div>{formatNumber(item.total)} / {formatNumber(item.taken)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Fang vs. Schneidersession (12 Monate)</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Sessions pro Monat, unterschieden nach Fang- und Schneider-Tagen.
+            </p>
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Basis: je Angler und Tag nur eine Session.
+          </div>
+        </div>
+
+        <div className="mt-6">
+          {activityStats.blankVsCatchSeries.length === 0 ? (
+            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
+              Noch keine Daten vorhanden.
+            </div>
+          ) : (
+            <div className="flex h-56 items-end gap-3 overflow-x-auto pb-2">
+              {activityStats.blankVsCatchSeries.map((item) => {
+                const catchHeight =
+                  item.totalSessions > 0
+                    ? Math.max(0, (item.catchSessions / sessionMaxTotal) * 100)
+                    : 0;
+                const blankHeight =
+                  item.totalSessions > 0
+                    ? Math.max(0, (item.blankSessions / sessionMaxTotal) * 100)
+                    : 0;
+                return (
+                  <div
+                    key={`sessions-${item.label}`}
+                    className="flex min-w-[46px] flex-col items-center justify-end gap-2"
+                  >
+                    <div className="flex h-44 w-10 flex-col justify-end overflow-hidden rounded bg-gray-200/80 dark:bg-gray-700/70">
+                      <div
+                        className="bg-red-500/80 dark:bg-red-400"
+                        style={{ height: `${Math.min(100, blankHeight)}%` }}
+                        aria-hidden
+                      />
+                      <div
+                        className="bg-emerald-500/80 dark:bg-emerald-400"
+                        style={{ height: `${Math.min(100, catchHeight)}%` }}
+                        aria-hidden
+                      />
+                    </div>
+                    <div className="text-center text-xs text-gray-700 dark:text-gray-300">
+                      <div className="font-semibold">{item.label}</div>
+                      <div>{formatNumber(item.catchSessions)} / {formatNumber(item.blankSessions)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 

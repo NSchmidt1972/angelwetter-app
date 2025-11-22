@@ -49,11 +49,9 @@ export async function fetchProfiles() {
 export async function fetchFishAggregates() {
   const { data, error } = await supabase
     .from('fishes')
-    .select('fish, taken, location_name, timestamp, size')
-    .not('blank', 'is', true)
-    .not('fish', 'is', null)
-    .neq('fish', '')
-    .order('fish', { ascending: true });
+    .select('fish, taken, location_name, timestamp, size, angler, blank, weight, is_marilou')
+    .neq('is_marilou', true)
+    .order('timestamp', { ascending: false });
 
   if (error) throw new Error(error.message || 'Fischübersicht konnte nicht geladen werden.');
   return data || [];

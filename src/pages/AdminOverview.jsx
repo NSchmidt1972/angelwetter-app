@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
 import { formatDateOnly, formatDateTime, parseTimestamp, formatTimeOnly } from '@/utils/dateUtils';
@@ -78,6 +78,7 @@ export default function AdminOverview() {
   const [pageViewLoading, setPageViewLoading] = useState(false);
   const [pageViewError, setPageViewError] = useState('');
   const [pageViewLastLimit, setPageViewLastLimit] = useState(20);
+  const [pageViewUniqueOpenPath, setPageViewUniqueOpenPath] = useState(null);
   const pageViewYearLabel = pageViewYearStart.getFullYear();
 
   const navLabelMap = useMemo(() => {
@@ -165,6 +166,22 @@ export default function AdminOverview() {
     })),
     [filteredPageViewRows, labelForPath],
   );
+  const pageViewAnglersByPath = useMemo(() => {
+    const map = new Map();
+    filteredPageViewRows.forEach((row) => {
+      const key = row?.path || '—';
+      const name = typeof row?.angler === 'string' ? row.angler.trim() : '';
+      if (!name) return;
+      if (!map.has(key)) map.set(key, new Set());
+      map.get(key).add(name);
+    });
+    return map;
+  }, [filteredPageViewRows]);
+  const uniqueAnglersForPath = useCallback((path) => {
+    const set = pageViewAnglersByPath.get(path);
+    if (!set) return [];
+    return [...set].sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+  }, [pageViewAnglersByPath]);
   const pageViewTotal = filteredPageViewRows.length;
   const pageViewAverage = pageViewAggregates.length > 0
     ? (pageViewTotal / pageViewAggregates.length).toFixed(1)
@@ -447,6 +464,10 @@ export default function AdminOverview() {
     setPageViewLastLimit(20);
   }, [filteredPageViewRows.length]);
 
+  useEffect(() => {
+    setPageViewUniqueOpenPath(null);
+  }, [pageViewAggregates]);
+
 
   const Section = ({ title, value, children }) => (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
@@ -667,20 +688,61 @@ export default function AdminOverview() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {pageViewAggregates.slice(0, 20).map((row) => (
-                          <tr key={row.path} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                            <td className="px-3 py-2 text-xs sm:text-sm">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-medium text-gray-800 dark:text-gray-100">{row.label}</span>
-                                {row.label !== row.path && row.path && row.path !== '—' && (
-                                  <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500">{row.path}</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-right font-semibold text-green-700 dark:text-green-300">{row.total}</td>
-                            <td className="px-3 py-2 text-right">{row.uniqueAnglers}</td>
-                          </tr>
-                        ))}
+                        {pageViewAggregates.slice(0, 20).map((row) => {
+                          const isOpen = pageViewUniqueOpenPath === row.path;
+                          const uniqueNames = isOpen ? uniqueAnglersForPath(row.path) : [];
+                          return (
+                            <Fragment key={row.path}>
+                              <tr className="hover:bg-gray-50 dark:hover:bg-gray-900">
+                                <td className="px-3 py-2 text-xs sm:text-sm">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-medium text-gray-800 dark:text-gray-100">{row.label}</span>
+                                    {row.label !== row.path && row.path && row.path !== '—' && (
+                                      <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500">{row.path}</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold text-green-700 dark:text-green-300">{row.total}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-200">
+                                      {row.uniqueAnglers}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPageViewUniqueOpenPath((current) => (current === row.path ? null : row.path))}
+                                      className="inline-flex items-center justify-center rounded px-1.5 py-1 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:text-blue-200 dark:hover:bg-blue-800/40 dark:focus:ring-blue-500"
+                                      title="Angler anzeigen"
+                                      aria-label={isOpen ? 'Angler verbergen' : 'Angler anzeigen'}
+                                    >
+                                      <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">{isOpen ? '▼' : '▶'}</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {isOpen && (
+                                <tr className="bg-blue-50/60 dark:bg-blue-900/20">
+                                  <td colSpan={3} className="px-3 py-2 text-xs sm:text-sm">
+                                    {uniqueNames.length === 0 ? (
+                                      <span className="text-gray-600 dark:text-gray-300">Keine Angler erfasst.</span>
+                                    ) : (
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {uniqueNames.map((name) => (
+                                          <span
+                                            key={name}
+                                            className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-blue-800 shadow-sm ring-1 ring-blue-200 dark:bg-blue-950/60 dark:text-blue-100 dark:ring-blue-700/50"
+                                          >
+                                            {name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
