@@ -231,6 +231,74 @@ function getLastMonths(count = 12) {
   return months;
 }
 
+const FISH_COLOR_CLASSES = [
+  'bg-blue-500 dark:bg-blue-400',
+  'bg-emerald-500 dark:bg-emerald-400',
+  'bg-amber-500 dark:bg-amber-400',
+  'bg-indigo-500 dark:bg-indigo-400',
+  'bg-rose-500 dark:bg-rose-400',
+  'bg-cyan-500 dark:bg-cyan-400',
+  'bg-lime-500 dark:bg-lime-400',
+  'bg-fuchsia-500 dark:bg-fuchsia-400',
+  'bg-orange-500 dark:bg-orange-400',
+];
+
+const TOP_ANGLER_PRESETS = [
+  {
+    key: 'lastWeek',
+    label: 'Letzte Woche',
+    getStartDate: (now) => {
+      const date = new Date(now);
+      date.setDate(date.getDate() - 7);
+      return date;
+    },
+  },
+  {
+    key: 'lastMonth',
+    label: 'Letzter Monat',
+    getStartDate: (now) => {
+      const date = new Date(now);
+      date.setMonth(date.getMonth() - 1);
+      return date;
+    },
+  },
+  {
+    key: 'last3Months',
+    label: 'Letzte 3 Monate',
+    getStartDate: (now) => {
+      const date = new Date(now);
+      date.setMonth(date.getMonth() - 3);
+      return date;
+    },
+  },
+  {
+    key: 'last6Months',
+    label: 'Letzte 6 Monate',
+    getStartDate: (now) => {
+      const date = new Date(now);
+      date.setMonth(date.getMonth() - 6);
+      return date;
+    },
+  },
+  {
+    key: 'currentYear',
+    label: 'Aktuelles Jahr',
+    getStartDate: (now) => new Date(new Date(now).getFullYear(), 0, 1),
+  },
+];
+
+function getColorStyleByIndex(index) {
+  if (index == null || Number.isNaN(index)) {
+    return { className: FISH_COLOR_CLASSES[0], style: undefined };
+  }
+  if (index < FISH_COLOR_CLASSES.length) {
+    return { className: FISH_COLOR_CLASSES[index], style: undefined };
+  }
+  // Fallback: generate distinct HSL so keine Farbe doppelt.
+  const hue = (index * 47) % 360;
+  return { className: '', style: { backgroundColor: `hsl(${hue}, 70%, 55%)` } };
+}
+
 export default function BoardOverview() {
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -255,6 +323,8 @@ export default function BoardOverview() {
   const [fishStatsLoading, setFishStatsLoading] = useState(false);
   const [fishStatsError, setFishStatsError] = useState('');
   const [selectedFishDetail, setSelectedFishDetail] = useState('');
+  const [activeSeasonalFish, setActiveSeasonalFish] = useState([]);
+  const [topAnglerPreset, setTopAnglerPreset] = useState('last3Months');
   const detailSectionRef = useRef(null);
 
   const stats = useMemo(() => {
@@ -348,8 +418,13 @@ export default function BoardOverview() {
     });
 
     const now = Date.now();
+    const preset = TOP_ANGLER_PRESETS.find((item) => item.key === topAnglerPreset);
+    const presetStart = preset?.getStartDate ? preset.getStartDate(now) : null;
+    const defaultStart = new Date(now - 90 * 24 * 60 * 60 * 1000);
+    const topAnglerStartMs = presetStart && !Number.isNaN(presetStart?.getTime())
+      ? presetStart.getTime()
+      : defaultStart.getTime();
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-    const ninetyDaysAgo = now - 90 * 24 * 60 * 60 * 1000;
 
     const activeAnglersSet = new Set();
     const session30d = { catch: new Set(), blank: new Set() };
@@ -393,7 +468,7 @@ export default function BoardOverview() {
         session30d.catch.add(`${angler}__${dateKey}`);
       }
 
-      if (ts.getTime() >= ninetyDaysAgo) {
+      if (ts.getTime() >= topAnglerStartMs) {
         topAnglerMap[angler] = (topAnglerMap[angler] || 0) + 1;
       }
 
@@ -457,8 +532,9 @@ export default function BoardOverview() {
       catchSessions30d,
       blankSessions30d,
       blankShare30d,
+      topAnglerRangeLabel: preset?.label || 'Letzte 90 Tage',
     };
-  }, [fishEntries]);
+  }, [fishEntries, topAnglerPreset]);
 
   const monthlyMaxTotal = useMemo(() => {
     if (!activityStats?.monthlyCatchSeries?.length) return 1;
@@ -472,6 +548,83 @@ export default function BoardOverview() {
       ...activityStats.blankVsCatchSeries.map((item) => item.totalSessions || 0)
     );
   }, [activityStats]);
+
+  const seasonalStats = useMemo(() => {
+    const months = getLastMonths(12);
+    const monthMap = months.reduce((map, m) => {
+      map[m.key] = { total: 0, fish: {} };
+      return map;
+    }, {});
+
+    const totalByFish = {};
+
+    fishEntries.forEach((entry) => {
+      if (entry?.blank === true) return;
+      const fishName = entry?.fish ? String(entry.fish).trim() : '';
+      if (!fishName) return;
+      const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return;
+      const monthKey = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthMap[monthKey]) return;
+      monthMap[monthKey].total += 1;
+      monthMap[monthKey].fish[fishName] = (monthMap[monthKey].fish[fishName] || 0) + 1;
+      totalByFish[fishName] = (totalByFish[fishName] || 0) + 1;
+    });
+
+    const fishList = Object.entries(totalByFish)
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'de'))
+      .map((fish, index) => {
+        const color = getColorStyleByIndex(index);
+        return { ...fish, color };
+      });
+
+    const monthStacks = months.map((m) => {
+      const bucket = monthMap[m.key];
+      const total = bucket.total || 0;
+      const parts = fishList.map((fish) => ({
+        fish: fish.name,
+        count: bucket.fish[fish.name] || 0,
+        percent: total > 0 ? ((bucket.fish[fish.name] || 0) / total) * 100 : 0,
+        color: fish.color,
+      }));
+
+      return { label: m.label, total, parts };
+    });
+
+    const legend = fishList.map((fish) => ({
+      name: fish.name,
+      color: fish.color,
+    }));
+
+    return { months: monthStacks, legend };
+  }, [fishEntries]);
+
+  const seasonalMaxActiveTotal = useMemo(() => {
+    if (!seasonalStats?.months?.length) return 1;
+    return Math.max(
+      1,
+      ...seasonalStats.months.map((month) => {
+        const activeParts = month.parts.filter((part) => activeSeasonalFish.includes(part.fish));
+        return activeParts.reduce((sum, part) => sum + part.count, 0);
+      })
+    );
+  }, [seasonalStats, activeSeasonalFish]);
+
+  useEffect(() => {
+    if (seasonalStats.legend.length === 0) {
+      setActiveSeasonalFish([]);
+      return;
+    }
+    setActiveSeasonalFish((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) {
+        return seasonalStats.legend.map((item) => item.name);
+      }
+      const valid = new Set(seasonalStats.legend.map((item) => item.name));
+      const next = prev.filter((name) => valid.has(name));
+      return next.length > 0 ? next : seasonalStats.legend.map((item) => item.name);
+    });
+  }, [seasonalStats.legend]);
 
   const canAssignAdmin = useCallback((profile) => {
     if (!profile?.name) return false;
@@ -814,19 +967,46 @@ export default function BoardOverview() {
             )}
           </div>
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-gray-800 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-100">
-            <p className="text-sm font-medium uppercase tracking-wide">Top-Angler (90 Tage)</p>
-            {activityStats.topAnglers.length === 0 ? (
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Noch keine Daten.</p>
-            ) : (
-              <ul className="mt-1 space-y-1 text-sm">
-                {activityStats.topAnglers.map((item) => (
-                  <li key={item.name} className="flex justify-between gap-2">
-                    <span className="truncate">{item.name}</span>
-                    <span className="font-semibold">{formatNumber(item.count)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium uppercase tracking-wide">Top-Angler</p>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {activityStats.topAnglerRangeLabel}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {TOP_ANGLER_PRESETS.map((preset) => {
+                  const isActive = preset.key === topAnglerPreset;
+                  return (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => setTopAnglerPreset(preset.key)}
+                      className={`rounded-full border px-3 py-1 font-semibold transition ${
+                        isActive
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-100'
+                          : 'border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800'
+                      }`}
+                      aria-pressed={isActive}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {activityStats.topAnglers.length === 0 ? (
+                <p className="text-sm text-gray-600 dark:text-gray-300">Noch keine Daten.</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {activityStats.topAnglers.map((item) => (
+                    <li key={item.name} className="flex justify-between gap-2">
+                      <span className="truncate">{item.name}</span>
+                      <span className="font-semibold">{formatNumber(item.count)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -938,6 +1118,135 @@ export default function BoardOverview() {
                 );
               })}
             </div>
+          )}
+        </div>
+      </section>
+
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Saisonale Muster je Art (12 Monate)</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Stack je Monat zeigt die Verteilung der Top-Fischarten.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+            {seasonalStats.legend.length === 0 ? (
+              <span className="text-gray-500 dark:text-gray-400">Noch keine Daten.</span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveSeasonalFish(seasonalStats.legend.map((item) => item.name))}
+                  className={`rounded-full border px-3 py-1 font-semibold transition ${
+                    activeSeasonalFish.length === seasonalStats.legend.length
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-100'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  Alle
+                </button>
+                {seasonalStats.legend.map((item) => {
+                  const isActive = activeSeasonalFish.includes(item.name);
+                  return (
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() =>
+                        setActiveSeasonalFish((prev) => {
+                          const allSelected = prev.length === seasonalStats.legend.length;
+                          const isAlready = prev.includes(item.name);
+                          if (allSelected) {
+                            return [item.name]; // Solo-Mode starten
+                          }
+                          if (!isAlready) {
+                            return [...prev, item.name]; // hinzuwählen
+                          }
+                          if (prev.length > 1) {
+                            return prev.filter((name) => name !== item.name); // abwählen
+                          }
+                          return prev; // nie leer werden lassen
+                        })
+                      }
+                      className={`flex items-center gap-1 rounded-full border px-3 py-1 font-semibold transition ${
+                        isActive
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-100'
+                          : 'border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <span
+                        className={`h-3 w-3 rounded-full ${item.color.className || ''}`}
+                        style={item.color.style}
+                        aria-hidden
+                      />
+                      {item.name}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          {seasonalStats.months.length === 0 ? (
+            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
+              Noch keine Daten vorhanden.
+            </div>
+          ) : (
+            seasonalStats.months.map((month) => (
+              <div key={`season-${month.label}`} className="flex items-center gap-3">
+                <div className="w-12 shrink-0 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  {month.label}
+                </div>
+                {(() => {
+                  const activeParts = month.parts.filter(
+                    (part) => activeSeasonalFish.includes(part.fish) && part.count > 0
+                  );
+                  const activeTotal = activeParts.reduce((sum, part) => sum + part.count, 0);
+                  const scalePercent =
+                    activeTotal > 0 ? (activeTotal / seasonalMaxActiveTotal) * 100 : 0;
+                  const widthPercent = Math.min(100, Math.max(5, scalePercent));
+
+                  return (
+                    <>
+                      <div className="flex h-6 flex-1 items-center rounded bg-gray-200/70 px-1 dark:bg-gray-700/70">
+                        {month.total === 0 ? (
+                          <div className="flex w-full items-center justify-center text-xs text-gray-500 dark:text-gray-300">
+                            keine Fänge
+                          </div>
+                        ) : activeParts.length === 0 || activeTotal === 0 ? (
+                          <div className="flex w-full items-center justify-center text-xs text-gray-500 dark:text-gray-300">
+                            Auswahl ohne Fänge
+                          </div>
+                        ) : (
+                          <div
+                            className="flex h-4 overflow-hidden rounded"
+                            style={{ width: `${widthPercent}%` }}
+                          >
+                            {activeParts.map((part) => {
+                              const share = activeTotal > 0 ? (part.count / activeTotal) * 100 : 0;
+                              return (
+                                <div
+                                  key={`${month.label}-${part.fish}`}
+                                  className={part.color.className}
+                                  style={{ width: `${Math.max(1, share)}%`, ...(part.color.style || {}) }}
+                                  title={`${part.fish}: ${formatNumber(part.count)}`}
+                                  aria-label={`${part.fish}: ${formatNumber(part.count)}`}
+                                />
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      <div className="w-14 text-right text-xs text-gray-600 dark:text-gray-300">
+                        {formatNumber(activeTotal)}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            ))
           )}
         </div>
       </section>
