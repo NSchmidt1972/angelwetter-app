@@ -8,7 +8,7 @@ const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
 
 export default function FunFacts() {
   const funFacts = useFunFactsData({ PUBLIC_FROM, vertraute });
-  const { validFishes, loading, loadError } = funFacts;
+  const { statsFishes, loading, loadError } = funFacts;
 
   return (
     <PageContainer>
@@ -28,7 +28,7 @@ export default function FunFacts() {
         <div className="p-6 text-center text-gray-600 dark:text-gray-300">
           Lade Funfragen…
         </div>
-      ) : validFishes.length === 0 ? (
+      ) : statsFishes.length === 0 ? (
         <div className="p-6 text-center text-gray-600 dark:text-gray-300">
           Keine Fänge in der aktuellen Sichtbarkeit.
         </div>

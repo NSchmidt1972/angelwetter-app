@@ -1144,7 +1144,7 @@ export default function FunFactsCards({ data }) {
                         #{idx + 1} {p.angler}
                       </span>
                       <span className="text-green-700 dark:text-green-300 font-bold">
-                        {p.total} Fische
+                        {p.total} {p.total === 1 ? 'Fisch' : 'Fische'}
                       </span>
                     </div>
                     <div className="mb-2 text-xs text-gray-600 dark:text-gray-400">
@@ -1186,7 +1186,7 @@ export default function FunFactsCards({ data }) {
                       </div>
                     </div>
                     <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                      {it.gap} Tage
+                      {Math.round(it.gap)} Tage
                     </div>
                   </li>
                 ))}

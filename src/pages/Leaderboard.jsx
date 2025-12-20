@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import PageContainer from '../components/PageContainer';
 import { isFerkensbruchLocation } from '@/utils/location';
@@ -7,6 +7,8 @@ export default function Leaderboard() {
   const [fishes, setFishes] = useState([]);
   const [formattedNamesMap, setFormattedNamesMap] = useState({});
   const [showIntern, setShowIntern] = useState(false);
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
 
   const rawName = (localStorage.getItem('anglerName') || 'Unbekannt').trim();
   const anglerNameLC = rawName.toLowerCase();
@@ -62,7 +64,7 @@ export default function Leaderboard() {
   }, []);
 
   // 🔒 Clientseitige Zusatzsicherheit (falls mal alte Zeilen ohne Flag dabei sind)
-  const filteredFishes = fishes.filter((f) => {
+  const eligibleFishes = fishes.filter((f) => {
     // 0) Falls Flag vorhanden: harte Schranke
     if (typeof f.count_in_stats === 'boolean' && f.count_in_stats === false) return false;
 
@@ -100,6 +102,37 @@ export default function Leaderboard() {
 
     return darfSehenBasis && istVerwertbar;
   });
+
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    years.add(currentYear);
+    eligibleFishes.forEach((f) => {
+      const ts = f.timestamp ? new Date(f.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return;
+      years.add(ts.getFullYear());
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [eligibleFishes, currentYear]);
+
+  useEffect(() => {
+    if (availableYears.length === 0) return;
+    if (selectedYear == null) {
+      setSelectedYear(currentYear);
+      return;
+    }
+    if (selectedYear !== 'all' && !availableYears.includes(selectedYear)) {
+      setSelectedYear(currentYear);
+    }
+  }, [availableYears, selectedYear, currentYear]);
+
+  const filteredFishes = useMemo(() => {
+    if (selectedYear === 'all' || !Number.isFinite(selectedYear)) return eligibleFishes;
+    return eligibleFishes.filter((f) => {
+      const ts = f.timestamp ? new Date(f.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return false;
+      return ts.getFullYear() === selectedYear;
+    });
+  }, [eligibleFishes, selectedYear]);
 
   // Punkte/Zusammenfassung
   const byAngler = {};
@@ -148,7 +181,15 @@ export default function Leaderboard() {
       </h2>
 
       <p className="text-center text-xs text-gray-500 dark:text-gray-400 -mt-4 mb-6">
-        Wertungsfische insgesamt: <span className="font-semibold text-gray-700 dark:text-gray-200">{wertungsCount}</span>
+        Wertungsfische insgesamt:{' '}
+        <span className="font-semibold text-gray-700 dark:text-gray-200">{wertungsCount}</span>
+        {selectedYear === 'all' ? (
+          <span className="ml-2 text-gray-600 dark:text-gray-300">• Alle Jahre</span>
+        ) : (
+          Number.isFinite(selectedYear) && (
+            <span className="ml-2 text-gray-600 dark:text-gray-300">• Jahr: {selectedYear}</span>
+          )
+        )}
       </p>
 
       {vertraute.includes(anglerNameLC) && (
@@ -162,6 +203,29 @@ export default function Leaderboard() {
               className="accent-green-600 w-5 h-5"
             />
           </label>
+        </div>
+      )}
+
+      {availableYears.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-2 mb-6">
+          {['all', ...availableYears].map((year) => {
+            const isAll = year === 'all';
+            return (
+              <button
+                key={isAll ? 'all' : year}
+                type="button"
+                onClick={() => setSelectedYear(year)}
+                className={`rounded-full border px-4 py-1 text-sm transition ${
+                  selectedYear === year
+                    ? 'border-green-600 bg-green-600 text-white font-semibold dark:border-green-400 dark:bg-green-500 dark:text-gray-900'
+                    : 'border-green-400 bg-white text-green-700 hover:bg-green-50 dark:border-green-500 dark:bg-gray-800 dark:text-green-300 dark:hover:bg-gray-700'
+                }`}
+                aria-pressed={selectedYear === year}
+              >
+                {isAll ? 'Alle Jahre' : year}
+              </button>
+            );
+          })}
         </div>
       )}
 

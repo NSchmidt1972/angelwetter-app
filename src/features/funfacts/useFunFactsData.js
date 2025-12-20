@@ -30,13 +30,33 @@ const vertrauteDefaults = ['Nicol Schmidt', 'Laura Rittlinger'];
 export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) {
   const { fishes, validFishes, loading, loadError } = useValidFishes({ PUBLIC_FROM, vertraute });
 
-  const statsFishes = useMemo(() => {
-    return (validFishes || []).filter((f) => {
+  const ferkensbruchFishes = useMemo(
+    () => (validFishes || []).filter((f) => normalizePlace(f) === 'Ferkensbruch'),
+    [validFishes],
+  );
+
+  const ferkensbruchAllFishes = useMemo(
+    () => (fishes || []).filter((f) => normalizePlace(f) === 'Ferkensbruch'),
+    [fishes],
+  );
+
+  const buildStatsFishes = (list) => {
+    return (list || []).filter((f) => {
       if (typeof f.count_in_stats === 'boolean') return f.count_in_stats;
       if (f.under_min_size === true || f.out_of_season === true) return false;
       return true;
     });
-  }, [validFishes]);
+  };
+
+  const statsFishes = useMemo(
+    () => buildStatsFishes(ferkensbruchFishes),
+    [ferkensbruchFishes],
+  );
+
+  const statsFishesAllLocations = useMemo(
+    () => buildStatsFishes(validFishes),
+    [validFishes],
+  );
 
   const mostInOneDay = useMemo(() => {
     const byAnglerDay = {};
@@ -515,7 +535,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
 
   const mostPlacesAngler = useMemo(() => {
     const placesByAngler = {};
-    statsFishes.forEach((f) => {
+    statsFishesAllLocations.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       const place = normalizePlace(f);
@@ -539,7 +559,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     const ranking = [...entries].sort((a, b) => b.count - a.count || a.angler.localeCompare(b.angler));
 
     return { count: best, winners, ranking };
-  }, [statsFishes]);
+  }, [statsFishesAllLocations]);
 
   const predatorKing = useMemo(() => {
     const totals = {};
@@ -572,7 +592,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
   }, [statsFishes]);
 
   const heaviestFish = useMemo(() => {
-    const withWeight = validFishes.filter((f) => {
+    const withWeight = ferkensbruchFishes.filter((f) => {
       const w = parseFloat(f.weight);
       return !Number.isNaN(w) && w > 0;
     });
@@ -586,13 +606,13 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
 
     const items = withWeight.filter((f) => parseFloat(f.weight) === maxW);
     return { weight: maxW, items };
-  }, [validFishes]);
+  }, [ferkensbruchFishes]);
 
   const mostEfficientAngler = useMemo(() => {
-    if (fishes.length === 0) return { max: 0, winners: [], ranking: [] };
+    if (ferkensbruchAllFishes.length === 0) return { max: 0, winners: [], ranking: [] };
 
     const daysByAngler = {};
-    fishes.forEach((f) => {
+    ferkensbruchAllFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       (daysByAngler[who] ||= new Set()).add(localDayKey(new Date(f.timestamp)));
@@ -624,7 +644,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     const max = entries[0].ratio;
     const winners = entries.filter((e) => Math.abs(e.ratio - max) < 1e-9);
     return { max, winners, ranking: entries };
-  }, [fishes, statsFishes]);
+  }, [ferkensbruchAllFishes, statsFishes]);
 
   const mostRotaugen = useMemo(() => {
     const isRotauge = (name) => {
@@ -832,7 +852,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
 
   const topThreeSpecies = useMemo(() => {
     const counts = {};
-    statsFishes.forEach((f) => {
+    ferkensbruchFishes.forEach((f) => {
       const s = (f.fish || '').trim();
       if (!s) return;
       counts[s] = (counts[s] || 0) + 1;
@@ -844,7 +864,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     const items = entries.slice(0, 3);
     const max = items[0]?.count || 0;
     return { items, max, ranking: entries };
-  }, [statsFishes]);
+  }, [ferkensbruchFishes]);
 
   const averageSizeByAngler = useMemo(() => {
     if (statsFishes.length === 0) return { top3: [], ranking: [] };
@@ -1137,7 +1157,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
   }, [statsFishes]);
 
   const grundelChampion = useMemo(() => {
-    const onlyGrundeln = validFishes.filter((f) => f.fish?.trim().toLowerCase() === 'grundel');
+    const onlyGrundeln = ferkensbruchFishes.filter((f) => f.fish?.trim().toLowerCase() === 'grundel');
     if (onlyGrundeln.length === 0) return null;
 
     const byAngler = {};
@@ -1151,15 +1171,19 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
       .sort((a, b) => b.count - a.count);
 
     return sorted[0];
-  }, [validFishes]);
+  }, [ferkensbruchFishes]);
 
   const foreignAnglers = useMemo(() => {
     if (validFishes.length === 0) return { top3: [] };
 
     const byAngler = {};
     for (const f of validFishes) {
-      const loc = (f.location_name || '').trim();
-      if (!loc || ['Ferkensbruch', 'Lobberich'].includes(loc)) continue;
+      const normalizedPlace = normalizePlace(f);
+      if (normalizedPlace === 'Ferkensbruch') continue;
+
+      const locRaw = (f.location_name || '').trim();
+      const loc = locRaw || normalizedPlace;
+      if (!loc) continue;
 
       const who = (f.angler || 'Unbekannt').trim();
       if (!byAngler[who]) {
@@ -1182,7 +1206,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
 
   const schneiderKoenig = useMemo(() => {
     const counts = {};
-    fishes.forEach((f) => {
+    ferkensbruchAllFishes.forEach((f) => {
       if (f.blank) {
         const who = (f.angler || 'Unbekannt').trim();
         counts[who] = (counts[who] || 0) + 1;
@@ -1196,13 +1220,13 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     const max = entries[0].count;
     const winners = entries.filter((e) => e.count === max);
     return { max, winners, ranking: entries };
-  }, [fishes]);
+  }, [ferkensbruchAllFishes]);
 
   const worstBlankMonth = useMemo(() => {
-    if (fishes.length === 0) return { max: 0, winners: [], ranking: [] };
+    if (ferkensbruchAllFishes.length === 0) return { max: 0, winners: [], ranking: [] };
 
     const byMonth = {};
-    for (const f of fishes) {
+    for (const f of ferkensbruchAllFishes) {
       if (!f.blank) continue;
       const key = monthKey(new Date(f.timestamp));
       byMonth[key] = (byMonth[key] || 0) + 1;
@@ -1216,10 +1240,10 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     const winners = entries.filter((e) => e.count === max);
     const ranking = entries;
     return { max, winners, ranking };
-  }, [fishes]);
+  }, [ferkensbruchAllFishes]);
 
   const hottestCatch = useMemo(() => {
-    const withTemp = validFishes
+    const withTemp = ferkensbruchFishes
       .map((f) => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
       .filter((x) => x.t != null && !Number.isNaN(x.size) && x.size > 0);
 
@@ -1231,10 +1255,10 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     const winners = atMaxT.filter((x) => Math.abs(x.size - maxSize) < 1e-9).map((x) => x.f);
 
     return { tempC: maxT, size: maxSize, items: winners };
-  }, [validFishes]);
+  }, [ferkensbruchFishes]);
 
   const frostCatch = useMemo(() => {
-    const frost = validFishes
+    const frost = ferkensbruchFishes
       .map((f) => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
       .filter((x) => x.t != null && x.t <= 0 && !Number.isNaN(x.size) && x.size > 0);
 
@@ -1261,12 +1285,12 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     const max = entries[0].count;
     const winners = entries.filter((e) => e.count === max);
     return { max, winners, ranking: entries };
-  }, [validFishes]);
+  }, [ferkensbruchFishes]);
 
   const extremeWeatherCatch = useMemo(() => {
-    if (validFishes.length === 0) return null;
+    if (ferkensbruchFishes.length === 0) return null;
 
-    const entries = validFishes
+    const entries = ferkensbruchFishes
       .map((f) => {
         const parsed = parseWeather(f) || {};
         const { textLower = '', tempC = null, rainMm = null, windSpeed = null, windGust = null } = parsed;
@@ -1653,6 +1677,8 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
   return {
     fishes,
     validFishes,
+    ferkensbruchFishes,
+    ferkensbruchAllFishes,
     statsFishes,
     loading,
     loadError,

@@ -54,6 +54,9 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
 
   const [storedAnglerName] = useLocalStorageValue('anglerName', 'Unbekannt');
   const anglerName = (storedAnglerName || 'Unbekannt').trim();
+  const normalizedAnglerName = anglerName.toLowerCase();
+  const anglerFirstName = normalizedAnglerName.split(/\s+/)[0];
+  const isMarilou = anglerFirstName === 'marilou';
   const istVertrauter = vertraute.includes(anglerName);
   const [filterSetting] = useLocalStorageValue('dataFilter', 'recent');
 
@@ -80,9 +83,15 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
         const arr = Array.isArray(data) ? data : [];
         const filtered = arr.filter((f) => {
           const fangDatum = safeDate(f.timestamp);
-          return istVertrauter
+          const withinVisibility = istVertrauter
             ? (filterSetting === 'all' || fangDatum >= PUBLIC_FROM)
             : fangDatum >= PUBLIC_FROM;
+          if (!withinVisibility) return false;
+
+          const anglerNormalized = (f?.angler || '').toString().trim().toLowerCase();
+          const anglerFirst = anglerNormalized.split(/\s+/)[0];
+          if (anglerFirst === 'marilou' && !isMarilou) return false;
+          return true;
         });
 
         if (!signal.aborted) setFishes(filtered);
@@ -96,7 +105,7 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [istVertrauter, filterSetting]);
+  }, [istVertrauter, filterSetting, isMarilou]);
 
   const validFishes = useMemo(() => {
     return fishes.filter((f) => {
@@ -111,5 +120,14 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
   }, [fishes]);
 
   // Exponiere loadError, damit die Page was anzeigen kann
-  return { fishes, validFishes, loading, loadError, anglerName, filterSetting, istVertrauter };
+  return {
+    fishes,
+    validFishes,
+    loading,
+    loadError,
+    anglerName,
+    filterSetting,
+    istVertrauter,
+    isMarilou,
+  };
 }

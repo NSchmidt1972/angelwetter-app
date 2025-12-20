@@ -231,6 +231,21 @@ function getLastMonths(count = 12) {
   return months;
 }
 
+function getMonthsForYear(year) {
+  if (!Number.isFinite(year)) return getLastMonths(12);
+  const months = [];
+  for (let i = 0; i < 12; i += 1) {
+    const date = new Date(year, i, 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    months.push({
+      key,
+      date,
+      label: date.toLocaleDateString('de-DE', { month: 'short' }),
+    });
+  }
+  return months;
+}
+
 const FISH_COLOR_CLASSES = [
   'bg-blue-500 dark:bg-blue-400',
   'bg-emerald-500 dark:bg-emerald-400',
@@ -241,50 +256,6 @@ const FISH_COLOR_CLASSES = [
   'bg-lime-500 dark:bg-lime-400',
   'bg-fuchsia-500 dark:bg-fuchsia-400',
   'bg-orange-500 dark:bg-orange-400',
-];
-
-const TOP_ANGLER_PRESETS = [
-  {
-    key: 'lastWeek',
-    label: 'Letzte Woche',
-    getStartDate: (now) => {
-      const date = new Date(now);
-      date.setDate(date.getDate() - 7);
-      return date;
-    },
-  },
-  {
-    key: 'lastMonth',
-    label: 'Letzter Monat',
-    getStartDate: (now) => {
-      const date = new Date(now);
-      date.setMonth(date.getMonth() - 1);
-      return date;
-    },
-  },
-  {
-    key: 'last3Months',
-    label: 'Letzte 3 Monate',
-    getStartDate: (now) => {
-      const date = new Date(now);
-      date.setMonth(date.getMonth() - 3);
-      return date;
-    },
-  },
-  {
-    key: 'last6Months',
-    label: 'Letzte 6 Monate',
-    getStartDate: (now) => {
-      const date = new Date(now);
-      date.setMonth(date.getMonth() - 6);
-      return date;
-    },
-  },
-  {
-    key: 'currentYear',
-    label: 'Aktuelles Jahr',
-    getStartDate: (now) => new Date(new Date(now).getFullYear(), 0, 1),
-  },
 ];
 
 function getColorStyleByIndex(index) {
@@ -318,14 +289,42 @@ export default function BoardOverview() {
   const [search, setSearch] = useState('');
   const [showWhitelist, setShowWhitelist] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
-  const [fishStats, setFishStats] = useState([]);
   const [fishEntries, setFishEntries] = useState([]);
   const [fishStatsLoading, setFishStatsLoading] = useState(false);
   const [fishStatsError, setFishStatsError] = useState('');
   const [selectedFishDetail, setSelectedFishDetail] = useState('');
   const [activeSeasonalFish, setActiveSeasonalFish] = useState([]);
-  const [topAnglerPreset, setTopAnglerPreset] = useState('last3Months');
+  const [selectedYear, setSelectedYear] = useState(null);
   const detailSectionRef = useRef(null);
+
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    fishEntries.forEach((entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return;
+      years.add(ts.getFullYear());
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [fishEntries]);
+
+  useEffect(() => {
+    if (availableYears.length === 0) {
+      setSelectedYear(null);
+      return;
+    }
+    if (selectedYear == null || !availableYears.includes(selectedYear)) {
+      setSelectedYear(availableYears[0]);
+    }
+  }, [availableYears, selectedYear]);
+
+  const filteredFishEntries = useMemo(() => {
+    if (!Number.isFinite(selectedYear)) return fishEntries;
+    return fishEntries.filter((entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return false;
+      return ts.getFullYear() === selectedYear;
+    });
+  }, [fishEntries, selectedYear]);
 
   const stats = useMemo(() => {
     const totalWhitelist = whitelist.length;
@@ -377,6 +376,26 @@ export default function BoardOverview() {
     };
   }, [profiles, whitelist]);
 
+  const fishStats = useMemo(() => {
+    const grouped = filteredFishEntries.reduce((acc, entry) => {
+      const fishName = entry?.fish ? String(entry.fish).trim() : '';
+      if (!fishName || entry?.blank === true) return acc;
+
+      if (!acc[fishName]) acc[fishName] = { fish: fishName, total: 0, taken: 0, entries: [] };
+      acc[fishName].total += 1;
+      if (entry?.taken === true) acc[fishName].taken += 1;
+      acc[fishName].entries.push({
+        size: entry?.size ?? null,
+        taken: entry?.taken === true,
+      });
+      return acc;
+    }, {});
+
+    return Object.values(grouped).sort(
+      (a, b) => b.total - a.total || a.fish.localeCompare(b.fish)
+    );
+  }, [filteredFishEntries]);
+
   const fishOverviewTotals = useMemo(() => {
     if (!Array.isArray(fishStats) || fishStats.length === 0) {
       return { total: 0, taken: 0 };
@@ -407,7 +426,7 @@ export default function BoardOverview() {
   }, [selectedFishDetail, fishStats]);
 
   const activityStats = useMemo(() => {
-    const months = getLastMonths(12);
+    const months = getMonthsForYear(Number.isFinite(selectedYear) ? selectedYear : new Date().getFullYear());
     const monthlyMap = {};
     const catchSessionsMap = {};
     const blankSessionsMap = {};
@@ -417,24 +436,22 @@ export default function BoardOverview() {
       blankSessionsMap[m.key] = new Set();
     });
 
-    const now = Date.now();
-    const preset = TOP_ANGLER_PRESETS.find((item) => item.key === topAnglerPreset);
-    const presetStart = preset?.getStartDate ? preset.getStartDate(now) : null;
-    const defaultStart = new Date(now - 90 * 24 * 60 * 60 * 1000);
-    const topAnglerStartMs = presetStart && !Number.isNaN(presetStart?.getTime())
-      ? presetStart.getTime()
-      : defaultStart.getTime();
-    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const latestTimestamp = filteredFishEntries.reduce((max, entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
+      if (!Number.isFinite(ts)) return max;
+      return Math.max(max, ts);
+    }, 0);
+    const referenceTime = latestTimestamp || Date.now();
+    const thirtyDaysAgo = referenceTime - 30 * 24 * 60 * 60 * 1000;
 
     const activeAnglersSet = new Set();
     const session30d = { catch: new Set(), blank: new Set() };
     let catchesLast30d = 0;
 
-    const topAnglerMap = {};
     const weekdayCounts = Array(7).fill(0);
     const hourCounts = Array(24).fill(0);
 
-    fishEntries.forEach((entry) => {
+    filteredFishEntries.forEach((entry) => {
       const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
       if (!ts || Number.isNaN(ts.getTime())) return;
 
@@ -468,10 +485,6 @@ export default function BoardOverview() {
         session30d.catch.add(`${angler}__${dateKey}`);
       }
 
-      if (ts.getTime() >= topAnglerStartMs) {
-        topAnglerMap[angler] = (topAnglerMap[angler] || 0) + 1;
-      }
-
       const hour = ts.getHours();
       const weekday = ts.getDay();
       hourCounts[hour] += 1;
@@ -494,11 +507,6 @@ export default function BoardOverview() {
         totalSessions: catchSessions + blankSessions,
       };
     });
-
-    const topAnglers = Object.entries(topAnglerMap)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'de'))
-      .slice(0, 5);
 
     const weekdayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
     const topWeekdays = weekdayCounts
@@ -524,7 +532,6 @@ export default function BoardOverview() {
     return {
       monthlyCatchSeries,
       blankVsCatchSeries,
-      topAnglers,
       topWeekdays,
       topHours,
       activeAnglersLast30d,
@@ -532,9 +539,8 @@ export default function BoardOverview() {
       catchSessions30d,
       blankSessions30d,
       blankShare30d,
-      topAnglerRangeLabel: preset?.label || 'Letzte 90 Tage',
     };
-  }, [fishEntries, topAnglerPreset]);
+  }, [filteredFishEntries, selectedYear]);
 
   const monthlyMaxTotal = useMemo(() => {
     if (!activityStats?.monthlyCatchSeries?.length) return 1;
@@ -550,7 +556,7 @@ export default function BoardOverview() {
   }, [activityStats]);
 
   const seasonalStats = useMemo(() => {
-    const months = getLastMonths(12);
+    const months = getMonthsForYear(Number.isFinite(selectedYear) ? selectedYear : new Date().getFullYear());
     const monthMap = months.reduce((map, m) => {
       map[m.key] = { total: 0, fish: {} };
       return map;
@@ -558,7 +564,7 @@ export default function BoardOverview() {
 
     const totalByFish = {};
 
-    fishEntries.forEach((entry) => {
+    filteredFishEntries.forEach((entry) => {
       if (entry?.blank === true) return;
       const fishName = entry?.fish ? String(entry.fish).trim() : '';
       if (!fishName) return;
@@ -598,7 +604,7 @@ export default function BoardOverview() {
     }));
 
     return { months: monthStacks, legend };
-  }, [fishEntries]);
+  }, [filteredFishEntries, selectedYear]);
 
   const seasonalMaxActiveTotal = useMemo(() => {
     if (!seasonalStats?.months?.length) return 1;
@@ -676,26 +682,6 @@ export default function BoardOverview() {
       });
 
       setFishEntries(filtered);
-
-      const grouped = filtered.reduce((acc, entry) => {
-        const fishName = entry?.fish ? String(entry.fish).trim() : '';
-        if (!fishName || entry?.blank === true) return acc;
-
-        if (!acc[fishName]) acc[fishName] = { fish: fishName, total: 0, taken: 0, entries: [] };
-        acc[fishName].total += 1;
-        if (entry?.taken === true) acc[fishName].taken += 1;
-        acc[fishName].entries.push({
-          size: entry?.size ?? null,
-          taken: entry?.taken === true,
-        });
-        return acc;
-      }, {});
-
-      const sorted = Object.values(grouped).sort(
-        (a, b) => b.total - a.total || a.fish.localeCompare(b.fish)
-      );
-
-      setFishStats(sorted);
     } catch (error) {
       setFishStatsError(error.message || 'Fischübersicht konnte nicht geladen werden.');
     } finally {
@@ -925,22 +911,61 @@ export default function BoardOverview() {
         </div>
       </section>
 
+      {availableYears.length > 0 && (
+        <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Jahr wählen</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Alle Fang-Diagramme unten zeigen das ausgewählte Jahr.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {availableYears.map((year) => (
+                <button
+                  key={year}
+                  type="button"
+                  onClick={() => setSelectedYear(year)}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                    selectedYear === year
+                      ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
+                      : 'border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-500/50 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                  }`}
+                  aria-pressed={selectedYear === year}
+                >
+                  {year}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Aktivität & Nutzung</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Aktivität & Nutzung</h2>
+          {Number.isFinite(selectedYear) && (
+            <span className="text-sm text-gray-600 dark:text-gray-300">Jahr: {selectedYear}</span>
+          )}
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
             <p className="text-sm font-medium uppercase tracking-wide">Aktive Angler</p>
             <p className="mt-1 text-2xl font-semibold">
               {formatNumber(activityStats.activeAnglersLast30d)}
             </p>
-            <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">letzte 30 Tage</p>
+            <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">
+              letzte 30 Tage des gewählten Jahres
+            </p>
           </div>
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
             <p className="text-sm font-medium uppercase tracking-wide">Ø Fänge / aktiver Angler</p>
             <p className="mt-1 text-2xl font-semibold">
               {formatDecimal(activityStats.avgCatchesPerActive)}
             </p>
-            <p className="text-xs text-blue-700/80 dark:text-blue-200/70">letzte 30 Tage</p>
+            <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
+              letzte 30 Tage des gewählten Jahres
+            </p>
           </div>
           <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
             <p className="text-sm font-medium uppercase tracking-wide">Sessions (30 Tage)</p>
@@ -966,57 +991,17 @@ export default function BoardOverview() {
               </div>
             )}
           </div>
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-gray-800 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-100">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium uppercase tracking-wide">Top-Angler</p>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {activityStats.topAnglerRangeLabel}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs">
-                {TOP_ANGLER_PRESETS.map((preset) => {
-                  const isActive = preset.key === topAnglerPreset;
-                  return (
-                    <button
-                      key={preset.key}
-                      type="button"
-                      onClick={() => setTopAnglerPreset(preset.key)}
-                      className={`rounded-full border px-3 py-1 font-semibold transition ${
-                        isActive
-                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-100'
-                          : 'border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800'
-                      }`}
-                      aria-pressed={isActive}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {activityStats.topAnglers.length === 0 ? (
-                <p className="text-sm text-gray-600 dark:text-gray-300">Noch keine Daten.</p>
-              ) : (
-                <ul className="space-y-1 text-sm">
-                  {activityStats.topAnglers.map((item) => (
-                    <li key={item.name} className="flex justify-between gap-2">
-                      <span className="truncate">{item.name}</span>
-                      <span className="font-semibold">{formatNumber(item.count)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
         </div>
       </section>
 
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Zeitverlauf Fänge (12 Monate)</h2>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
+              Zeitverlauf Fänge ({Number.isFinite(selectedYear) ? selectedYear : '12 Monate'})
+            </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Gesamtfänge und Entnahmen im Vergleich je Monat.
+              Gesamtfänge und Entnahmen im Vergleich je Monat des gewählten Jahres.
             </p>
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -1067,7 +1052,9 @@ export default function BoardOverview() {
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Fang vs. Schneidersession (12 Monate)</h2>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
+              Fang vs. Schneidersession ({Number.isFinite(selectedYear) ? selectedYear : '12 Monate'})
+            </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
               Sessions pro Monat, unterschieden nach Fang- und Schneider-Tagen.
             </p>
@@ -1125,9 +1112,11 @@ export default function BoardOverview() {
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Saisonale Muster je Art (12 Monate)</h2>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
+              Saisonale Muster je Art ({Number.isFinite(selectedYear) ? selectedYear : '12 Monate'})
+            </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Stack je Monat zeigt die Verteilung der Top-Fischarten.
+              Stack je Monat zeigt die Verteilung der Top-Fischarten im gewählten Jahr.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
@@ -1270,6 +1259,11 @@ export default function BoardOverview() {
                   : '—'
               })
             </div>
+            {Number.isFinite(selectedYear) && (
+              <div className="text-right text-xs text-gray-500 dark:text-gray-400">
+                Jahr: {selectedYear}
+              </div>
+            )}
           </div>
         </div>
 
