@@ -141,32 +141,36 @@ export default function FunFactsCards({ data }) {
 
   const cards = useMemo(
     () => [
-          // 1) Meiste Fische an einem Tag
-          <Card key="day" title="Wer hat die meisten Fische an einem Tag gefangen?">
-            <p className="mb-2">
-              <strong>{mostInOneDay.count}</strong> Fänge – Rekordhalter:
-            </p>
-            <ul className="space-y-2">
-              {mostInOneDay.items.map((it, idx) => (
-                <li key={idx} className="flex items-start justify-between gap-3">
-                  <div className="space-y-0.5">
-                    <div className="font-medium text-green-700 dark:text-green-300">
-                      {it.angler}
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-300">
-                      {formatDateSafe(`${it.day}T00:00:00`)}
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {it.examples.map((e) => (
-                        <Pill key={e.id}>
-                          {e.fish} • {parseFloat(e.size).toFixed(0)} cm • {formatTimeSafe(e.timestamp)} Uhr
-                        </Pill>
-                      ))}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          <Card key="heavy" title="🏋️ Wer hat das dickste Ding gefangen? (max Gewicht)">
+            {heaviestFish ? (
+              <>
+                <p className="mb-2">
+                  Schwerster Fang:{' '}
+                  <b className="text-green-700 dark:text-green-300">
+                    {heaviestFish.weight.toFixed(1)} kg
+                  </b>
+                </p>
+                <ul className="space-y-2">
+                  {heaviestFish.items.map((f) => (
+                    <li key={f.id} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          {f.fish}
+                          {parseFloat(f.size) > 0 ? ` • ${parseFloat(f.size).toFixed(0)} cm` : ''} •{' '}
+                          {formatDateTimeSafe(f.timestamp)}
+                        </div>
+                      </div>
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                        {parseFloat(f.weight).toFixed(1)} kg
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>Keine Gewichtsangaben vorhanden.</p>
+            )}
           </Card>,
 
           <Card
@@ -201,38 +205,6 @@ export default function FunFactsCards({ data }) {
               </ul>
             ) : (
               <p>Keine Daten</p>
-            )}
-          </Card>,
-
-          <Card key="heavy" title="🏋️ Wer hat das dickste Ding gefangen? (max Gewicht)">
-            {heaviestFish ? (
-              <>
-                <p className="mb-2">
-                  Schwerster Fang:{' '}
-                  <b className="text-green-700 dark:text-green-300">
-                    {heaviestFish.weight.toFixed(1)} kg
-                  </b>
-                </p>
-                <ul className="space-y-2">
-                  {heaviestFish.items.map((f) => (
-                    <li key={f.id} className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">
-                          {f.fish}
-                          {parseFloat(f.size) > 0 ? ` • ${parseFloat(f.size).toFixed(0)} cm` : ''} •{' '}
-                          {formatDateTimeSafe(f.timestamp)}
-                        </div>
-                      </div>
-                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                        {parseFloat(f.weight).toFixed(1)} kg
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p>Keine Gewichtsangaben vorhanden.</p>
             )}
           </Card>,
 
@@ -443,6 +415,34 @@ export default function FunFactsCards({ data }) {
             ) : (
               <p>Zu wenig Top-10-Fänge vorhanden.</p>
             )}
+          </Card>,
+
+          // Meiste Fische an einem Tag (ans Ende der Highlights verschoben)
+          <Card key="day" title="Wer hat die meisten Fische an einem Tag gefangen?">
+            <p className="mb-2">
+              <strong>{mostInOneDay.count}</strong> Fänge – Rekordhalter:
+            </p>
+            <ul className="space-y-2">
+              {mostInOneDay.items.map((it, idx) => (
+                <li key={idx} className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="font-medium text-green-700 dark:text-green-300">
+                      {it.angler}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300">
+                      {formatDateSafe(`${it.day}T00:00:00`)}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {it.examples.map((e) => (
+                        <Pill key={e.id}>
+                          {e.fish} • {parseFloat(e.size).toFixed(0)} cm • {formatTimeSafe(e.timestamp)} Uhr
+                        </Pill>
+                      ))}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </Card>,
 
           // 7) Tag mit den meisten Fischen

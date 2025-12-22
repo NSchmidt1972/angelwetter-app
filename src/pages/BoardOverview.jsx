@@ -576,6 +576,10 @@ export default function BoardOverview() {
         fishName !== '' && fishName.toLowerCase() !== 'unbekannt' && entry.blank !== true;
 
       if (isBlank) {
+        const hour = ts.getHours();
+        const weekday = ts.getDay();
+        hourCounts[hour] += 1;
+        weekdayCounts[weekday] += 1;
         blankSessionsMap[monthKey] += 1;
         blankAnglersSet.add(anglerKey);
         sessionSet.blankCount += 1;
@@ -914,7 +918,7 @@ export default function BoardOverview() {
       });
 
       setActivityFishEntries([...analysisCatchEntries, ...analysisBlankEntries]);
-      setFishEntries(catchEntriesLeaderboard);
+      setFishEntries(analysisCatchEntries); // Fischstatistik soll mit Analysis übereinstimmen
     } catch (error) {
       setFishStatsError(error.message || 'Fischübersicht konnte nicht geladen werden.');
     } finally {
@@ -1342,7 +1346,7 @@ export default function BoardOverview() {
             </p>
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            Basis: je Angler und Tag nur eine Session.
+            Skala relativ zum stärksten Monat.
           </div>
         </div>
 
