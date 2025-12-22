@@ -1,8 +1,7 @@
 // src/components/weather/CurrentPanel.jsx
 import { owmIconUrl, degToDir, moonPhaseText } from '@/utils/weatherFormat';
-import FishRating from '@/components/common/FishRating';
 
-export default function CurrentPanel({ now, daily, savedAt, currentPrediction }) {
+export default function CurrentPanel({ now, daily, savedAt }) {
   const savedAtString = savedAt
     ? new Date(savedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
     : '';
@@ -29,11 +28,6 @@ export default function CurrentPanel({ now, daily, savedAt, currentPrediction })
           <p>💨 Wind: {now.wind_speed} m/s aus {degToDir(now.wind_deg)}</p>
           <p>🔆 UV-Index: {now.uvi}</p>
           <p>🌙 Mondphase: {moonText}</p>
-          {currentPrediction?.probability != null && (
-            <p className="text-sm text-green-700 dark:text-green-300 font-semibold">
-              🎯 {Number(currentPrediction.probability).toFixed(0)} % <FishRating probability={currentPrediction.probability} />
-            </p>
-          )}
         </div>
       </div>
     </>

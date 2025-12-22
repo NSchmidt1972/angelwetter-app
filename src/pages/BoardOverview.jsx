@@ -8,6 +8,7 @@ import {
   updateProfileRole,
   deleteProfile,
 } from '@/services/boardService';
+import { isFerkensbruchLocation } from '@/utils/location';
 
 const BASE_ROLE_OPTIONS = [
   { value: 'mitglied', label: 'Mitglied' },
@@ -246,6 +247,75 @@ function getMonthsForYear(year) {
   return months;
 }
 
+function getMonthsForAllYears() {
+  const months = [];
+  for (let i = 0; i < 12; i += 1) {
+    const date = new Date(2000, i, 1);
+    const key = `all-${String(i + 1).padStart(2, '0')}`;
+    months.push({
+      key,
+      date,
+      label: date.toLocaleDateString('de-DE', { month: 'short' }),
+    });
+  }
+  return months;
+}
+
+function getMonthsForSelection(selection) {
+  if (selection === 'all') return getMonthsForAllYears();
+  if (!Number.isFinite(selection)) return getLastMonths(12);
+  return getMonthsForYear(selection);
+}
+
+const ACTIVITY_RANGE_OPTIONS = [
+  { value: '7d', label: 'Letzte Woche' },
+  { value: '30d', label: 'Letzter Monat' },
+  { value: '90d', label: 'Letzte 3 Monate' },
+  { value: '180d', label: 'Letzte 6 Monate' },
+  { value: 'current-year', label: 'Aktuelles Jahr' },
+  { value: 'last-year', label: 'Letztes Jahr' },
+];
+
+function filterEntriesByRange(entries = [], range, referenceTime = Date.now()) {
+  if (!Array.isArray(entries) || entries.length === 0) return [];
+  const now = new Date(referenceTime);
+  let start = null;
+  let end = null;
+
+  switch (range) {
+    case '7d':
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case '30d':
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case '90d':
+      start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    case '180d':
+      start = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+      break;
+    case 'last-year': {
+      const lastYear = now.getFullYear() - 1;
+      start = new Date(lastYear, 0, 1);
+      end = new Date(now.getFullYear(), 0, 1);
+      break;
+    }
+    case 'current-year':
+    default:
+      start = new Date(now.getFullYear(), 0, 1);
+      break;
+  }
+
+  return entries.filter((entry) => {
+    const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+    if (!ts || Number.isNaN(ts.getTime())) return false;
+    if (start && ts < start) return false;
+    if (end && ts >= end) return false;
+    return true;
+  });
+}
+
 const FISH_COLOR_CLASSES = [
   'bg-blue-500 dark:bg-blue-400',
   'bg-emerald-500 dark:bg-emerald-400',
@@ -290,15 +360,18 @@ export default function BoardOverview() {
   const [showWhitelist, setShowWhitelist] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
   const [fishEntries, setFishEntries] = useState([]);
+  const [activityFishEntries, setActivityFishEntries] = useState([]);
   const [fishStatsLoading, setFishStatsLoading] = useState(false);
   const [fishStatsError, setFishStatsError] = useState('');
+  const [showActiveAnglers, setShowActiveAnglers] = useState(false);
   const [selectedFishDetail, setSelectedFishDetail] = useState('');
   const [activeSeasonalFish, setActiveSeasonalFish] = useState([]);
-  const [selectedYear, setSelectedYear] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [activityRange, setActivityRange] = useState('current-year');
   const detailSectionRef = useRef(null);
 
   const availableYears = useMemo(() => {
-    const years = new Set();
+    const years = new Set([new Date().getFullYear()]);
     fishEntries.forEach((entry) => {
       const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
       if (!ts || Number.isNaN(ts.getTime())) return;
@@ -307,17 +380,29 @@ export default function BoardOverview() {
     return Array.from(years).sort((a, b) => b - a);
   }, [fishEntries]);
 
+  const yearOptions = useMemo(() => ['all', ...availableYears], [availableYears]);
+  const selectedYearLabel = selectedYear === 'all' ? 'Alle Jahre (kumuliert)' : selectedYear;
+  const activityRangeLabel = useMemo(() => {
+    const option = ACTIVITY_RANGE_OPTIONS.find((item) => item.value === activityRange);
+    return option?.label || 'Aktuelles Jahr';
+  }, [activityRange]);
+
   useEffect(() => {
     if (availableYears.length === 0) {
-      setSelectedYear(null);
+      setSelectedYear('all');
       return;
     }
-    if (selectedYear == null || !availableYears.includes(selectedYear)) {
+    if (selectedYear == null) {
+      setSelectedYear('all');
+      return;
+    }
+    if (selectedYear !== 'all' && !availableYears.includes(selectedYear)) {
       setSelectedYear(availableYears[0]);
     }
   }, [availableYears, selectedYear]);
 
   const filteredFishEntries = useMemo(() => {
+    if (selectedYear === 'all') return fishEntries;
     if (!Number.isFinite(selectedYear)) return fishEntries;
     return fishEntries.filter((entry) => {
       const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
@@ -325,6 +410,26 @@ export default function BoardOverview() {
       return ts.getFullYear() === selectedYear;
     });
   }, [fishEntries, selectedYear]);
+
+  const activityFilteredFishEntries = useMemo(() => {
+    const latestTimestamp = activityFishEntries.reduce((max, entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
+      if (!Number.isFinite(ts)) return max;
+      return Math.max(max, ts);
+    }, 0);
+    const referenceTime = latestTimestamp || Date.now();
+    return filterEntriesByRange(activityFishEntries, activityRange, referenceTime);
+  }, [activityFishEntries, activityRange]);
+
+  const diagramSessionEntries = useMemo(() => {
+    if (selectedYear === 'all') return activityFishEntries;
+    if (!Number.isFinite(selectedYear)) return activityFishEntries;
+    return activityFishEntries.filter((entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return false;
+      return ts.getFullYear() === selectedYear;
+    });
+  }, [activityFishEntries, selectedYear]);
 
   const stats = useMemo(() => {
     const totalWhitelist = whitelist.length;
@@ -377,7 +482,7 @@ export default function BoardOverview() {
   }, [profiles, whitelist]);
 
   const fishStats = useMemo(() => {
-    const grouped = filteredFishEntries.reduce((acc, entry) => {
+    const grouped = fishEntries.reduce((acc, entry) => {
       const fishName = entry?.fish ? String(entry.fish).trim() : '';
       if (!fishName || entry?.blank === true) return acc;
 
@@ -394,7 +499,7 @@ export default function BoardOverview() {
     return Object.values(grouped).sort(
       (a, b) => b.total - a.total || a.fish.localeCompare(b.fish)
     );
-  }, [filteredFishEntries]);
+  }, [fishEntries]);
 
   const fishOverviewTotals = useMemo(() => {
     if (!Array.isArray(fishStats) || fishStats.length === 0) {
@@ -426,50 +531,43 @@ export default function BoardOverview() {
   }, [selectedFishDetail, fishStats]);
 
   const activityStats = useMemo(() => {
-    const months = getMonthsForYear(Number.isFinite(selectedYear) ? selectedYear : new Date().getFullYear());
+    const months = getMonthsForAllYears();
     const monthlyMap = {};
     const catchSessionsMap = {};
     const blankSessionsMap = {};
     months.forEach((m) => {
       monthlyMap[m.key] = { total: 0, taken: 0 };
       catchSessionsMap[m.key] = new Set();
-      blankSessionsMap[m.key] = new Set();
+      blankSessionsMap[m.key] = 0;
     });
 
-    const latestTimestamp = filteredFishEntries.reduce((max, entry) => {
-      const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
-      if (!Number.isFinite(ts)) return max;
-      return Math.max(max, ts);
-    }, 0);
-    const referenceTime = latestTimestamp || Date.now();
-    const thirtyDaysAgo = referenceTime - 30 * 24 * 60 * 60 * 1000;
-
-    const activeAnglersSet = new Set();
-    const session30d = { catch: new Set(), blank: new Set() };
-    let catchesLast30d = 0;
+    const catchAnglersSet = new Set();
+    const blankAnglersSet = new Set();
+    const sessionSet = { catch: new Set(), blankCount: 0 };
+    let totalCatchCount = 0;
 
     const weekdayCounts = Array(7).fill(0);
     const hourCounts = Array(24).fill(0);
 
-    filteredFishEntries.forEach((entry) => {
+    activityFilteredFishEntries.forEach((entry) => {
       const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
       if (!ts || Number.isNaN(ts.getTime())) return;
 
-      const monthKey = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
+      const monthKey = `all-${String(ts.getMonth() + 1).padStart(2, '0')}`;
       const monthBucket = monthlyMap[monthKey];
       if (!monthBucket) return;
 
       const dateKey = ts.toISOString().slice(0, 10);
-      const angler = entry?.angler ? String(entry.angler).trim() || 'Unbekannt' : 'Unbekannt';
+      const anglerKey = (entry?.angler || 'Unbekannt').trim() || 'Unbekannt';
       const isBlank = entry?.blank === true;
-      const hasFish = entry?.fish && String(entry.fish).trim() !== '' && entry.blank !== true;
+      const fishName = entry?.fish ? String(entry.fish).trim() : '';
+      const hasFish =
+        fishName !== '' && fishName.toLowerCase() !== 'unbekannt' && entry.blank !== true;
 
       if (isBlank) {
-        blankSessionsMap[monthKey].add(`${angler}__${dateKey}`);
-        if (ts.getTime() >= thirtyDaysAgo) {
-          activeAnglersSet.add(angler);
-          session30d.blank.add(`${angler}__${dateKey}`);
-        }
+        blankSessionsMap[monthKey] += 1;
+        blankAnglersSet.add(anglerKey);
+        sessionSet.blankCount += 1;
         return;
       }
 
@@ -477,13 +575,10 @@ export default function BoardOverview() {
 
       monthBucket.total += 1;
       if (entry?.taken === true) monthBucket.taken += 1;
-      catchSessionsMap[monthKey].add(`${angler}__${dateKey}`);
-
-      if (ts.getTime() >= thirtyDaysAgo) {
-        activeAnglersSet.add(angler);
-        catchesLast30d += 1;
-        session30d.catch.add(`${angler}__${dateKey}`);
-      }
+      catchSessionsMap[monthKey].add(`${anglerKey}__${dateKey}`);
+      catchAnglersSet.add(anglerKey);
+      sessionSet.catch.add(`${anglerKey}__${dateKey}`);
+      totalCatchCount += 1;
 
       const hour = ts.getHours();
       const weekday = ts.getDay();
@@ -499,7 +594,7 @@ export default function BoardOverview() {
 
     const blankVsCatchSeries = months.map((m) => {
       const catchSessions = catchSessionsMap[m.key]?.size || 0;
-      const blankSessions = blankSessionsMap[m.key]?.size || 0;
+      const blankSessions = blankSessionsMap[m.key] || 0;
       return {
         label: m.label,
         catchSessions,
@@ -521,42 +616,118 @@ export default function BoardOverview() {
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
       .slice(0, 3);
 
-    const activeAnglersLast30d = activeAnglersSet.size;
-    const avgCatchesPerActive = activeAnglersLast30d > 0 ? catchesLast30d / activeAnglersLast30d : 0;
-
-    const catchSessions30d = session30d.catch.size;
-    const blankSessions30d = session30d.blank.size;
-    const totalSessions30d = catchSessions30d + blankSessions30d;
-    const blankShare30d = totalSessions30d > 0 ? blankSessions30d / totalSessions30d : 0;
+    const catchSessions = sessionSet.catch.size;
+    const blankSessions = sessionSet.blankCount;
+    const totalSessions = catchSessions + blankSessions;
+    const blankShare = totalSessions > 0 ? blankSessions / totalSessions : 0;
+    const avgCatchesPerCatchDay = catchSessions > 0 ? totalCatchCount / catchSessions : 0;
+    const activeAnglerNames = Array.from(new Set([...catchAnglersSet, ...blankAnglersSet])).sort(
+      (a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' })
+    );
 
     return {
       monthlyCatchSeries,
       blankVsCatchSeries,
       topWeekdays,
       topHours,
-      activeAnglersLast30d,
-      avgCatchesPerActive,
-      catchSessions30d,
-      blankSessions30d,
-      blankShare30d,
+      activeAnglers: activeAnglerNames.length,
+      activeAnglerNames,
+      avgCatchesPerCatchDay,
+      catchSessions,
+      blankSessions,
+      blankShare,
     };
-  }, [filteredFishEntries, selectedYear]);
+  }, [activityFilteredFishEntries, activityRange]);
+
+  const diagramStats = useMemo(() => {
+    const months = getMonthsForSelection(selectedYear);
+    const allYearsMode = selectedYear === 'all';
+    const monthlyMap = {};
+    const catchSessionsMap = {};
+    const blankSessionsMap = {};
+    months.forEach((m) => {
+      monthlyMap[m.key] = { total: 0, taken: 0 };
+      catchSessionsMap[m.key] = new Set();
+      blankSessionsMap[m.key] = new Set();
+    });
+
+    // Monatliche Fänge (nur Catches, keine Schneider)
+    filteredFishEntries.forEach((entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return;
+
+      const monthKey = allYearsMode
+        ? `all-${String(ts.getMonth() + 1).padStart(2, '0')}`
+        : `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
+      const monthBucket = monthlyMap[monthKey];
+      if (!monthBucket) return;
+
+      monthBucket.total += 1;
+      if (entry?.taken === true) monthBucket.taken += 1;
+    });
+
+    // Sessions (Catch + Schneider) auf Basis der kombinierten Activity-Einträge
+    diagramSessionEntries.forEach((entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return;
+
+      const monthKey = allYearsMode
+        ? `all-${String(ts.getMonth() + 1).padStart(2, '0')}`
+        : `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
+      if (!catchSessionsMap[monthKey] || !blankSessionsMap[monthKey]) return;
+
+      const dateKey = ts.toISOString().slice(0, 10);
+      const anglerKey = (entry?.angler || 'Unbekannt').trim() || 'Unbekannt';
+      const isBlank = entry?.blank === true;
+      const fishName = entry?.fish ? String(entry.fish).trim() : '';
+      const hasFish =
+        fishName !== '' && fishName.toLowerCase() !== 'unbekannt' && entry.blank !== true;
+
+      if (isBlank) {
+        blankSessionsMap[monthKey].add(`${anglerKey}__${dateKey}`);
+        return;
+      }
+
+      if (!hasFish) return;
+      catchSessionsMap[monthKey].add(`${anglerKey}__${dateKey}`);
+    });
+
+    const monthlyCatchSeries = months.map((m) => ({
+      label: m.label,
+      total: monthlyMap[m.key].total,
+      taken: monthlyMap[m.key].taken,
+    }));
+
+    const blankVsCatchSeries = months.map((m) => {
+      const catchSessions = catchSessionsMap[m.key]?.size || 0;
+      const blankSessions = blankSessionsMap[m.key]?.size || 0;
+      return {
+        label: m.label,
+        catchSessions,
+        blankSessions,
+        totalSessions: catchSessions + blankSessions,
+      };
+    });
+
+    return { monthlyCatchSeries, blankVsCatchSeries };
+  }, [filteredFishEntries, diagramSessionEntries, selectedYear]);
 
   const monthlyMaxTotal = useMemo(() => {
-    if (!activityStats?.monthlyCatchSeries?.length) return 1;
-    return Math.max(1, ...activityStats.monthlyCatchSeries.map((item) => item.total || 0));
-  }, [activityStats]);
+    if (!diagramStats?.monthlyCatchSeries?.length) return 1;
+    return Math.max(1, ...diagramStats.monthlyCatchSeries.map((item) => item.total || 0));
+  }, [diagramStats]);
 
   const sessionMaxTotal = useMemo(() => {
-    if (!activityStats?.blankVsCatchSeries?.length) return 1;
+    if (!diagramStats?.blankVsCatchSeries?.length) return 1;
     return Math.max(
       1,
-      ...activityStats.blankVsCatchSeries.map((item) => item.totalSessions || 0)
+      ...diagramStats.blankVsCatchSeries.map((item) => item.totalSessions || 0)
     );
-  }, [activityStats]);
+  }, [diagramStats]);
 
   const seasonalStats = useMemo(() => {
-    const months = getMonthsForYear(Number.isFinite(selectedYear) ? selectedYear : new Date().getFullYear());
+    const months = getMonthsForSelection(selectedYear);
+    const allYearsMode = selectedYear === 'all';
     const monthMap = months.reduce((map, m) => {
       map[m.key] = { total: 0, fish: {} };
       return map;
@@ -570,7 +741,9 @@ export default function BoardOverview() {
       if (!fishName) return;
       const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
       if (!ts || Number.isNaN(ts.getTime())) return;
-      const monthKey = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
+      const monthKey = allYearsMode
+        ? `all-${String(ts.getMonth() + 1).padStart(2, '0')}`
+        : `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
       if (!monthMap[monthKey]) return;
       monthMap[monthKey].total += 1;
       monthMap[monthKey].fish[fishName] = (monthMap[monthKey].fish[fishName] || 0) + 1;
@@ -668,20 +841,69 @@ export default function BoardOverview() {
     setFishStatsError('');
     try {
       const data = await fetchFishAggregates();
-      const threshold = Date.UTC(2025, 5, 1); // 01.06.2025 00:00 UTC
-      const filtered = (Array.isArray(data) ? data : []).filter((entry) => {
-        const location = entry?.location_name ? String(entry.location_name).toLowerCase() : '';
-        const timestampMs = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
-        const isAfterThreshold = Number.isFinite(timestampMs) && timestampMs >= threshold;
+      const PUBLIC_FROM_LEADERBOARD = new Date('2025-05-29').getTime();
+      const PUBLIC_FROM_ANALYSIS = new Date('2025-06-01').getTime();
+      const MARILOU_ALIASES = ['marilou', 'marilou boes'];
+      const isMarilouName = (name) => MARILOU_ALIASES.includes((name || '').trim().toLowerCase());
 
-        const isLobberich = location.includes('lobberich');
-        const isUnknown = !entry?.location_name;
-        if (!isAfterThreshold || (!isLobberich && !isUnknown)) return false;
-        if (entry?.is_marilou === true) return false;
+      const items = Array.isArray(data) ? data : [];
+
+      // Catch-Einträge für Leaderboard-Logik (größe > 0 etc.)
+      const catchEntriesLeaderboard = items.filter((entry) => {
+        if (!isFerkensbruchLocation(entry?.location_name)) return false;
+        if (isMarilouName(entry?.angler)) return false;
+
+        const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
+        if (!Number.isFinite(ts) || ts < PUBLIC_FROM_LEADERBOARD) return false;
+
+        if (entry?.blank === true) return false;
+
+        const fishName = entry?.fish ? String(entry.fish).trim() : '';
+        const size = parseFloat(entry?.size);
+        const hasValidFish =
+          fishName &&
+          fishName.toLowerCase() !== 'unbekannt' &&
+          Number.isFinite(size) &&
+          size > 0;
+        if (!hasValidFish) return false;
+
+        if (typeof entry?.count_in_stats === 'boolean' && entry.count_in_stats === false) {
+          return false;
+        }
+        if (typeof entry?.count_in_stats !== 'boolean') {
+          if (entry?.under_min_size === true || entry?.out_of_season === true) return false;
+        }
         return true;
       });
 
-      setFishEntries(filtered);
+      // Analyse-Logik für Fang-/Schneidertage: keine Größenpflicht, kein count_in_stats-Filter
+      const analysisCatchEntries = items.filter((entry) => {
+        if (entry?.is_marilou === true) return false;
+        if (!isFerkensbruchLocation(entry?.location_name)) return false;
+
+        const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
+        if (!Number.isFinite(ts) || ts < PUBLIC_FROM_ANALYSIS) return false;
+
+        if (entry?.blank === true) return false;
+
+        const fishName = entry?.fish ? String(entry.fish).trim() : '';
+        if (!fishName || fishName.toLowerCase() === 'unbekannt') return false;
+
+        return true;
+      });
+
+      const analysisBlankEntries = items.filter((entry) => {
+        if (entry?.is_marilou === true) return false;
+        if (!isFerkensbruchLocation(entry?.location_name)) return false;
+
+        const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
+        if (!Number.isFinite(ts) || ts < PUBLIC_FROM_ANALYSIS) return false;
+
+        return entry?.blank === true;
+      });
+
+      setActivityFishEntries([...analysisCatchEntries, ...analysisBlankEntries]);
+      setFishEntries(catchEntriesLeaderboard);
     } catch (error) {
       setFishStatsError(error.message || 'Fischübersicht konnte nicht geladen werden.');
     } finally {
@@ -911,69 +1133,68 @@ export default function BoardOverview() {
         </div>
       </section>
 
-      {availableYears.length > 0 && (
-        <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Jahr wählen</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                Alle Fang-Diagramme unten zeigen das ausgewählte Jahr.
-              </p>
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Aktivität & Nutzung</h2>
+            
+          </div>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+              {ACTIVITY_RANGE_OPTIONS.map((option) => {
+                const isActive = activityRange === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setActivityRange(option.value)}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                      isActive
+                        ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
+                        : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-50 dark:border-blue-500/60 dark:bg-gray-800 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                    }`}
+                    aria-pressed={isActive}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
-            <div className="flex flex-wrap gap-2">
-              {availableYears.map((year) => (
-                <button
-                  key={year}
-                  type="button"
-                  onClick={() => setSelectedYear(year)}
-                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                    selectedYear === year
-                      ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
-                      : 'border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-500/50 dark:text-blue-200 dark:hover:bg-blue-900/30'
-                  }`}
-                  aria-pressed={selectedYear === year}
-                >
-                  {year}
-                </button>
-              ))}
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Zeitraum: {activityRangeLabel}
             </div>
           </div>
-        </section>
-      )}
-
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Aktivität & Nutzung</h2>
-          {Number.isFinite(selectedYear) && (
-            <span className="text-sm text-gray-600 dark:text-gray-300">Jahr: {selectedYear}</span>
-          )}
         </div>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
+          <button
+            type="button"
+            onClick={() => setShowActiveAnglers((prev) => !prev)}
+            aria-expanded={showActiveAnglers}
+            className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-left text-emerald-800 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100 dark:focus:ring-emerald-300"
+          >
             <p className="text-sm font-medium uppercase tracking-wide">Aktive Angler</p>
             <p className="mt-1 text-2xl font-semibold">
-              {formatNumber(activityStats.activeAnglersLast30d)}
+              {formatNumber(activityStats.activeAnglers)}
             </p>
-            <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">
-              letzte 30 Tage des gewählten Jahres
+            <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">im gewählten Zeitraum</p>
+            <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-700/90 dark:text-emerald-200/80">
+              {showActiveAnglers ? 'Namen verbergen' : 'Namen anzeigen'}
             </p>
-          </div>
+          </button>
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
-            <p className="text-sm font-medium uppercase tracking-wide">Ø Fänge / aktiver Angler</p>
+            <p className="text-sm font-medium uppercase tracking-wide">Ø Fänge pro Fangtag</p>
             <p className="mt-1 text-2xl font-semibold">
-              {formatDecimal(activityStats.avgCatchesPerActive)}
+              {formatDecimal(activityStats.avgCatchesPerCatchDay)}
             </p>
-            <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
-              letzte 30 Tage des gewählten Jahres
-            </p>
+            <p className="text-xs text-blue-700/80 dark:text-blue-200/70">im gewählten Zeitraum</p>
           </div>
           <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
-            <p className="text-sm font-medium uppercase tracking-wide">Sessions (30 Tage)</p>
+            <p className="text-sm font-medium uppercase tracking-wide">Sessions</p>
             <p className="mt-1 text-lg font-semibold">
-              {formatNumber(activityStats.catchSessions30d)} Fang / {formatNumber(activityStats.blankSessions30d)} Schneider
+              {formatNumber(activityStats.catchSessions)} {activityStats.catchSessions === 1 ? 'Fangtag' : 'Fangtage'} / {formatNumber(activityStats.blankSessions)} Schneider
             </p>
             <p className="text-xs text-amber-700/80 dark:text-amber-200/70">
-              Schneider-Anteil: {formatPercent(activityStats.blankShare30d)}
+              Schneider-Anteil: {formatPercent(activityStats.blankShare)}
             </p>
           </div>
           <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-indigo-800 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100">
@@ -992,13 +1213,60 @@ export default function BoardOverview() {
             )}
           </div>
         </div>
+        {showActiveAnglers && (
+          <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
+            <p className="font-semibold text-emerald-800 dark:text-emerald-100">
+              Aktive Angler im Zeitraum ({formatNumber(activityStats.activeAnglers)}):
+            </p>
+            {activityStats.activeAnglerNames.length === 0 ? (
+              <p className="mt-1 text-emerald-700/80 dark:text-emerald-200/80">Keine Einträge.</p>
+            ) : (
+              <p className="mt-2 leading-relaxed text-emerald-800 dark:text-emerald-100">
+                {activityStats.activeAnglerNames.join(', ')}
+              </p>
+            )}
+          </div>
+        )}
       </section>
+
+      {availableYears.length > 0 && (
+        <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Jahr wählen</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Alle Fang-Diagramme unten zeigen das ausgewählte Jahr.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {yearOptions.map((year) => {
+                const isAll = year === 'all';
+                return (
+                  <button
+                    key={isAll ? 'all-years' : year}
+                    type="button"
+                    onClick={() => setSelectedYear(year)}
+                    className={`rounded-full border px-4 py-1 text-sm transition ${
+                      selectedYear === year
+                        ? 'border-blue-600 bg-blue-600 text-white font-semibold dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
+                        : 'border-blue-400 bg-white text-blue-700 hover:bg-blue-50 dark:border-blue-500 dark:bg-gray-800 dark:text-blue-200 dark:hover:bg-gray-700'
+                    }`}
+                    aria-pressed={selectedYear === year}
+                  >
+                    {isAll ? 'Alle Jahre' : year}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
-              Zeitverlauf Fänge ({Number.isFinite(selectedYear) ? selectedYear : '12 Monate'})
+              Zeitverlauf Fänge ({selectedYearLabel || '12 Monate'})
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
               Gesamtfänge und Entnahmen im Vergleich je Monat des gewählten Jahres.
@@ -1010,16 +1278,19 @@ export default function BoardOverview() {
         </div>
 
         <div className="mt-6">
-          {activityStats.monthlyCatchSeries.length === 0 ? (
+          {diagramStats.monthlyCatchSeries.length === 0 ? (
             <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
               Noch keine Daten vorhanden.
             </div>
           ) : (
             <div className="flex h-56 items-end gap-3 overflow-x-auto pb-2">
-              {activityStats.monthlyCatchSeries.map((item) => {
+              {diagramStats.monthlyCatchSeries.map((item) => {
                 const totalHeight = Math.max(0, (item.total / monthlyMaxTotal) * 100);
                 const takenHeight =
                   item.total > 0 ? Math.max(0, (item.taken / monthlyMaxTotal) * 100) : 0;
+                const totalPercent = Math.min(100, totalHeight);
+                const takenPercent = Math.min(100, takenHeight);
+                const takenOffset = Math.max(0, totalPercent - takenPercent);
                 return (
                   <div
                     key={`monthly-${item.label}`}
@@ -1028,12 +1299,12 @@ export default function BoardOverview() {
                     <div className="relative flex h-44 w-10 items-end rounded bg-blue-100/80 dark:bg-blue-900/40">
                       <div
                         className="absolute bottom-0 left-0 right-0 rounded-t bg-blue-400/80 dark:bg-blue-500"
-                        style={{ height: `${Math.min(100, totalHeight)}%` }}
+                        style={{ height: `${totalPercent}%` }}
                         aria-hidden
                       />
                       <div
-                        className="absolute bottom-0 left-0 right-0 rounded-t bg-blue-700 dark:bg-blue-400"
-                        style={{ height: `${Math.min(100, takenHeight)}%` }}
+                        className="absolute left-0 right-0 rounded bg-blue-700 dark:bg-blue-400"
+                        style={{ height: `${takenPercent}%`, bottom: `${takenOffset}%` }}
                         aria-hidden
                       />
                     </div>
@@ -1053,7 +1324,7 @@ export default function BoardOverview() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
-              Fang vs. Schneidersession ({Number.isFinite(selectedYear) ? selectedYear : '12 Monate'})
+              Fang vs. Schneidersession ({selectedYearLabel || '12 Monate'})
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
               Sessions pro Monat, unterschieden nach Fang- und Schneider-Tagen.
@@ -1065,13 +1336,13 @@ export default function BoardOverview() {
         </div>
 
         <div className="mt-6">
-          {activityStats.blankVsCatchSeries.length === 0 ? (
+          {diagramStats.blankVsCatchSeries.length === 0 ? (
             <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
               Noch keine Daten vorhanden.
             </div>
           ) : (
             <div className="flex h-56 items-end gap-3 overflow-x-auto pb-2">
-              {activityStats.blankVsCatchSeries.map((item) => {
+              {diagramStats.blankVsCatchSeries.map((item) => {
                 const catchHeight =
                   item.totalSessions > 0
                     ? Math.max(0, (item.catchSessions / sessionMaxTotal) * 100)
@@ -1113,7 +1384,7 @@ export default function BoardOverview() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
-              Saisonale Muster je Art ({Number.isFinite(selectedYear) ? selectedYear : '12 Monate'})
+              Saisonale Muster je Art ({selectedYearLabel || '12 Monate'})
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
               Stack je Monat zeigt die Verteilung der Top-Fischarten im gewählten Jahr.
@@ -1248,23 +1519,18 @@ export default function BoardOverview() {
               Gegenüberstellung aller Fänge sowie entnommener Fische pro Art.
             </p>
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-300">
-            <div className="text-right font-semibold text-gray-800 dark:text-gray-100">
-              {formatNumber(fishOverviewTotals.total)} gesamt
-            </div>
-            <div className="text-right text-xs">
-              {formatNumber(fishOverviewTotals.taken)} entnommen ({
-                fishOverviewTotals.total > 0
-                  ? formatPercent(fishOverviewTotals.taken / fishOverviewTotals.total)
-                  : '—'
-              })
-            </div>
-            {Number.isFinite(selectedYear) && (
-              <div className="text-right text-xs text-gray-500 dark:text-gray-400">
-                Jahr: {selectedYear}
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              <div className="text-right font-semibold text-gray-800 dark:text-gray-100">
+                {formatNumber(fishOverviewTotals.total)} gesamt
               </div>
-            )}
-          </div>
+              <div className="text-right text-xs">
+                {formatNumber(fishOverviewTotals.taken)} entnommen ({
+                  fishOverviewTotals.total > 0
+                    ? formatPercent(fishOverviewTotals.taken / fishOverviewTotals.total)
+                    : '—'
+                })
+              </div>
+            </div>
         </div>
 
         {fishStatsError && (

@@ -97,8 +97,6 @@ export default function WeatherNow({ data, onRefresh }) {
   const [hourPreds, setHourPreds] = useState({});
   const [visibleCount, setVisibleCount] = useState(INITIAL_HOURS);
 
-  const [currentPrediction, setCurrentPrediction] = useState(null);
-
   const hoursToRender = useMemo(
     () => hourlyBase.slice(0, Math.min(visibleCount, hourlyBase.length)),
     [hourlyBase, visibleCount]
@@ -126,7 +124,6 @@ export default function WeatherNow({ data, onRefresh }) {
     setHourlyBase(slice);
     setVisibleCount(Math.min(INITIAL_HOURS, slice.length));
     setHourPreds({});
-    setCurrentPrediction(null);
     if (hourlyRef.current) hourlyRef.current.scrollLeft = 0;
   }, [data, cache]);
 
@@ -168,42 +165,6 @@ export default function WeatherNow({ data, onRefresh }) {
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.data?.daily]);
-
-  // KI-Prognose: CURRENT (idle)
-  useEffect(() => {
-    if (!data?.data?.current || !data?.data?.daily) return;
-    const cancelIdle = idleCall(() => {
-      const ac = new AbortController();
-      const { signal } = ac;
-      (async () => {
-        const moonPhase = data.data.daily?.[0]?.moon_phase ?? null;
-        const cDate = new Date(data.data.current.dt * 1000);
-        const w = {
-          temp: data.data.current.temp,
-          pressure: data.data.current.pressure,
-          wind: data.data.current.wind_speed,
-          humidity: data.data.current.humidity,
-          wind_deg: data.data.current.wind_deg,
-          moon_phase: moonPhase,
-          hour: cDate.getHours(),
-          date: cDate.toISOString().slice(0, 10)
-        };
-        const key = makeKey(w);
-        const c = cache.get(key);
-        if (c) { setCurrentPrediction(c); return; }
-        try {
-          const pred = await fetchPrediction(w, signal);
-          cache.set(key, pred);
-          setCurrentPrediction(pred);
-          cache.persist();
-        } catch (err) {
-          console.warn('Aktuelle Vorhersage fehlgeschlagen:', err);
-        }
-      })();
-      return () => ac.abort();
-    });
-    return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
-  }, [cache, data]);
 
   // KI-Prognosen: sichtbare Stunden
   useEffect(() => {
@@ -290,7 +251,6 @@ export default function WeatherNow({ data, onRefresh }) {
         now={now}
         daily={data.data.daily}
         savedAt={data.savedAt}
-        currentPrediction={currentPrediction}
       />
       <HourlyScroller
         hours={hoursToRender}
