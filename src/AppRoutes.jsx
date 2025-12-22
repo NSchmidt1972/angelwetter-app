@@ -31,6 +31,7 @@ const Analysis      = lazy(() => import('@/pages/Analysis'));
 const Leaderboard   = lazy(() => import('@/pages/Leaderboard'));
 const TopFishes     = lazy(() => import('@/pages/TopFishes'));
 const Forecast      = lazy(() => import('@/pages/Forecast'));
+const CrayfishForm  = lazy(() => import('@/pages/CrayfishForm'));
 const AdminOverview = lazy(() => import('@/pages/AdminOverview'));
 const Calendar      = lazy(() => import('@/pages/Calendar'));
 const MapView       = lazy(() => import('@/pages/MapView'));
@@ -80,6 +81,10 @@ export default function AppRoutes({
                 anglerName={anglerName}
               />
             }
+          />
+          <Route
+            path="crayfish"
+            element={<CrayfishForm anglerName={anglerName} />}
           />
           <Route path="catches"      element={<CatchList anglerName={anglerName} />} />
           <Route path="analysis"     element={<Analysis anglerName={anglerName} />} />

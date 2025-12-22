@@ -1,6 +1,7 @@
 export const baseNav = [
   { label: "Wetter", path: "/" },
   { label: "+   🐠", path: "/new-catch" },
+  { label: "+   🦞", path: "/crayfish" },
   { label: "Fangliste", path: "/catches" },
   { label: "Rangliste", path: "/leaderboard" },
   { label: "Regeln", path: "/regeln" },
