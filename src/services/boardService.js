@@ -80,3 +80,13 @@ export async function deleteProfile(profileId) {
   if (error) throw new Error(error.message || 'Mitglied konnte nicht gelöscht werden.');
   return true;
 }
+
+export async function fetchCrayfishCatches() {
+  const { data, error } = await supabase
+    .from('crayfish_catches')
+    .select('species, count, catch_timestamp, angler')
+    .order('catch_timestamp', { ascending: false });
+
+  if (error) throw new Error(error.message || 'Krebsdaten konnten nicht geladen werden.');
+  return data || [];
+}

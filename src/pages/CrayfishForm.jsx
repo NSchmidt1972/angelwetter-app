@@ -85,7 +85,7 @@ export default function CrayfishForm({ anglerName }) {
             Krebsfang erfassen
           </h2>
           <p className="mt-1 text-sm text-gray-700 dark:text-gray-200">
-            Melde Entnahmen von invasiven Krebsarten. Wetter wird hier nicht erfasst – wir speichern Datum/Uhrzeit automatisch.
+            Melde Entnahmen von invasiven Krebsarten.
           </p>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {CRAYFISH_SPECIES.map((item) => {

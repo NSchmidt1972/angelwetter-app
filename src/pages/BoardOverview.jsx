@@ -4,6 +4,7 @@ import {
   fetchProfiles,
   fetchWhitelist,
   fetchFishAggregates,
+  fetchCrayfishCatches,
   removeWhitelistEmail,
   updateProfileRole,
   deleteProfile,
@@ -372,6 +373,10 @@ export default function BoardOverview() {
   const [activityFishEntries, setActivityFishEntries] = useState([]);
   const [fishStatsLoading, setFishStatsLoading] = useState(false);
   const [fishStatsError, setFishStatsError] = useState('');
+  const [crayfishEntries, setCrayfishEntries] = useState([]);
+  const [crayfishLoading, setCrayfishLoading] = useState(false);
+  const [crayfishError, setCrayfishError] = useState('');
+  const [showCrayfishAnglers, setShowCrayfishAnglers] = useState(false);
   const [showActiveAnglers, setShowActiveAnglers] = useState(false);
   const [selectedFishDetail, setSelectedFishDetail] = useState('');
   const [activeSeasonalFish, setActiveSeasonalFish] = useState([]);
@@ -740,6 +745,57 @@ export default function BoardOverview() {
     );
   }, [diagramStats]);
 
+  const crayfishStats = useMemo(() => {
+    if (!Array.isArray(crayfishEntries) || crayfishEntries.length === 0) {
+      return {
+        totalCount: 0,
+        entriesCount: 0,
+        bySpecies: [],
+        last30d: 0,
+        uniqueAnglers: 0,
+        anglerNames: [],
+      };
+    }
+
+    const bySpeciesMap = new Map();
+    const anglers = new Set();
+    let totalCount = 0;
+    let entriesCount = 0;
+    let last30d = 0;
+    const now = Date.now();
+    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
+
+    crayfishEntries.forEach((entry) => {
+      const species = entry?.species ? String(entry.species).trim() : 'Unbekannt';
+      const count = Number(entry?.count) || 0;
+      const ts = entry?.catch_timestamp ? new Date(entry.catch_timestamp).getTime() : null;
+      const angler = entry?.angler ? String(entry.angler).trim() : 'Unbekannt';
+
+      entriesCount += 1;
+      totalCount += count;
+      anglers.add(angler);
+
+      bySpeciesMap.set(species, (bySpeciesMap.get(species) || 0) + count);
+
+      if (Number.isFinite(ts) && ts >= cutoff) {
+        last30d += count;
+      }
+    });
+
+    const bySpecies = Array.from(bySpeciesMap.entries())
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'de'));
+
+    return {
+      totalCount,
+      entriesCount,
+      bySpecies,
+      last30d,
+      uniqueAnglers: anglers.size,
+      anglerNames: Array.from(anglers).sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' })),
+    };
+  }, [crayfishEntries]);
+
   const seasonalStats = useMemo(() => {
     const months = getMonthsForSelection(selectedYear);
     const allYearsMode = selectedYear === 'all';
@@ -926,11 +982,25 @@ export default function BoardOverview() {
     }
   }, []);
 
+  const refreshCrayfish = useCallback(async () => {
+    setCrayfishLoading(true);
+    setCrayfishError('');
+    try {
+      const data = await fetchCrayfishCatches();
+      setCrayfishEntries(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setCrayfishError(error.message || 'Krebsdaten konnten nicht geladen werden.');
+    } finally {
+      setCrayfishLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshProfiles();
     refreshWhitelist();
     refreshFishAggregates();
-  }, [refreshProfiles, refreshWhitelist, refreshFishAggregates]);
+    refreshCrayfish();
+  }, [refreshProfiles, refreshWhitelist, refreshFishAggregates, refreshCrayfish]);
 
   useEffect(() => {
     if (!selectedFishDetail) return;
@@ -1335,6 +1405,7 @@ export default function BoardOverview() {
         </div>
       </section>
 
+
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1720,6 +1791,112 @@ export default function BoardOverview() {
                   Schließen
                 </button>
               </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Krebs-Entnahmen</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Erfasste invasive Krebsarten (Meldungen aus dem Formular „+ 🦞“).
+            </p>
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            {crayfishLoading
+              ? 'Lädt...'
+              : `${formatNumber(crayfishStats.totalCount)} Stück gesamt (${formatNumber(crayfishStats.entriesCount)} Meldungen)`}
+          </div>
+        </div>
+
+        {crayfishError && (
+          <div className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200">
+            {crayfishError}
+          </div>
+        )}
+
+        {crayfishLoading ? (
+          <div className="mt-4 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
+            Lädt Krebsdaten...
+          </div>
+        ) : crayfishStats.entriesCount === 0 ? (
+          <div className="mt-4 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
+            Noch keine Krebs-Entnahmen erfasst.
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
+              <p className="text-sm font-medium uppercase tracking-wide">Entnommen gesamt</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {formatNumber(crayfishStats.totalCount)}
+              </p>
+              <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">über alle Meldungen</p>
+            </div>
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
+              <p className="text-sm font-medium uppercase tracking-wide">Meldungen</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {formatNumber(crayfishStats.entriesCount)}
+              </p>
+              <p className="text-xs text-blue-700/80 dark:text-blue-200/70">Formulareinträge</p>
+            </div>
+            <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
+              <p className="text-sm font-medium uppercase tracking-wide">Letzte 30 Tage</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {formatNumber(crayfishStats.last30d)}
+              </p>
+              <p className="text-xs text-amber-700/80 dark:text-amber-200/70">gemeldet im letzten Monat</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCrayfishAnglers((prev) => !prev)}
+              aria-expanded={showCrayfishAnglers}
+              className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-left text-indigo-800 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100 dark:focus:ring-indigo-300"
+            >
+              <p className="text-sm font-medium uppercase tracking-wide">Aktive Melder</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {formatNumber(crayfishStats.uniqueAnglers)}
+              </p>
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-indigo-700/90 dark:text-indigo-200/80">
+                {showCrayfishAnglers ? 'Namen verbergen' : 'Namen anzeigen'}
+              </p>
+            </button>
+          </div>
+        )}
+
+        {crayfishStats.bySpecies.length > 0 && (
+          <div className="mt-6 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                <tr>
+                  <th className="px-4 py-2 text-left font-semibold">Art</th>
+                  <th className="px-4 py-2 text-left font-semibold">Entnommen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {crayfishStats.bySpecies.map((item) => (
+                  <tr key={item.name} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
+                    <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{item.name}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(item.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {showCrayfishAnglers && (
+          <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/70 p-4 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100">
+            <p className="font-semibold text-indigo-800 dark:text-indigo-100">
+              Aktive Melder ({formatNumber(crayfishStats.uniqueAnglers)}):
+            </p>
+            {crayfishStats.anglerNames.length === 0 ? (
+              <p className="mt-1 text-indigo-700/80 dark:text-indigo-200/80">Keine Einträge.</p>
+            ) : (
+              <p className="mt-2 leading-relaxed text-indigo-800 dark:text-indigo-100">
+                {crayfishStats.anglerNames.join(', ')}
+              </p>
             )}
           </div>
         )}

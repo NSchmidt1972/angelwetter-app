@@ -1,7 +1,7 @@
 export const baseNav = [
   { label: "Wetter", path: "/" },
   { label: "+   🐠", path: "/new-catch" },
-  { label: "+   🦞", path: "/crayfish" },
+  // Krebsformular wird gezielt in navItemsFor ergänzt (nur für Nicol)
   { label: "Fangliste", path: "/catches" },
   { label: "Rangliste", path: "/leaderboard" },
   { label: "Regeln", path: "/regeln" },
@@ -18,8 +18,15 @@ export const baseNav = [
   },
 ];
 
-export function navItemsFor({ isAdmin = false, canAccessBoard = false } = {}) {
+export function navItemsFor({ isAdmin = false, canAccessBoard = false, anglerName = '' } = {}) {
   const items = [...baseNav];
+
+  // Krebsformular nur für Nicol
+  const isNicol = (anglerName || '').trim().toLowerCase() === 'nicol schmidt';
+  if (isNicol) {
+    items.splice(2, 0, { label: "+   🦞", path: "/crayfish" });
+  }
+
   if (canAccessBoard) {
     items.push({ label: "👥 Vorstand", path: "/vorstand" });
   }

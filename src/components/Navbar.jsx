@@ -109,7 +109,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     navigate("/");
   };
 
-  const navItems = navItemsFor({ isAdmin: !!isAdmin, canAccessBoard: !!canAccessBoard });
+  const navItems = navItemsFor({ isAdmin: !!isAdmin, canAccessBoard: !!canAccessBoard, anglerName: name });
   const currentPath = location.pathname;
 
   const handleToggleDropdown = (next) => {
