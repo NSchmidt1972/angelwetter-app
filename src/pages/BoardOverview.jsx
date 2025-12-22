@@ -268,10 +268,11 @@ function getMonthsForSelection(selection) {
 }
 
 const ACTIVITY_RANGE_OPTIONS = [
-  { value: '7d', label: 'Letzte Woche' },
-  { value: '30d', label: 'Letzter Monat' },
-  { value: '90d', label: 'Letzte 3 Monate' },
-  { value: '180d', label: 'Letzte 6 Monate' },
+  { value: 'current-week', label: 'Aktuelle Woche' },
+  { value: 'current-month', label: 'Aktueller Monat' },
+  { value: '30d', label: 'Letzte 30 Tage' },
+  { value: '90d', label: 'Letzte 90 Tage' },
+  { value: '180d', label: 'Letzte 180 Tage' },
   { value: 'current-year', label: 'Aktuelles Jahr' },
   { value: 'last-year', label: 'Letztes Jahr' },
 ];
@@ -283,8 +284,16 @@ function filterEntriesByRange(entries = [], range, referenceTime = Date.now()) {
   let end = null;
 
   switch (range) {
-    case '7d':
-      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case 'current-week': {
+      // Woche beginnt am Montag
+      const day = now.getDay();
+      const diffToMonday = (day === 0 ? -6 : 1 - day) * 24 * 60 * 60 * 1000;
+      start = new Date(now.getTime() + diffToMonday);
+      start.setHours(0, 0, 0, 0);
+      break;
+    }
+    case 'current-month':
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
       break;
     case '30d':
       start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -381,7 +390,7 @@ export default function BoardOverview() {
   }, [fishEntries]);
 
   const yearOptions = useMemo(() => ['all', ...availableYears], [availableYears]);
-  const selectedYearLabel = selectedYear === 'all' ? 'Alle Jahre (kumuliert)' : selectedYear;
+  const selectedYearLabel = selectedYear === 'all' ? 'Alle Jahre' : selectedYear;
   const activityRangeLabel = useMemo(() => {
     const option = ACTIVITY_RANGE_OPTIONS.find((item) => item.value === activityRange);
     return option?.label || 'Aktuelles Jahr';
@@ -411,17 +420,7 @@ export default function BoardOverview() {
     });
   }, [fishEntries, selectedYear]);
 
-  const activityFilteredFishEntries = useMemo(() => {
-    const latestTimestamp = activityFishEntries.reduce((max, entry) => {
-      const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
-      if (!Number.isFinite(ts)) return max;
-      return Math.max(max, ts);
-    }, 0);
-    const referenceTime = latestTimestamp || Date.now();
-    return filterEntriesByRange(activityFishEntries, activityRange, referenceTime);
-  }, [activityFishEntries, activityRange]);
-
-  const diagramSessionEntries = useMemo(() => {
+  const yearScopedActivityEntries = useMemo(() => {
     if (selectedYear === 'all') return activityFishEntries;
     if (!Number.isFinite(selectedYear)) return activityFishEntries;
     return activityFishEntries.filter((entry) => {
@@ -430,6 +429,18 @@ export default function BoardOverview() {
       return ts.getFullYear() === selectedYear;
     });
   }, [activityFishEntries, selectedYear]);
+
+  const activityFilteredFishEntries = useMemo(() => {
+    const latestTimestamp = yearScopedActivityEntries.reduce((max, entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
+      if (!Number.isFinite(ts)) return max;
+      return Math.max(max, ts);
+    }, 0);
+    const referenceTime = latestTimestamp || Date.now();
+    return filterEntriesByRange(yearScopedActivityEntries, activityRange, referenceTime);
+  }, [yearScopedActivityEntries, activityRange]);
+
+  const diagramSessionEntries = useMemo(() => yearScopedActivityEntries, [yearScopedActivityEntries]);
 
   const stats = useMemo(() => {
     const totalWhitelist = whitelist.length;
