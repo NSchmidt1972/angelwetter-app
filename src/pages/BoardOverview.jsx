@@ -1,4 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ActivitySection from '@/components/ActivitySection';
+import FishTableSection from '@/components/FishTableSection';
+import WhitelistSection from '@/components/WhitelistSection';
+import MembersSection from '@/components/MembersSection';
+import YearSelectorSection from '@/components/YearSelectorSection';
+import { MonthlyCatchSection, SessionSection } from '@/components/FishTrendsSection';
+import SeasonalSection from '@/components/SeasonalSection';
+import CrayfishSection from '@/components/CrayfishSection';
 import {
   addWhitelistEmail,
   fetchProfiles,
@@ -657,7 +665,7 @@ export default function BoardOverview() {
       blankSessions,
       blankShare,
     };
-  }, [activityFilteredFishEntries, activityRange]);
+  }, [activityFilteredFishEntries]);
 
   const diagramStats = useMemo(() => {
     const months = getMonthsForSelection(selectedYear);
@@ -796,6 +804,27 @@ export default function BoardOverview() {
     };
   }, [crayfishEntries]);
 
+  const crayfishDateRange = useMemo(() => {
+    if (!Array.isArray(crayfishEntries) || crayfishEntries.length === 0) return null;
+
+    let minTs = null;
+    let maxTs = null;
+
+    crayfishEntries.forEach((entry) => {
+      const ts = entry?.catch_timestamp ? new Date(entry.catch_timestamp).getTime() : null;
+      if (!Number.isFinite(ts)) return;
+      minTs = minTs == null ? ts : Math.min(minTs, ts);
+      maxTs = maxTs == null ? ts : Math.max(maxTs, ts);
+    });
+
+    if (minTs == null || maxTs == null) return null;
+
+    return {
+      from: new Date(minTs),
+      to: new Date(maxTs),
+    };
+  }, [crayfishEntries]);
+
   const seasonalStats = useMemo(() => {
     const months = getMonthsForSelection(selectedYear);
     const allYearsMode = selectedYear === 'all';
@@ -912,40 +941,8 @@ export default function BoardOverview() {
     setFishStatsError('');
     try {
       const data = await fetchFishAggregates();
-      const PUBLIC_FROM_LEADERBOARD = new Date('2025-05-29').getTime();
       const PUBLIC_FROM_ANALYSIS = new Date('2025-06-01').getTime();
-      const MARILOU_ALIASES = ['marilou', 'marilou boes'];
-      const isMarilouName = (name) => MARILOU_ALIASES.includes((name || '').trim().toLowerCase());
-
       const items = Array.isArray(data) ? data : [];
-
-      // Catch-Einträge für Leaderboard-Logik (größe > 0 etc.)
-      const catchEntriesLeaderboard = items.filter((entry) => {
-        if (!isFerkensbruchLocation(entry?.location_name)) return false;
-        if (isMarilouName(entry?.angler)) return false;
-
-        const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
-        if (!Number.isFinite(ts) || ts < PUBLIC_FROM_LEADERBOARD) return false;
-
-        if (entry?.blank === true) return false;
-
-        const fishName = entry?.fish ? String(entry.fish).trim() : '';
-        const size = parseFloat(entry?.size);
-        const hasValidFish =
-          fishName &&
-          fishName.toLowerCase() !== 'unbekannt' &&
-          Number.isFinite(size) &&
-          size > 0;
-        if (!hasValidFish) return false;
-
-        if (typeof entry?.count_in_stats === 'boolean' && entry.count_in_stats === false) {
-          return false;
-        }
-        if (typeof entry?.count_in_stats !== 'boolean') {
-          if (entry?.under_min_size === true || entry?.out_of_season === true) return false;
-        }
-        return true;
-      });
 
       // Analyse-Logik für Fang-/Schneidertage: keine Größenpflicht, kein count_in_stats-Filter
       const analysisCatchEntries = items.filter((entry) => {
@@ -1218,917 +1215,120 @@ export default function BoardOverview() {
         </div>
       </section>
 
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Aktivität & Nutzung</h2>
-            
-          </div>
-          <div className="flex flex-col items-start gap-2 sm:items-end">
-            <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-              {ACTIVITY_RANGE_OPTIONS.map((option) => {
-                const isActive = activityRange === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setActivityRange(option.value)}
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                      isActive
-                        ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
-                        : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-50 dark:border-blue-500/60 dark:bg-gray-800 dark:text-blue-200 dark:hover:bg-blue-900/30'
-                    }`}
-                    aria-pressed={isActive}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              Zeitraum: {activityRangeLabel}
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <button
-            type="button"
-            onClick={() => setShowActiveAnglers((prev) => !prev)}
-            aria-expanded={showActiveAnglers}
-            className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-left text-emerald-800 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100 dark:focus:ring-emerald-300"
-          >
-            <p className="text-sm font-medium uppercase tracking-wide">Aktive Angler</p>
-            <p className="mt-1 text-2xl font-semibold">
-              {formatNumber(activityStats.activeAnglers)}
-            </p>
-            <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">im gewählten Zeitraum</p>
-            <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-700/90 dark:text-emerald-200/80">
-              {showActiveAnglers ? 'Namen verbergen' : 'Namen anzeigen'}
-            </p>
-          </button>
-          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
-            <p className="text-sm font-medium uppercase tracking-wide">Ø Fänge pro Fangtag</p>
-            <p className="mt-1 text-2xl font-semibold">
-              {formatDecimal(activityStats.avgCatchesPerCatchDay)}
-            </p>
-            <p className="text-xs text-blue-700/80 dark:text-blue-200/70">im gewählten Zeitraum</p>
-          </div>
-          <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
-            <p className="text-sm font-medium uppercase tracking-wide">Sessions</p>
-            <p className="mt-1 text-lg font-semibold">
-              {formatNumber(activityStats.catchSessions)} {activityStats.catchSessions === 1 ? 'Fangtag' : 'Fangtage'} / {formatNumber(activityStats.blankSessions)} Schneider
-            </p>
-            <p className="text-xs text-amber-700/80 dark:text-amber-200/70">
-              Schneider-Anteil: {formatPercent(activityStats.blankShare)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-indigo-800 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100">
-            <p className="text-sm font-medium uppercase tracking-wide">Peak-Zeiten</p>
-            {activityStats.topWeekdays.length === 0 && activityStats.topHours.length === 0 ? (
-              <p className="mt-1 text-sm text-indigo-700/80 dark:text-indigo-200/70">Noch keine Daten.</p>
-            ) : (
-              <div className="mt-1 space-y-1 text-sm">
-                {activityStats.topWeekdays.length > 0 && (
-                  <div>Wochentag: {activityStats.topWeekdays.map((d) => d.label).join(', ')}</div>
-                )}
-                {activityStats.topHours.length > 0 && (
-                  <div>Uhrzeit: {activityStats.topHours.map((h) => h.label).join(', ')}</div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-        {showActiveAnglers && (
-          <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
-            <p className="font-semibold text-emerald-800 dark:text-emerald-100">
-              Aktive Angler im Zeitraum ({formatNumber(activityStats.activeAnglers)}):
-            </p>
-            {activityStats.activeAnglerNames.length === 0 ? (
-              <p className="mt-1 text-emerald-700/80 dark:text-emerald-200/80">Keine Einträge.</p>
-            ) : (
-              <p className="mt-2 leading-relaxed text-emerald-800 dark:text-emerald-100">
-                {activityStats.activeAnglerNames.join(', ')}
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+      <ActivitySection
+        activityRange={activityRange}
+        activityRangeLabel={activityRangeLabel}
+        activityStats={activityStats}
+        onSelectRange={(value) => setActivityRange(value)}
+        showActiveAnglers={showActiveAnglers}
+        onToggleActiveAnglers={() => setShowActiveAnglers((prev) => !prev)}
+        formatNumber={formatNumber}
+        formatDecimal={formatDecimal}
+        formatPercent={formatPercent}
+        rangeOptions={ACTIVITY_RANGE_OPTIONS}
+      />
 
-      {availableYears.length > 0 && (
-        <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Jahr wählen</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                Alle Fang-Diagramme unten zeigen das ausgewählte Jahr.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {yearOptions.map((year) => {
-                const isAll = year === 'all';
-                return (
-                  <button
-                    key={isAll ? 'all-years' : year}
-                    type="button"
-                    onClick={() => setSelectedYear(year)}
-                    className={`rounded-full border px-4 py-1 text-sm transition ${
-                      selectedYear === year
-                        ? 'border-blue-600 bg-blue-600 text-white font-semibold dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
-                        : 'border-blue-400 bg-white text-blue-700 hover:bg-blue-50 dark:border-blue-500 dark:bg-gray-800 dark:text-blue-200 dark:hover:bg-gray-700'
-                    }`}
-                    aria-pressed={selectedYear === year}
-                  >
-                    {isAll ? 'Alle Jahre' : year}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      )}
+      <YearSelectorSection
+        yearOptions={yearOptions}
+        selectedYear={selectedYear}
+        onSelectYear={(value) => setSelectedYear(value)}
+        selectedYearLabel={selectedYearLabel}
+      />
 
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
-              Zeitverlauf Fänge ({selectedYearLabel || '12 Monate'})
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Gesamtfänge und Entnahmen im Vergleich je Monat des gewählten Jahres.
-            </p>
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            Skala relativ zum stärksten Monat.
-          </div>
-        </div>
+      <MonthlyCatchSection
+        diagramStats={diagramStats}
+        monthlyMaxTotal={monthlyMaxTotal}
+        selectedYearLabel={selectedYearLabel}
+        formatNumber={formatNumber}
+      />
 
-        <div className="mt-6">
-          {diagramStats.monthlyCatchSeries.length === 0 ? (
-            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
-              Noch keine Daten vorhanden.
-            </div>
-          ) : (
-            <div className="flex h-56 items-end gap-3 overflow-x-auto pb-2">
-              {diagramStats.monthlyCatchSeries.map((item) => {
-                const totalHeight = Math.max(0, (item.total / monthlyMaxTotal) * 100);
-                const takenHeight =
-                  item.total > 0 ? Math.max(0, (item.taken / monthlyMaxTotal) * 100) : 0;
-                const totalPercent = Math.min(100, totalHeight);
-                const takenPercent = Math.min(100, takenHeight);
-                const takenOffset = Math.max(0, totalPercent - takenPercent);
-                return (
-                  <div
-                    key={`monthly-${item.label}`}
-                    className="flex min-w-[46px] flex-col items-center justify-end gap-2"
-                  >
-                    <div className="relative flex h-44 w-10 items-end rounded bg-blue-100/80 dark:bg-blue-900/40">
-                      <div
-                        className="absolute bottom-0 left-0 right-0 rounded-t bg-blue-400/80 dark:bg-blue-500"
-                        style={{ height: `${totalPercent}%` }}
-                        aria-hidden
-                      />
-                      <div
-                        className="absolute left-0 right-0 rounded bg-blue-700 dark:bg-blue-400"
-                        style={{ height: `${takenPercent}%`, bottom: `${takenOffset}%` }}
-                        aria-hidden
-                      />
-                    </div>
-                    <div className="text-center text-xs text-gray-700 dark:text-gray-300">
-                      <div className="font-semibold">{item.label}</div>
-                      <div>{formatNumber(item.total)} / {formatNumber(item.taken)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
+      <SessionSection
+        diagramStats={diagramStats}
+        sessionMaxTotal={sessionMaxTotal}
+        selectedYearLabel={selectedYearLabel}
+        formatNumber={formatNumber}
+      />
 
+      <SeasonalSection
+        seasonalStats={seasonalStats}
+        seasonalMaxActiveTotal={seasonalMaxActiveTotal}
+        activeSeasonalFish={activeSeasonalFish}
+        onToggleFish={(name, isActive) =>
+          setActiveSeasonalFish((prev) => {
+            const allSelected = prev.length === seasonalStats.legend.length;
+            if (allSelected) {
+              return [name];
+            }
+            if (!isActive) {
+              return [...prev, name];
+            }
+            if (prev.length > 1) {
+              return prev.filter((entry) => entry !== name);
+            }
+            return prev;
+          })
+        }
+        onSelectAll={() => setActiveSeasonalFish(seasonalStats.legend.map((item) => item.name))}
+        selectedYearLabel={selectedYearLabel}
+        formatNumber={formatNumber}
+      />
 
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
-              Fang vs. Schneidersession ({selectedYearLabel || '12 Monate'})
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Sessions pro Monat, unterschieden nach Fang- und Schneider-Tagen.
-            </p>
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            Skala relativ zum stärksten Monat.
-          </div>
-        </div>
+      <FishTableSection
+        fishStats={fishStats}
+        fishStatsLoading={fishStatsLoading}
+        fishStatsError={fishStatsError}
+        fishOverviewTotals={fishOverviewTotals}
+        selectedFishDetail={selectedFishDetail}
+        onSelectFishDetail={setSelectedFishDetail}
+        fishDetailData={fishDetailData}
+        detailSectionRef={detailSectionRef}
+        formatNumber={formatNumber}
+        formatPercent={formatPercent}
+      />
 
-        <div className="mt-6">
-          {diagramStats.blankVsCatchSeries.length === 0 ? (
-            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
-              Noch keine Daten vorhanden.
-            </div>
-          ) : (
-            <div className="flex h-56 items-end gap-3 overflow-x-auto pb-2">
-              {diagramStats.blankVsCatchSeries.map((item) => {
-                const catchHeight =
-                  item.totalSessions > 0
-                    ? Math.max(0, (item.catchSessions / sessionMaxTotal) * 100)
-                    : 0;
-                const blankHeight =
-                  item.totalSessions > 0
-                    ? Math.max(0, (item.blankSessions / sessionMaxTotal) * 100)
-                    : 0;
-                return (
-                  <div
-                    key={`sessions-${item.label}`}
-                    className="flex min-w-[46px] flex-col items-center justify-end gap-2"
-                  >
-                    <div className="flex h-44 w-10 flex-col justify-end overflow-hidden rounded bg-gray-200/80 dark:bg-gray-700/70">
-                      <div
-                        className="bg-red-500/80 dark:bg-red-400"
-                        style={{ height: `${Math.min(100, blankHeight)}%` }}
-                        aria-hidden
-                      />
-                      <div
-                        className="bg-emerald-500/80 dark:bg-emerald-400"
-                        style={{ height: `${Math.min(100, catchHeight)}%` }}
-                        aria-hidden
-                      />
-                    </div>
-                    <div className="text-center text-xs text-gray-700 dark:text-gray-300">
-                      <div className="font-semibold">{item.label}</div>
-                      <div>{formatNumber(item.catchSessions)} / {formatNumber(item.blankSessions)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
+      <CrayfishSection
+        stats={crayfishStats}
+        dateRange={crayfishDateRange}
+        entries={crayfishEntries}
+        loading={crayfishLoading}
+        error={crayfishError}
+        showAnglers={showCrayfishAnglers}
+        onToggleAnglers={() => setShowCrayfishAnglers((prev) => !prev)}
+        formatNumber={formatNumber}
+        formatDate={formatDate}
+      />
 
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
-              Saisonale Muster je Art ({selectedYearLabel || '12 Monate'})
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Stack je Monat zeigt die Verteilung der Top-Fischarten im gewählten Jahr.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
-            {seasonalStats.legend.length === 0 ? (
-              <span className="text-gray-500 dark:text-gray-400">Noch keine Daten.</span>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setActiveSeasonalFish(seasonalStats.legend.map((item) => item.name))}
-                  className={`rounded-full border px-3 py-1 font-semibold transition ${
-                    activeSeasonalFish.length === seasonalStats.legend.length
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-100'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  Alle
-                </button>
-                {seasonalStats.legend.map((item) => {
-                  const isActive = activeSeasonalFish.includes(item.name);
-                  return (
-                    <button
-                      key={item.name}
-                      type="button"
-                      onClick={() =>
-                        setActiveSeasonalFish((prev) => {
-                          const allSelected = prev.length === seasonalStats.legend.length;
-                          const isAlready = prev.includes(item.name);
-                          if (allSelected) {
-                            return [item.name]; // Solo-Mode starten
-                          }
-                          if (!isAlready) {
-                            return [...prev, item.name]; // hinzuwählen
-                          }
-                          if (prev.length > 1) {
-                            return prev.filter((name) => name !== item.name); // abwählen
-                          }
-                          return prev; // nie leer werden lassen
-                        })
-                      }
-                      className={`flex items-center gap-1 rounded-full border px-3 py-1 font-semibold transition ${
-                        isActive
-                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-100'
-                          : 'border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      <span
-                        className={`h-3 w-3 rounded-full ${item.color.className || ''}`}
-                        style={item.color.style}
-                        aria-hidden
-                      />
-                      {item.name}
-                    </button>
-                  );
-                })}
-              </>
-            )}
-          </div>
-        </div>
+      <WhitelistSection
+        showWhitelist={showWhitelist}
+        onToggleWhitelist={() => setShowWhitelist((prev) => !prev)}
+        newEmail={newEmail}
+        onChangeNewEmail={setNewEmail}
+        addingEmail={addingEmail}
+        whitelist={whitelist}
+        whitelistLoading={whitelistLoading}
+        whitelistError={whitelistError}
+        whitelistMessage={whitelistMessage}
+        onAddEmail={handleAddEmail}
+        onRemoveEmail={handleRemoveEmail}
+        formatDate={formatDate}
+      />
 
-        <div className="mt-6 space-y-3">
-          {seasonalStats.months.length === 0 ? (
-            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
-              Noch keine Daten vorhanden.
-            </div>
-          ) : (
-            seasonalStats.months.map((month) => (
-              <div key={`season-${month.label}`} className="flex items-center gap-3">
-                <div className="w-12 shrink-0 text-sm font-semibold text-gray-700 dark:text-gray-200">
-                  {month.label}
-                </div>
-                {(() => {
-                  const activeParts = month.parts.filter(
-                    (part) => activeSeasonalFish.includes(part.fish) && part.count > 0
-                  );
-                  const activeTotal = activeParts.reduce((sum, part) => sum + part.count, 0);
-                  const scalePercent =
-                    activeTotal > 0 ? (activeTotal / seasonalMaxActiveTotal) * 100 : 0;
-                  const widthPercent = Math.min(100, Math.max(5, scalePercent));
-
-                  return (
-                    <>
-                      <div className="flex h-6 flex-1 items-center rounded bg-gray-200/70 px-1 dark:bg-gray-700/70">
-                        {month.total === 0 ? (
-                          <div className="flex w-full items-center justify-center text-xs text-gray-500 dark:text-gray-300">
-                            keine Fänge
-                          </div>
-                        ) : activeParts.length === 0 || activeTotal === 0 ? (
-                          <div className="flex w-full items-center justify-center text-xs text-gray-500 dark:text-gray-300">
-                            Auswahl ohne Fänge
-                          </div>
-                        ) : (
-                          <div
-                            className="flex h-4 overflow-hidden rounded"
-                            style={{ width: `${widthPercent}%` }}
-                          >
-                            {activeParts.map((part) => {
-                              const share = activeTotal > 0 ? (part.count / activeTotal) * 100 : 0;
-                              return (
-                                <div
-                                  key={`${month.label}-${part.fish}`}
-                                  className={part.color.className}
-                                  style={{ width: `${Math.max(1, share)}%`, ...(part.color.style || {}) }}
-                                  title={`${part.fish}: ${formatNumber(part.count)}`}
-                                  aria-label={`${part.fish}: ${formatNumber(part.count)}`}
-                                />
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                      <div className="w-14 text-right text-xs text-gray-600 dark:text-gray-300">
-                        {formatNumber(activeTotal)}
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Fänge nach Fischart</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Gegenüberstellung aller Fänge sowie entnommener Fische pro Art.
-            </p>
-          </div>
-            <div className="text-sm text-gray-600 dark:text-gray-300">
-              <div className="text-right font-semibold text-gray-800 dark:text-gray-100">
-                {formatNumber(fishOverviewTotals.total)} gesamt
-              </div>
-              <div className="text-right text-xs">
-                {formatNumber(fishOverviewTotals.taken)} entnommen ({
-                  fishOverviewTotals.total > 0
-                    ? formatPercent(fishOverviewTotals.taken / fishOverviewTotals.total)
-                    : '—'
-                })
-              </div>
-            </div>
-        </div>
-
-        {fishStatsError && (
-          <div className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200">
-            {fishStatsError}
-          </div>
-        )}
-
-        <div className="mt-6 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
-              <tr>
-                <th className="px-4 py-2 text-left font-semibold">Fischart</th>
-                <th className="px-4 py-2 text-left font-semibold">Gefangen gesamt</th>
-                <th className="px-4 py-2 text-left font-semibold">Davon entnommen</th>
-                <th className="px-4 py-2 text-left font-semibold">Entnahmequote</th>
-                <th className="px-4 py-2 text-left font-semibold">Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fishStatsLoading ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-4 text-center text-gray-500">
-                    Lädt Fangstatistik...
-                  </td>
-                </tr>
-              ) : fishStats.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-4 text-center text-gray-500">
-                    Keine Fänge erfasst.
-                  </td>
-                </tr>
-              ) : (
-                fishStats.map((entry) => {
-                  const total = Number(entry?.total) || 0;
-                  const taken = Number(entry?.taken) || 0;
-                  const ratio = total > 0 ? Math.max(0, Math.min(1, taken / total)) : 0;
-                  const ratioPercent = Math.round(ratio * 100);
-                  const isActive = selectedFishDetail === entry.fish;
-
-                  return (
-                    <tr key={entry.fish} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
-                      <td className="px-4 py-2 font-medium text-gray-800 dark:text-gray-100">{entry.fish}</td>
-                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(total)}</td>
-                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(taken)}</td>
-                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
-                        {total > 0 ? formatPercent(ratio) : '—'}
-                        {total > 0 && (
-                          <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
-                            <div
-                              className={`h-1.5 rounded-full ${
-                                ratioPercent >= 66
-                                  ? 'bg-red-500 dark:bg-red-400'
-                                  : ratioPercent >= 33
-                                    ? 'bg-amber-500 dark:bg-amber-400'
-                                    : 'bg-emerald-500 dark:bg-emerald-400'
-                              }`}
-                              style={{ width: `${ratioPercent}%` }}
-                            />
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedFishDetail((prev) => (prev === entry.fish ? '' : entry.fish))
-                          }
-                          className={`rounded border px-3 py-1 text-xs font-semibold transition ${
-                            isActive
-                              ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
-                              : 'border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-500/50 dark:text-blue-200 dark:hover:bg-blue-900/30'
-                          }`}
-                          aria-pressed={isActive}
-                        >
-                          {isActive ? 'Schließen' : 'Details'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {selectedFishDetail && (
-          <div
-            ref={detailSectionRef}
-            className="mt-6 rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-gray-700 dark:border-blue-900/40 dark:bg-blue-900/10 dark:text-gray-200"
-          >
-            {fishDetailData ? (
-              <>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200">
-                      Detailansicht: {fishDetailData.fish}
-                    </h3>
-                   
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      {formatNumber(fishDetailData.total)} Meldungen, davon {formatNumber(fishDetailData.taken)} entnommen.
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-500">
-                      Altersangaben sind grobe Erfahrungswerte je Art.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFishDetail('')}
-                    className="self-start rounded border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-500/40 dark:text-blue-200 dark:hover:bg-blue-900/30"
-                  >
-                    Schließen
-                  </button>
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {fishDetailData.buckets.map((bucket) => {
-                    const hasData = fishDetailData.measuredCount > 0;
-                    const share = hasData && bucket.count > 0
-                      ? formatPercent(bucket.count / fishDetailData.measuredCount)
-                      : '—';
-                    const takenShare =
-                      bucket.count > 0 ? formatPercent((bucket.takenCount || 0) / bucket.count) : '—';
-                    return (
-                      <div
-                        key={`${fishDetailData.fish}-${bucket.key}`}
-                        className="rounded border border-white/60 bg-white/70 p-3 shadow-sm dark:border-blue-900/30 dark:bg-blue-900/30"
-                      >
-                        <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                          {bucket.label}
-                        </div>
-                        <div className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                          {formatNumber(bucket.count)}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Anteil: {share}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Entnommen: {formatNumber(bucket.takenCount)} ({takenShare})
-                        </div>
-                        {bucket.ageLabel && (
-                          <div className="mt-1 text-xs text-blue-700 dark:text-blue-200">
-                            Alter: {bucket.ageLabel}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-4 text-xs text-gray-600 dark:text-gray-400">
-                  {fishDetailData.measuredCount > 0 ? (
-                    <>
-                      {formatNumber(fishDetailData.measuredCount)} Fänge mit Größenangabe bilden die Cluster.
-                      {fishDetailData.missingCount > 0 && (
-                        <> Zusätzlich {formatNumber(fishDetailData.missingCount)} ohne Größenwert.</>
-                      )}
-                    </>
-                  ) : (
-                    <>Noch keine Größenangaben verfügbar. Sobald Werte eingehen, erscheinen hier Cluster.</>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-between gap-4">
-                <div>Keine Details verfügbar.</div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedFishDetail('')}
-                  className="rounded border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-500/40 dark:text-blue-200 dark:hover:bg-blue-900/30"
-                >
-                  Schließen
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Krebs-Entnahmen</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Erfasste invasive Krebsarten (Meldungen aus dem Formular „+ 🦞“).
-            </p>
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            {crayfishLoading
-              ? 'Lädt...'
-              : `${formatNumber(crayfishStats.totalCount)} Stück gesamt (${formatNumber(crayfishStats.entriesCount)} Meldungen)`}
-          </div>
-        </div>
-
-        {crayfishError && (
-          <div className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200">
-            {crayfishError}
-          </div>
-        )}
-
-        {crayfishLoading ? (
-          <div className="mt-4 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
-            Lädt Krebsdaten...
-          </div>
-        ) : crayfishStats.entriesCount === 0 ? (
-          <div className="mt-4 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
-            Noch keine Krebs-Entnahmen erfasst.
-          </div>
-        ) : (
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
-              <p className="text-sm font-medium uppercase tracking-wide">Entnommen gesamt</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {formatNumber(crayfishStats.totalCount)}
-              </p>
-              <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70">über alle Meldungen</p>
-            </div>
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
-              <p className="text-sm font-medium uppercase tracking-wide">Meldungen</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {formatNumber(crayfishStats.entriesCount)}
-              </p>
-              <p className="text-xs text-blue-700/80 dark:text-blue-200/70">Formulareinträge</p>
-            </div>
-            <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
-              <p className="text-sm font-medium uppercase tracking-wide">Letzte 30 Tage</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {formatNumber(crayfishStats.last30d)}
-              </p>
-              <p className="text-xs text-amber-700/80 dark:text-amber-200/70">gemeldet im letzten Monat</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowCrayfishAnglers((prev) => !prev)}
-              aria-expanded={showCrayfishAnglers}
-              className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-left text-indigo-800 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100 dark:focus:ring-indigo-300"
-            >
-              <p className="text-sm font-medium uppercase tracking-wide">Aktive Melder</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {formatNumber(crayfishStats.uniqueAnglers)}
-              </p>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-indigo-700/90 dark:text-indigo-200/80">
-                {showCrayfishAnglers ? 'Namen verbergen' : 'Namen anzeigen'}
-              </p>
-            </button>
-          </div>
-        )}
-
-        {crayfishStats.bySpecies.length > 0 && (
-          <div className="mt-6 overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
-                <tr>
-                  <th className="px-4 py-2 text-left font-semibold">Art</th>
-                  <th className="px-4 py-2 text-left font-semibold">Entnommen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {crayfishStats.bySpecies.map((item) => (
-                  <tr key={item.name} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
-                    <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{item.name}</td>
-                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(item.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {showCrayfishAnglers && (
-          <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/70 p-4 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100">
-            <p className="font-semibold text-indigo-800 dark:text-indigo-100">
-              Aktive Melder ({formatNumber(crayfishStats.uniqueAnglers)}):
-            </p>
-            {crayfishStats.anglerNames.length === 0 ? (
-              <p className="mt-1 text-indigo-700/80 dark:text-indigo-200/80">Keine Einträge.</p>
-            ) : (
-              <p className="mt-2 leading-relaxed text-indigo-800 dark:text-indigo-100">
-                {crayfishStats.anglerNames.join(', ')}
-              </p>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Whitelist verwalten</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Nur E-Mail-Adressen auf der Whitelist dürfen neue Accounts erstellen.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowWhitelist((prev) => !prev)}
-            aria-expanded={showWhitelist}
-            className={`rounded px-4 py-2 text-sm font-semibold transition ${
-              showWhitelist
-                ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            {showWhitelist ? 'Liste verbergen' : 'Liste anzeigen'}
-          </button>
-        </div>
-
-        {showWhitelist && (
-          <>
-            <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={handleAddEmail}>
-              <input
-                type="email"
-                value={newEmail}
-                onChange={(event) => setNewEmail(event.target.value)}
-                placeholder="E-Mail hinzufügen"
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white sm:w-60"
-                required
-              />
-              <button
-                type="submit"
-                disabled={addingEmail}
-                className={`rounded px-4 py-2 text-sm font-semibold text-white ${
-                  addingEmail ? 'bg-blue-300' : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-              >
-                {addingEmail ? 'Speichert...' : 'Hinzufügen'}
-              </button>
-            </form>
-
-            {(whitelistError || whitelistMessage) && (
-              <div
-                className={`mt-4 rounded border px-3 py-2 text-sm ${
-                  whitelistError
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200'
-                    : 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/30 dark:text-green-200'
-                }`}
-              >
-                {whitelistError || whitelistMessage}
-              </div>
-            )}
-
-            <div className="mt-6 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
-                  <tr>
-                    <th className="px-4 py-2 text-left font-semibold">E-Mail</th>
-                    <th className="px-4 py-2 text-left font-semibold">Freigeschaltet seit</th>
-                    <th className="px-4 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {whitelistLoading ? (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
-                        Lädt Whitelist...
-                      </td>
-                    </tr>
-                  ) : whitelist.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
-                        Keine E-Mails gespeichert.
-                      </td>
-                    </tr>
-                  ) : (
-                    whitelist.map((entry) => (
-                      <tr key={entry.email} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
-                        <td className="px-4 py-2 font-mono text-[13px] text-gray-800 dark:text-gray-200">
-                          {entry.email}
-                        </td>
-                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{formatDate(entry.created_at)}</td>
-                        <td className="px-4 py-2 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEmail(entry.email)}
-                            className="rounded px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/30"
-                          >
-                            Entfernen
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Mitglieder & Rollen</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Weise Vorstand- oder Admin-Rechte zu. Änderungen wirken sofort.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowMemberList((prev) => !prev)}
-            aria-expanded={showMemberList}
-            className={`rounded px-4 py-2 text-sm font-semibold transition ${
-              showMemberList
-                ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            {showMemberList ? 'Liste verbergen' : 'Liste anzeigen'}
-          </button>
-        </div>
-
-        {showMemberList && (
-          <>
-            <div className="mt-4 flex justify-end">
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Name oder Rolle suchen"
-                className="w-full max-w-xs rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-              />
-            </div>
-
-            {(profilesError || roleMessage) && (
-              <div
-                className={`mt-4 rounded border px-3 py-2 text-sm ${
-                  profilesError
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200'
-                    : 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/30 dark:text-green-200'
-                }`}
-              >
-                {profilesError || roleMessage}
-              </div>
-            )}
-
-            <div className="mt-6 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200">
-                  <tr>
-                    <th className="px-4 py-2 text-left font-semibold">Name</th>
-                    <th className="px-4 py-2 text-left font-semibold">Rolle</th>
-                    <th className="px-4 py-2 text-left font-semibold">Angemeldet seit</th>
-                    <th className="px-4 py-2 text-left font-semibold">Aktionen</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profilesLoading ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
-                        Lädt Profile...
-                      </td>
-                    </tr>
-                  ) : filteredProfiles.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
-                        Keine passenden Profile gefunden.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredProfiles.map((profile) => {
-                      const normalizedRole = normalizeRoleValue(profile.role);
-                      const selectValue = normalizedRole === 'inactive' ? 'mitglied' : normalizedRole;
-                      const isInactive = normalizedRole === 'inactive';
-                      return (
-                        <tr key={profile.id} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
-                          <td className="px-4 py-2 text-gray-800 dark:text-gray-200">
-                            <div className="flex items-center gap-2">
-                              <span>{profile.name || '—'}</span>
-                              {isInactive && (
-                                <span className="rounded bg-gray-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                                  Inaktiv
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
-                            <select
-                              value={selectValue}
-                              onChange={(event) => handleRoleChange(profile.id, event.target.value)}
-                              disabled={updatingRoleId === profile.id || deletingProfileId === profile.id}
-                              className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                            >
-                              {roleOptionsForProfile(profile).map((option) => (
-                                <option key={option.value || 'none'} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{formatDate(profile.created_at)}</td>
-                          <td className="px-4 py-2 text-right">
-                            <select
-                              value={isInactive ? 'inactive' : 'active'}
-                              onChange={(event) => handleMemberActionChange(profile, event.target.value)}
-                              disabled={updatingRoleId === profile.id || deletingProfileId === profile.id}
-                              className="rounded border border-gray-300 px-2 py-1 text-xs font-semibold focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                            >
-                              <option value="active">Aktiv</option>
-                              <option value="inactive">Inaktiv</option>
-                              <option value="delete">Löschen</option>
-                            </select>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </section>
+      <MembersSection
+        showMemberList={showMemberList}
+        onToggleMemberList={() => setShowMemberList((prev) => !prev)}
+        search={search}
+        onChangeSearch={setSearch}
+        profilesError={profilesError}
+        roleMessage={roleMessage}
+        profilesLoading={profilesLoading}
+        filteredProfiles={filteredProfiles}
+        updatingRoleId={updatingRoleId}
+        deletingProfileId={deletingProfileId}
+        onChangeRole={handleRoleChange}
+        onMemberActionChange={handleMemberActionChange}
+        roleOptionsForProfile={roleOptionsForProfile}
+        formatDate={formatDate}
+      />
     </div>
   );
 }

@@ -85,7 +85,7 @@ export default function CrayfishForm({ anglerName }) {
             Krebsfang erfassen
           </h2>
           <p className="mt-1 text-sm text-gray-700 dark:text-gray-200">
-            Melde Entnahmen von invasiven Krebsarten.
+            Wähle die Krebsart. Mit einem Klick auf das Symbol kannst du dir ein Bild der Art anzeigen lassen.
           </p>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {CRAYFISH_SPECIES.map((item) => {
@@ -197,23 +197,23 @@ export default function CrayfishForm({ anglerName }) {
             className="relative w-full max-w-lg rounded-xl bg-white shadow-xl dark:bg-gray-900"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              onClick={() => setPreviewSpecies('')}
-              className="absolute right-3 top-3 rounded-full bg-white px-2 py-1 text-sm font-semibold text-gray-700 shadow hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-              aria-label="Schließen"
-            >
-              ✕
-            </button>
-            <div className="rounded-t-xl bg-blue-600 px-4 py-2 text-sm font-semibold uppercase tracking-wide text-white">
-              {previewSpecies}
+            <div className="flex items-center justify-between rounded-t-xl bg-blue-600 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-white">
+              <span className="pr-3">{previewSpecies}</span>
+              <button
+                type="button"
+                onClick={() => setPreviewSpecies('')}
+                className="ml-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-lg font-bold text-white transition hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/60"
+                aria-label="Schließen"
+              >
+                ✕
+              </button>
             </div>
-            <div className="p-4">
+            <div className="p-4 flex justify-center">
               {CRAYFISH_IMAGES[previewSpecies] && failedSpecies !== previewSpecies ? (
                 <img
                   src={CRAYFISH_IMAGES[previewSpecies]}
                   alt={previewSpecies}
-                  className="h-72 w-full rounded-lg object-cover"
+                  className="w-full max-h-[70vh] rounded-lg object-contain bg-black/5 dark:bg-white/5 sm:max-h-[80vh]"
                   onError={() => setFailedSpecies(previewSpecies)}
                 />
               ) : (

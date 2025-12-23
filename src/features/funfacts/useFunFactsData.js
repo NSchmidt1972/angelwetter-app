@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useMemo } from 'react';
 import { useValidFishes } from '../../hooks/useValidFishes';
 import { localDayKey, monthKey } from '../../utils/dateUtils';
@@ -224,7 +225,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     });
 
     return { count: best, items: winners };
-  }, [statsFishes]);
+  }, [statsFishes, totalPerAnglerDay]);
 
   const mostFishesDay = useMemo(() => {
     if (statsFishes.length === 0) return { count: 0, days: [] };
@@ -1729,3 +1730,4 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     funCardChampion,
   };
 }
+ 

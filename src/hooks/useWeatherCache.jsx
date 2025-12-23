@@ -95,6 +95,7 @@ export function WeatherProvider({ children }) {
   return <WeatherContext.Provider value={value}>{children}</WeatherContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWeatherCache() {
   const context = useContext(WeatherContext);
   if (!context) {

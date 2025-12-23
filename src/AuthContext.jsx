@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabaseClient';
 
 const AuthContext = createContext();
@@ -30,11 +30,10 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, setUser, loading }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = useMemo(() => ({ user, setUser, loading }), [user, loading]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

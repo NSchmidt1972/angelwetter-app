@@ -21,9 +21,10 @@ export const baseNav = [
 export function navItemsFor({ isAdmin = false, canAccessBoard = false, anglerName = '' } = {}) {
   const items = [...baseNav];
 
-  // Krebsformular nur für Nicol
-  const isNicol = (anglerName || '').trim().toLowerCase() === 'nicol schmidt';
-  if (isNicol) {
+  // Krebsformular nur für freigegebene Personen
+  const normalizedName = (anglerName || '').trim().toLowerCase();
+  const allowedForCrayfish = ['nicol schmidt', 'laura rittlinger'];
+  if (allowedForCrayfish.includes(normalizedName)) {
     items.splice(2, 0, { label: "+   🦞", path: "/crayfish" });
   }
 

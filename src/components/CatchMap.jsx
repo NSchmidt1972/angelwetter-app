@@ -159,7 +159,7 @@ export default function CatchMap() {
   const bounds = useMemo(() => {
     if (filteredEntries.length === 0) return [];
     return filteredEntries.map(e => [e.lat, e.lon]);
-  }, [filteredEntries, onlyMine]);
+  }, [filteredEntries]);
 
   const legendFishList = useMemo(() => {
     const relevantEntries = onlyMine
@@ -177,7 +177,7 @@ export default function CatchMap() {
       map.get(normalized).count += 1;
     });
     return Array.from(map.entries()).sort((a, b) => b[1].count - a[1].count);
-  }, [filteredEntries]);
+  }, [filteredEntries, onlyMine]);
 
   // 🔧 NEU: Bei "Nur meine" nur zoomen, wenn es mind. einen externen Punkt gibt
   const hasExternalPoint = useMemo(() =>
