@@ -84,7 +84,7 @@ export async function deleteProfile(profileId) {
 export async function fetchCrayfishCatches() {
   const { data, error } = await supabase
     .from('crayfish_catches')
-    .select('species, count, catch_timestamp, angler')
+    .select('species, count, catch_timestamp, angler, note')
     .order('catch_timestamp', { ascending: false });
 
   if (error) throw new Error(error.message || 'Krebsdaten konnten nicht geladen werden.');

@@ -1390,22 +1390,57 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     };
   }, [validFishes]);
 
-  const overallAvgPerAnglerDay = useMemo(() => {
-    if (statsFishes.length === 0) {
-      return { avg: 0, totalAnglerDays: 0, totalFishes: 0 };
+  const activitySummary = useMemo(() => {
+    if (ferkensbruchAllFishes.length === 0) {
+      return {
+        catchSessions: 0,
+        blankSessions: 0,
+        totalCatchCount: 0,
+        blankShare: 0,
+        avgCatchesPerCatchDay: 0,
+      };
     }
-    const perAnglerDay = new Map();
-    for (const f of statsFishes) {
-      const dayKey = localDayKey(new Date(f.timestamp));
-      const key = `${f.angler}|${dayKey}`;
-      perAnglerDay.set(key, (perAnglerDay.get(key) || 0) + 1);
-    }
-    let totalFishes = 0;
-    for (const cnt of perAnglerDay.values()) totalFishes += cnt;
-    const totalAnglerDays = perAnglerDay.size;
-    const avg = totalAnglerDays ? totalFishes / totalAnglerDays : 0;
-    return { avg, totalAnglerDays, totalFishes };
-  }, [statsFishes]);
+
+    const cutoff = PUBLIC_FROM ? new Date(PUBLIC_FROM).getTime() : null;
+    const catchSessionsSet = new Set();
+    const blankSessionsSet = new Set();
+    let totalCatchCount = 0;
+
+    ferkensbruchAllFishes.forEach((entry) => {
+      const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
+      const timeOk = ts && !Number.isNaN(ts.getTime()) && (cutoff == null || ts.getTime() >= cutoff);
+      if (!timeOk) return;
+
+      const dateKey = ts.toISOString().slice(0, 10);
+      const anglerKey = (entry?.angler || 'Unbekannt').trim() || 'Unbekannt';
+      const fishName = entry?.fish ? String(entry.fish).trim() : '';
+      const isBlank = entry?.blank === true;
+      const hasFish = fishName && fishName.toLowerCase() !== 'unbekannt' && entry.blank !== true;
+
+      if (isBlank) {
+        blankSessionsSet.add(`${anglerKey}__${dateKey}`);
+        return;
+      }
+
+      if (!hasFish) return;
+      totalCatchCount += 1;
+      catchSessionsSet.add(`${anglerKey}__${dateKey}`);
+    });
+
+    const catchSessions = catchSessionsSet.size;
+    const blankSessions = blankSessionsSet.size;
+    const totalSessions = catchSessions + blankSessions;
+    const blankShare = totalSessions > 0 ? blankSessions / totalSessions : 0;
+    const avgCatchesPerCatchDay = catchSessions > 0 ? totalCatchCount / catchSessions : 0;
+
+    return {
+      catchSessions,
+      blankSessions,
+      totalCatchCount,
+      blankShare,
+      avgCatchesPerCatchDay,
+    };
+  }, [ferkensbruchAllFishes, PUBLIC_FROM]);
 
   const avgPerAnglerDayByMonth = useMemo(() => {
     if (statsFishes.length === 0) {
@@ -1610,7 +1645,6 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     addList(frostCatch.winners, (item) => item?.angler);
     addList(frostCatch.ranking.slice(0, 5), (item) => item?.angler);
     addList(extremeWeatherCatch?.ranking?.slice(0, 3), (item) => item?.fish?.angler);
-    addList(overallAvgPerAnglerDay.winners, (item) => item?.angler);
     addList(angelQueen.winners, (item) => item?.angler);
     addList(photoArtist.winners, (item) => item?.angler);
     addList(recordHunter.winners, (item) => item?.angler);
@@ -1668,7 +1702,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     hottestCatch,
     frostCatch,
     extremeWeatherCatch,
-    overallAvgPerAnglerDay,
+    activitySummary,
     avgPerAnglerDayByMonth,
     angelQueen,
     photoArtist,
@@ -1722,7 +1756,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     hottestCatch,
     frostCatch,
     extremeWeatherCatch,
-    overallAvgPerAnglerDay,
+    activitySummary,
     avgPerAnglerDayByMonth,
     angelQueen,
     photoArtist,

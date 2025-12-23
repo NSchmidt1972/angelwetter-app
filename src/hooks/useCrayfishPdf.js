@@ -138,29 +138,6 @@ export default function useCrayfishPdf({ entries, stats, dateRange }) {
         ? `${formatDateValue(dateRange.from)} – ${formatDateValue(dateRange.to)}`
         : 'keine Datumsangaben';
 
-      const monthlyBuckets = (() => {
-        const map = new Map();
-        (entries || []).forEach((entry) => {
-          const ts = entry?.catch_timestamp ? new Date(entry.catch_timestamp) : null;
-          const count = Number(entry?.count) || 0;
-          if (!ts || Number.isNaN(ts.getTime())) return;
-          const key = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
-          if (!map.has(key)) {
-            map.set(key, {
-              key,
-              label: ts.toLocaleString('de-DE', { month: 'short', year: 'numeric' }),
-              total: 0,
-              species: new Map(),
-            });
-          }
-          const bucket = map.get(key);
-          bucket.total += count;
-          const species = entry?.species || 'Unbekannt';
-          bucket.species.set(species, (bucket.species.get(species) || 0) + count);
-        });
-        return Array.from(map.values()).sort((a, b) => (a.key < b.key ? 1 : -1));
-      })();
-
       const logoBytes = await fetchLogoBytes();
       if (logoBytes) {
         try {
@@ -206,10 +183,10 @@ export default function useCrayfishPdf({ entries, stats, dateRange }) {
       drawLine(`Gesamt entnommen: ${stats?.totalCount ? stats.totalCount.toLocaleString('de-DE') : '0'} Tiere`);
       drawLine(`Meldungen: ${stats?.entriesCount ? stats.entriesCount.toLocaleString('de-DE') : '0'}`);
       drawLine(`Letzte 30 Tage: ${stats?.last30d ? stats.last30d.toLocaleString('de-DE') : '0'} Tiere gemeldet`);
-      drawLine(`Aktive Melder: ${stats?.uniqueAnglers ? stats.uniqueAnglers.toLocaleString('de-DE') : '0'}`);
+      
       y -= 6;
 
-      drawSectionTitle('Artenübersicht (summiert)');
+      drawSectionTitle('Artenübersicht');
       drawRow('Art', 'Anzahl', { font: boldFont });
       if (!stats?.bySpecies?.length) {
         drawLine('Keine Einträge vorhanden.', { size: 12 });
@@ -220,31 +197,31 @@ export default function useCrayfishPdf({ entries, stats, dateRange }) {
       }
       y -= 6;
 
-      drawSectionTitle('Monatliche Übersicht (summiert)');
-      if (monthlyBuckets.length === 0) {
-        drawLine('Keine Monatsdaten vorhanden.', { size: 12 });
-      } else {
-        monthlyBuckets.forEach((bucket) => {
-          drawLine(`${bucket.label}: ${(bucket.total ?? 0).toLocaleString('de-DE')} Ex.`, { font: boldFont });
-          Array.from(bucket.species.entries())
-            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de'))
-            .forEach(([name, total]) => {
-              drawLine(`• ${name}: ${(total ?? 0).toLocaleString('de-DE')}`, { size: 11, lineHeight: 16, x: margin + 12 });
-            });
-          y -= 4;
-        });
-      }
       y -= 6;
 
-      drawSectionTitle('Empfohlene Zusatzangaben für Verbände/Behörden');
-      const hints = [
-        'Gewässerabschnitt / Koordinaten und Datum der Entnahme',
-        'Fangmethode und eingesetzte Reusen- oder Netzgröße',
-        'Anzahl je Art und dokumentierter Entsorgungsweg (z.B. Verbrennung, Abgabe)',
-        'Hinweise zu Beifängen, Verletzungen oder Sichtungen weiterer Arten',
-        'Kontakt zur meldenden Person für Rückfragen',
-      ];
-      hints.forEach((hint) => drawLine(`• ${hint}`, { size: 11 }));
+      drawSectionTitle('Besondere Hinweise & Beobachtungen');
+      const noteEntries = (entries || [])
+        .map((entry) => ({
+          note: entry?.note ? String(entry.note).trim() : '',
+          date: entry?.catch_timestamp,
+          species: entry?.species || 'Unbekannt',
+        }))
+        .filter((item) => item.note);
+
+      if (noteEntries.length === 0) {
+        drawLine('Keine Hinweise hinterlegt.', { size: 11 });
+      } else {
+        noteEntries.slice(0, 8).forEach((item) => {
+          const label = `${formatDateValue(item.date)} • ${item.species}`;
+          drawLine(`• ${label}: ${item.note}`, { size: 11, lineHeight: 16 });
+        });
+        if (noteEntries.length > 8) {
+          drawLine(`(Weitere ${noteEntries.length - 8} Hinweise vorhanden)`, {
+            size: 10,
+            color: rgb(0.35, 0.35, 0.35),
+          });
+        }
+      }
       y -= 6;
 
       drawSectionTitle('Freigabe Vorstand');

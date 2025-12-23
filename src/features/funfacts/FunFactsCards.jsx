@@ -131,7 +131,7 @@ export default function FunFactsCards({ data }) {
     hottestCatch,
     frostCatch,
     extremeWeatherCatch,
-    overallAvgPerAnglerDay,
+    activitySummary,
     avgPerAnglerDayByMonth,
     angelQueen,
     recordHunter,
@@ -1251,21 +1251,26 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
 
-          <Card key="overallAvg" title="📊 Ø Fische pro Angler-Tag (gesamt)">
-            {overallAvgPerAnglerDay.totalAnglerDays > 0 ? (
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <div className="text-3xl font-bold text-green-700 dark:text-green-300">
-                    {overallAvgPerAnglerDay.avg.toFixed(2)}
+          <Card key="overallAvg" title="📊 Ø Fische pro Fangtag">
+            {activitySummary.catchSessions > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <div>
+                    <div className="text-3xl font-bold text-green-700 dark:text-green-300">
+                      {activitySummary.avgCatchesPerCatchDay.toFixed(2)}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      Ø Fische pro Fangtag
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Ø Fische pro Angler-Tag
+                  <div className="text-xs text-right text-gray-500 dark:text-gray-400">
+                    Basis: {activitySummary.catchSessions} Fangtage, {activitySummary.blankSessions} Schneider
+                    <br />
+                    {activitySummary.totalCatchCount} Fänge gesamt
                   </div>
                 </div>
-                <div className="text-xs text-right text-gray-500 dark:text-gray-400">
-                  Basis: {overallAvgPerAnglerDay.totalAnglerDays} Angler-Tage,
-                  <br />
-                  {overallAvgPerAnglerDay.totalFishes} Fänge
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Schneider-Anteil: {(activitySummary.blankShare * 100).toFixed(1)}%
                 </div>
               </div>
             ) : (
@@ -1605,6 +1610,7 @@ export default function FunFactsCards({ data }) {
       mostInRain,
       sunshineOnly,
       topThreeSpecies,
+      activitySummary,
       avgPerAnglerDayByMonth,
       longestBreakBetweenCatchDays,
       longestCatchStreak,
@@ -1618,7 +1624,6 @@ export default function FunFactsCards({ data }) {
       hottestCatch,
       frostCatch,
       extremeWeatherCatch,
-      overallAvgPerAnglerDay,
       angelQueen,
       recordHunter,
       photoArtist,

@@ -64,7 +64,7 @@ export default function CrayfishForm({ anglerName }) {
         timestamp: new Date(),
         note,
       });
-      alert('Krebsfang gespeichert.');
+      alert(`Krebsfang gespeichert: ${species || 'Unbekannte Art'} (${count}x)`);
       navigate('/');
       setSpecies('');
       setCount(1);

@@ -22,6 +22,15 @@ export default function CrayfishSection({
     closePreview,
   } = useCrayfishPdf({ entries, stats, dateRange });
 
+  const pdfButtonDisabled = !showPreview && (loading || stats.entriesCount === 0 || generating);
+  const handlePdfButton = () => {
+    if (showPreview) {
+      closePreview();
+      return;
+    }
+    previewReport();
+  };
+
   return (
     <>
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -43,19 +52,19 @@ export default function CrayfishSection({
                 Zeitraum: {formatDate(dateRange.from)} – {formatDate(dateRange.to)}
               </div>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap justify-center gap-3 sm:justify-start">
               <button
                 type="button"
-                onClick={previewReport}
-                disabled={loading || stats.entriesCount === 0 || generating}
+                onClick={handlePdfButton}
+                disabled={pdfButtonDisabled}
                 className={`rounded px-4 py-2 text-sm font-semibold transition ${
-                  loading || stats.entriesCount === 0 || generating
-                    ? 'bg-indigo-300 text-white dark:bg-indigo-800/50'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:text-gray-900'
-                }`}
+                  showPreview
+                    ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                } ${pdfButtonDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
                 aria-busy={generating}
               >
-                {generating ? 'PDF wird erstellt...' : 'PDF-Vorschau'}
+                {generating ? 'PDF wird erstellt...' : showPreview ? 'Vorschau schließen' : ' PDF Vorschau'}
               </button>
             </div>
           </div>
@@ -111,7 +120,7 @@ export default function CrayfishSection({
                 aria-expanded={showAnglers}
                 className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-left text-indigo-800 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100 dark:focus:ring-indigo-300"
               >
-                <p className="text-sm font-medium uppercase tracking-wide">Aktive Melder</p>
+                <p className="text-sm font-medium uppercase tracking-wide">Aktive Krebsjäger</p>
                 <p className="mt-1 text-2xl font-semibold">
                   {formatNumber(stats.uniqueAnglers)}
                 </p>
@@ -120,6 +129,23 @@ export default function CrayfishSection({
                 </p>
               </button>
             </div>
+
+            {stats.bySpecies.length > 0 && (
+              showAnglers && (
+                <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/70 p-4 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100">
+                  <p className="font-semibold text-indigo-800 dark:text-indigo-100">
+                    Aktive Krebsjäger ({formatNumber(stats.uniqueAnglers)}):
+                  </p>
+                  {stats.anglerNames.length === 0 ? (
+                    <p className="mt-1 text-indigo-700/80 dark:text-indigo-200/80">Keine Einträge.</p>
+                  ) : (
+                    <p className="mt-2 leading-relaxed text-indigo-800 dark:text-indigo-100">
+                      {stats.anglerNames.join(', ')}
+                    </p>
+                  )}
+                </div>
+              )
+            )}
 
             {stats.bySpecies.length > 0 && (
               <div className="mt-6 overflow-x-auto">
@@ -142,20 +168,6 @@ export default function CrayfishSection({
               </div>
             )}
 
-            {showAnglers && (
-              <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/70 p-4 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-100">
-                <p className="font-semibold text-indigo-800 dark:text-indigo-100">
-                  Aktive Melder ({formatNumber(stats.uniqueAnglers)}):
-                </p>
-                {stats.anglerNames.length === 0 ? (
-                  <p className="mt-1 text-indigo-700/80 dark:text-indigo-200/80">Keine Einträge.</p>
-                ) : (
-                  <p className="mt-2 leading-relaxed text-indigo-800 dark:text-indigo-100">
-                    {stats.anglerNames.join(', ')}
-                  </p>
-                )}
-              </div>
-            )}
           </>
         )}
       </section>
