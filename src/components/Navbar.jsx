@@ -32,7 +32,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
   const [open, setOpen] = useState(false);                 // Mobile-Overlay
   const [openDropdown, setOpenDropdown] = useState(false); // Statistik-Dropdown (Desktop & Mobile, durch Outside-Click geschützt)
   const [showMenu, setShowMenu] = useState(false);         // Profil-Menü
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [dataFilter, setDataFilter] = useState('recent');  // Nur für Nicol
 
   const headerRef = useRef(null);
   const [headerH, setHeaderH] = useState(64);
@@ -64,6 +64,13 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     };
   }, [open]);
 
+  // Datenfilter (Nicol): aktuelles Setting laden
+  useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+    const storedFilter = localStorage.getItem("dataFilter") || "recent";
+    setDataFilter(storedFilter);
+  }, []);
+
   // Outside-Click: Profil + Statistik schließen
   useEffect(() => {
     function handleClickOutside(e) {
@@ -89,12 +96,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [showHamburger, open]);
 
-  useEffect(() => {
-    if (!showMenu) {
-      setSettingsExpanded(false);
-    }
-  }, [showMenu]);
-
   const shouldShowUpdateBanner = updateReady && !updating;
 
 
@@ -116,10 +117,22 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     setOpenDropdown((prev) => (typeof next === "boolean" ? next : !prev));
   };
 
-  const handleNavigateSettings = () => {
+  const handleNavigateAdmin = () => {
     setShowMenu(false);
-    setSettingsExpanded(false);
-    navigate("/settings");
+    navigate("/admin");
+  };
+
+  const handleToggleDataFilter = () => {
+    if (typeof localStorage === "undefined") return;
+    const newValue = dataFilter === "recent" ? "all" : "recent";
+    setDataFilter(newValue);
+    localStorage.setItem("dataFilter", newValue);
+    alert(
+      newValue === "recent"
+        ? "Nur Daten ab 01.06.2025 werden verwendet."
+        : "Alle Daten werden verwendet."
+    );
+    window.location.reload();
   };
 
   const handleCloseMobileMenu = () => {
@@ -132,6 +145,9 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     const shortName = localStorage.getItem("shortAnglerName");
     return shortName || first || "Profil";
   })();
+
+  const showAdminLink = isAdmin && canAccessBoard;
+  const showDataFilter = (name || "").trim().toLowerCase() === "nicol schmidt";
 
   return (
     <>
@@ -173,17 +189,19 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
             ref={profileRef}
             dark={dark}
             onToggleDark={toggle}
-            displayName={displayName}
-            showMenu={showMenu}
-            onToggleMenu={() => setShowMenu((v) => !v)}
-            settingsExpanded={settingsExpanded}
-            onToggleSettings={() => setSettingsExpanded((v) => !v)}
-            onNavigateSettings={handleNavigateSettings}
-            onLogout={handleLogout}
-            shouldShowUpdateBanner={shouldShowUpdateBanner}
-            onApplyUpdate={applyUpdateNow}
-            updating={updating}
-          />
+          displayName={displayName}
+          showMenu={showMenu}
+          onToggleMenu={() => setShowMenu((v) => !v)}
+          onNavigateAdmin={handleNavigateAdmin}
+          showAdminLink={showAdminLink}
+          showDataFilter={showDataFilter}
+          dataFilterValue={dataFilter}
+          onToggleDataFilter={handleToggleDataFilter}
+          onLogout={handleLogout}
+          shouldShowUpdateBanner={shouldShowUpdateBanner}
+          onApplyUpdate={applyUpdateNow}
+          updating={updating}
+        />
         </div>
 
         {showHamburger && (

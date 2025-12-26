@@ -21,16 +21,15 @@ export const baseNav = [
 export function navItemsFor({ isAdmin = false, canAccessBoard = false, anglerName = '' } = {}) {
   const items = [...baseNav];
 
-  // Krebsformular nur für freigegebene Personen
-  const normalizedName = (anglerName || '').trim().toLowerCase();
-  const allowedForCrayfish = ['nicol schmidt', 'laura rittlinger'];
-  if (allowedForCrayfish.includes(normalizedName)) {
+  // Krebsformular für Vorstand sowie Admins
+  const canSeeCrayfishForm = canAccessBoard || isAdmin;
+  if (canSeeCrayfishForm) {
     items.splice(2, 0, { label: "+   🦞", path: "/crayfish" });
   }
 
+  items.push({ label: "Downloads", path: "/downloads" });
   if (canAccessBoard) {
     items.push({ label: "👥 Vorstand", path: "/vorstand" });
   }
-  if (isAdmin) items.push({ label: "🔧 Admin", path: "/admin" });
   return items;
 }

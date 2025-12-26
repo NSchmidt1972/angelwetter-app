@@ -37,6 +37,7 @@ const Calendar      = lazy(() => import('@/pages/Calendar'));
 const MapView       = lazy(() => import('@/pages/MapView'));
 const Regulations   = lazy(() => import('@/pages/Regulations'));
 const BoardOverview = lazy(() => import('@/pages/BoardOverview'));
+const DownloadsPage = lazy(() => import('@/pages/DownloadsPage'));
 
 // Optional
 const SettingsPage  = safeLazy(() => import('@/pages/SettingsPage'), 'SettingsPage');
@@ -94,6 +95,7 @@ export default function AppRoutes({
           <Route path="map"          element={<MapView />} />
           <Route path="forecast"     element={<Forecast />} />
           <Route path="regeln"       element={<Regulations />} />
+          <Route path="downloads"    element={<DownloadsPage />} />
           <Route path="fun"          element={<FunFacts />} />
           <Route
             path="vorstand"
