@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 function getKey(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -20,9 +21,11 @@ export default function FishCalendarMobileView() {
 
   useEffect(() => {
     async function fetchData() {
+      const clubId = getActiveClubId();
       const { data, error } = await supabase
         .from('fishes')
         .select('timestamp, fish, angler')
+        .eq('club_id', clubId)
         .eq('angler', anglerName);
 
       if (error) {

@@ -11,6 +11,7 @@ import PhotoLightbox from './PhotoLightbox';
 import { shareEntry } from '../../utils/share';
 import { windDirection, getMoonDescription } from '../../utils/weather';
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import { VERTRAUTE } from '@/constants';
 import { REACTION_OPTIONS } from '@/constants/reactions';
 import { isVisibleToUser } from '@/utils/filters';
@@ -60,9 +61,11 @@ export default function CatchList({ anglerName }) {
 
     async function loadTopTen() {
       try {
+        const clubId = getActiveClubId();
         const { data, error } = await supabase
           .from('fishes')
-          .select('id, fish, size, angler, timestamp, location_name, blank');
+          .select('id, fish, size, angler, timestamp, location_name, blank')
+          .eq('club_id', clubId);
         if (error) {
           console.error('Top 10 laden:', error);
           return;

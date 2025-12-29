@@ -1,6 +1,7 @@
 // src/services/catchService.js
 import { supabase } from '../supabaseClient';
 import { getDistanceKm } from '../utils/geo';
+import { getActiveClubId } from '@/utils/clubId';
 
 const FERKENSBRUCH_LAT = 51.3135;
 const FERKENSBRUCH_LON = 6.256;
@@ -53,6 +54,7 @@ const IS_DEV_BUILD = (() => {
 export async function saveCatchEntry(entry, taken, position, anglerName, options = {}) {
   // 1) Insert
   const payload = { ...entry, taken: !!taken };
+  payload.club_id = getActiveClubId();
   const locationLat = payload.lat ?? position?.lat ?? null;
   const locationLon = payload.lon ?? position?.lon ?? null;
   const isFerkensbruchRegion = typeof options.region === 'string'
@@ -127,6 +129,7 @@ export async function saveCatchEntry(entry, taken, position, anglerName, options
         angler: anglerName,
         fish: payload.fish,
         size: payload.size,
+        club_id: payload.club_id,
        // sender_user_id,
       },
     });

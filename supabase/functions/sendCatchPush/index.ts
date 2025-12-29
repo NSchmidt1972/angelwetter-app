@@ -93,18 +93,20 @@ serve(async (req) => {
     const fish = String(payload.fish ?? record.fish ?? "").trim();
     const sizeValue = payload.size ?? record.size ?? null;
     const sizeNum = sizeValue != null ? Number(sizeValue) || null : null;
+    const clubId = payload.club_id ?? record.club_id ?? null;
     let excludeUserId = record.user_id ? String(record.user_id) : null;
     console.log("[send-push-notification] extracted data:", {
       angler,
       fish,
       sizeNum,
+      clubId,
       excludeUserId
     });
 
-    if (!angler || !fish) {
-      console.warn("[send-push-notification] missing angler/fish – skipping");
+    if (!angler || !fish || !clubId) {
+      console.warn("[send-push-notification] missing angler/fish/club – skipping");
       return json(400, {
-        error: "Missing angler or fish"
+        error: "Missing angler, fish or club_id"
       });
     }
 
@@ -142,6 +144,7 @@ serve(async (req) => {
     const { data: subs, error: subsErr } = await supabase
       .from("push_subscriptions")
       .select("subscription_id, user_id, opted_in, revoked_at, angler_name")
+      .eq("club_id", clubId)
       .eq("opted_in", true)
       .is("revoked_at", null);
 

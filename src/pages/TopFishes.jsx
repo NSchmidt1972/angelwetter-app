@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import PageContainer from '../components/PageContainer';
 import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
 
@@ -25,7 +26,8 @@ export default function TopFishes() {
 
   useEffect(() => {
     async function loadData() {
-      const { data, error } = await supabase.from('fishes').select('*');
+      const clubId = getActiveClubId();
+      const { data, error } = await supabase.from('fishes').select('*').eq('club_id', clubId);
       if (error || !Array.isArray(data)) {
         console.error('Fehler beim Laden der Fische:', error);
         return;

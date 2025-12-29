@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 /**
  * Ruft die Wetterzusammenfassung-Funktion auf.
@@ -24,13 +25,15 @@ async function sendBlankWeatherSummary(anglerName, hours, accessToken) {
  * Speichert die Schneidersession in der DB.
  */
 async function insertBlankSession(anglerName, position) {
+  const clubId = getActiveClubId();
   const { error } = await supabase.from('fishes').insert([{
     angler: anglerName,
     note: 'Schneidersession',
     blank: true,
     timestamp: new Date().toISOString(),
     lat: position?.lat ?? null,
-    lon: position?.lon ?? null
+    lon: position?.lon ?? null,
+    club_id: clubId,
   }]);
   if (error) throw new Error('Fehler beim Speichern in fishes.');
 }

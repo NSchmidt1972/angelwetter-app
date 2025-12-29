@@ -9,6 +9,7 @@ import MarkerClusterGroup from 'react-leaflet-markercluster';
 import L from 'leaflet';
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -101,9 +102,11 @@ export default function CatchMap() {
 
   useEffect(() => {
     async function loadData() {
+      const clubId = getActiveClubId();
       const { data: fishes, error } = await supabase
         .from('fishes')
         .select('*')
+        .eq('club_id', clubId)
         .not('lat', 'is', null)
         .not('lon', 'is', null);
       if (!error) setEntries(fishes || []);

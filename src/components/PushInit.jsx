@@ -7,6 +7,7 @@ import {
   waitForServiceWorkerRegistration,
   SERVICE_WORKER_INFO,
 } from '@/onesignal/swHelpers';
+import { getActiveClubId } from '@/utils/clubId';
 
 export default function PushInit() {
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function PushInit() {
       }
       const uid = userRes?.user?.id;
       if (!uid) return;
+      const clubId = getActiveClubId();
 
       const reg = await ensureServiceWorkerRegistration();
       const scope = reg?.scope || SERVICE_WORKER_INFO.scope || null;
@@ -64,6 +66,7 @@ export default function PushInit() {
         opted_in: true,
         revoked_at: null,
         last_seen_at: new Date().toISOString(),
+        club_id: clubId,
       };
 
       if (anglerName) {
@@ -149,6 +152,7 @@ export default function PushInit() {
                   })
                   .eq('subscription_id', sid)
                   .eq('user_id', u.user.id)
+                  .eq('club_id', getActiveClubId())
                   .catch((e) => console.warn('[PushInit] revoke failed:', e));
               }
             } else {

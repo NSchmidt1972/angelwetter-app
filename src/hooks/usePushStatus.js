@@ -1,6 +1,7 @@
 // src/hooks/usePushStatus.js
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import { runWhenOneSignalReady, enqueueOneSignal } from '@/onesignal/deferred';
 import {
   ensureServiceWorkerRegistration,
@@ -321,6 +322,7 @@ export default function usePushStatus() {
               opted_in: true,
               revoked_at: null,
               last_seen_at: new Date().toISOString(),
+              club_id: getActiveClubId(),
             };
 
             if (anglerName) {

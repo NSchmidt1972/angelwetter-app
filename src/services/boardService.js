@@ -1,5 +1,6 @@
 // src/services/boardService.js
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 export async function fetchWhitelist() {
   const { data, error } = await supabase
@@ -47,11 +48,13 @@ export async function fetchProfiles() {
 }
 
 export async function fetchFishAggregates() {
+  const clubId = getActiveClubId();
   const { data, error } = await supabase
     .from('fishes')
     .select(
       'fish, taken, location_name, timestamp, size, angler, blank, weight, is_marilou, count_in_stats, under_min_size, out_of_season'
     )
+    .eq('club_id', clubId)
     .order('timestamp', { ascending: false });
 
   if (error) throw new Error(error.message || 'Fischübersicht konnte nicht geladen werden.');

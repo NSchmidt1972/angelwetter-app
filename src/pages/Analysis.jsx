@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import { fetchWeather } from '../api/weather';
 import PageContainer from '../components/PageContainer';
 
@@ -39,7 +40,8 @@ export default function Analysis({ anglerName }) {
 
   useEffect(() => {
     async function loadData() {
-      const { data, error } = await supabase.from('fishes').select('*');
+      const clubId = getActiveClubId();
+      const { data, error } = await supabase.from('fishes').select('*').eq('club_id', clubId);
       if (error) {
         console.error("Fehler beim Laden der Fänge:", error);
         return;

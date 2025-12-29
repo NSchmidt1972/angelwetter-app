@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import { createCatchPDF } from '@/utils/pdfExporter';
 import { isFerkensbruchLocation } from '@/utils/location';
 
@@ -32,9 +33,11 @@ export default function DownloadsPage() {
   };
 
   const exportCatches = async () => {
+    const clubId = getActiveClubId();
     const { data, error } = await supabase
       .from('fishes')
       .select('*')
+      .eq('club_id', clubId)
       .eq('angler', anglerName);
 
     if (error) {
@@ -59,9 +62,11 @@ export default function DownloadsPage() {
   };
 
   const exportCatchesAsPDF = async () => {
+    const clubId = getActiveClubId();
     const { data, error } = await supabase
       .from('fishes')
       .select('fish, size, weight, timestamp, location_name')
+      .eq('club_id', clubId)
       .eq('angler', anglerName)
       .eq('taken', true)
       .gte('timestamp', `${pdfYear}-01-01`)

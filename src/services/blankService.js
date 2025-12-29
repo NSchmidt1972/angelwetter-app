@@ -1,9 +1,11 @@
 import { supabase } from '../supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 /**
  * Fügt eine Schneidersession hinzu.
  */
 async function insertBlankSession(anglerName, hours, fishingType, position) {
+  const clubId = getActiveClubId();
   const insertObj = {
     angler: anglerName ?? null,
     note: 'Schneidersession',
@@ -12,7 +14,8 @@ async function insertBlankSession(anglerName, hours, fishingType, position) {
     fishing_type: fishingType ?? null,
     timestamp: new Date().toISOString(),
     lat: position?.lat ?? null,
-    lon: position?.lon ?? null
+    lon: position?.lon ?? null,
+    club_id: clubId,
   };
 
   console.log("📤 Insert in fishes:", insertObj);

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
 import { formatDateOnly, formatDateTime, parseTimestamp, formatTimeOnly } from '@/utils/dateUtils';
 import { navItemsFor } from '@/config/navItems';
@@ -263,6 +264,7 @@ export default function AdminOverview() {
   useEffect(() => {
     async function loadData() {
       try {
+        const clubId = getActiveClubId();
         const { data: weatherData } = await supabase
           .from('weather_cache')
           .select('updated_at')
@@ -277,6 +279,7 @@ export default function AdminOverview() {
         const { data: users } = await supabase
           .from('user_activity')
           .select('user_id, last_active')
+          .eq('club_id', clubId)
           .gt(
             'last_active',
             new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -299,6 +302,7 @@ export default function AdminOverview() {
         const { data: taken } = await supabase
           .from('fishes')
           .select('angler, fish, timestamp')
+          .eq('club_id', clubId)
           .eq('taken', true)
           .order('timestamp', { ascending: false })
           .limit(100);
@@ -309,6 +313,7 @@ export default function AdminOverview() {
         const { data: fishes } = await supabase
           .from('fishes')
           .select('*')
+          .eq('club_id', clubId)
           .order('timestamp', { ascending: false })
           .not('blank', 'is', true)
           .limit(1);
@@ -319,6 +324,7 @@ export default function AdminOverview() {
         const { count } = await supabase
           .from('fishes')
           .select('*', { count: 'exact', head: true })
+          .eq('club_id', clubId)
           .not('fish', 'is', null)
           .neq('fish', '');
         setCatchCount(count);
@@ -326,6 +332,7 @@ export default function AdminOverview() {
         const { data: blanks } = await supabase
           .from('fishes')
           .select('angler, timestamp')
+          .eq('club_id', clubId)
           .eq('blank', true)
           .gt(
             'timestamp',
@@ -342,7 +349,8 @@ export default function AdminOverview() {
 
         const { data: pushSubs } = await supabase
           .from('push_subscriptions')
-          .select('user_id, angler_name, device_label, opted_in, revoked_at');
+          .select('user_id, angler_name, device_label, opted_in, revoked_at')
+          .eq('club_id', clubId);
 
         if (pushSubs) {
           const profileNameById = (allProfilesData || []).reduce((acc, profile) => {
@@ -386,6 +394,7 @@ export default function AdminOverview() {
         const { data: externals } = await supabase
           .from('fishes')
           .select('angler, fish, size, timestamp, lat, lon, location_name')
+          .eq('club_id', clubId)
           .not('lat', 'is', null)
           .not('lon', 'is', null)
           .not('blank', 'is', true)

@@ -6,6 +6,7 @@ import { supabase } from '@/supabaseClient';
 import PushInit from '@/components/PushInit';
 import AppRoutes from '@/AppRoutes';
 import { WeatherProvider } from '@/hooks/useWeatherCache';
+import { getActiveClubId } from '@/utils/clubId';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
@@ -188,12 +189,14 @@ function AppContent() {
     let disposed = false;
 
     const updateActivity = async () => {
+      const clubId = getActiveClubId();
       try {
         await supabase.from('user_activity').upsert(
           {
             user_id: user.id,
             angler_name: user.email,
             last_active: new Date().toISOString(),
+            club_id: clubId,
           },
           { onConflict: 'user_id' } // vermeidet Duplikate
         );

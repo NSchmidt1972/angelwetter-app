@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import PageContainer from '../components/PageContainer';
 import { isFerkensbruchLocation } from '@/utils/location';
 
@@ -26,9 +27,11 @@ export default function Leaderboard() {
   useEffect(() => {
     async function loadData() {
       // lade nur die Felder, die wir hier brauchen
+      const clubId = getActiveClubId();
       const { data, error } = await supabase
         .from('fishes')
         .select('fish,size,angler,timestamp,location_name,count_in_stats,under_min_size,out_of_season')
+        .eq('club_id', clubId)
         .eq('count_in_stats', true); // <— Hauptfilter
 
       if (error) {

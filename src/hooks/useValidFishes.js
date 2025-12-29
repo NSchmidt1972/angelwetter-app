@@ -1,6 +1,7 @@
 // src/hooks/useValidFishes.js
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 function useAbortableFetch() {
   const abortRef = useRef(null);
@@ -71,7 +72,9 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
       setLoadError(null);
       try {
         // WICHTIG: '*' nehmen, um 400 durch fehlende Spalten zu vermeiden
-        const query = supabase.from('fishes').select('*');
+        const clubId = getActiveClubId();
+        let query = supabase.from('fishes').select('*');
+        if (clubId) query = query.eq('club_id', clubId);
 
         const { data, error, status } = await withTimeout(query, 8000);
         if (error) {
