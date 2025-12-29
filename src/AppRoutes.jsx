@@ -38,6 +38,7 @@ const MapView       = lazy(() => import('@/pages/MapView'));
 const Regulations   = lazy(() => import('@/pages/Regulations'));
 const BoardOverview = lazy(() => import('@/pages/BoardOverview'));
 const DownloadsPage = lazy(() => import('@/pages/DownloadsPage'));
+const SuperAdmin    = safeLazy(() => import('@/pages/SuperAdmin'), 'SuperAdmin');
 
 // Optional
 const SettingsPage  = safeLazy(() => import('@/pages/SettingsPage'), 'SettingsPage');
@@ -54,10 +55,18 @@ function RequireManagement({ canAccessBoard, children }) {
   return children;
 }
 
+function RequireSuperAdmin({ isSuperAdmin, children }) {
+  if (!isSuperAdmin) {
+    return <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Nur für Superadmins</div>;
+  }
+  return children;
+}
+
 export default function AppRoutes({
   isLoggedIn,
   isAdmin,
   canAccessBoard,
+  isSuperAdmin,
   anglerName,
 }) {
   const isRecoveryLink = typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
@@ -111,6 +120,14 @@ export default function AppRoutes({
               <RequireManagement canAccessBoard={canAccessBoard}>
                 <AdminOverview isAdmin={isAdmin} canAccessBoard={canAccessBoard} />
               </RequireManagement>
+            }
+          />
+          <Route
+            path="superadmin"
+            element={
+              <RequireSuperAdmin isSuperAdmin={isSuperAdmin}>
+                <SuperAdmin />
+              </RequireSuperAdmin>
             }
           />
           <Route path="settings" element={<SettingsPage />} />

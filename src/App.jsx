@@ -243,6 +243,7 @@ function AppContent() {
   const isDeveloperAdmin = userEmail === 'nicol@schmidt-2006.de';
   const isAdmin = isDeveloperAdmin || cachedRole === 'admin';
   const canAccessBoard = isAdmin || cachedRole === 'vorstand';
+  const isSuperAdmin = isDeveloperAdmin; // aktuell nur Developer-Mail als Superadmin
 
   return (
     <>
@@ -252,6 +253,7 @@ function AppContent() {
             isLoggedIn={isLoggedIn}
             isAdmin={isAdmin}
             canAccessBoard={canAccessBoard}
+            isSuperAdmin={isSuperAdmin}
             anglerName={anglerName}
           />
         </WeatherProvider>
