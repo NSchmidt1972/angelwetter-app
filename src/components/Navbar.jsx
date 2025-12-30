@@ -119,7 +119,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
 
   const handleNavigateAdmin = () => {
     setShowMenu(false);
-    navigate("/admin");
+    navigate("/admin2");
   };
 
   const handleToggleDataFilter = () => {

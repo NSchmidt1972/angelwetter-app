@@ -5,13 +5,18 @@
 // 2) Domain-Mapping (host → club_id)
 // 3) VITE_DEFAULT_CLUB_ID aus .env
 // 4) Fallback: Null-Club
+const ASV_ROTAUGE_ID = '00000000-0000-0000-0000-000000000001';
+
 const DOMAIN_CLUB_MAP = {
-  'app.asv-rotauge.de': '00000000-0000-0000-0000-000000000001',
+  'app.asv-rotauge.de': ASV_ROTAUGE_ID,
+  'localhost': ASV_ROTAUGE_ID,
+  '127.0.0.1': ASV_ROTAUGE_ID,
+  '::1': ASV_ROTAUGE_ID,
 };
 
 const FALLBACK_CLUB_ID =
   import.meta.env.VITE_DEFAULT_CLUB_ID ||
-  '00000000-0000-0000-0000-000000000000';
+  ASV_ROTAUGE_ID;
 
 export function getActiveClubId() {
   // 1) Manuell gesetzter Club (z. B. beim Wechsel)

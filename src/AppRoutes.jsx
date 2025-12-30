@@ -2,6 +2,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy } from 'react';
 import AppLayout from '@/AppLayout';
+import AdminLayout from '@/AdminLayout';
 
 // 🔐 Sicherer Lazy-Helper
 function safeLazy(importer, FallbackName) {
@@ -32,7 +33,10 @@ const Leaderboard   = lazy(() => import('@/pages/Leaderboard'));
 const TopFishes     = lazy(() => import('@/pages/TopFishes'));
 const Forecast      = lazy(() => import('@/pages/Forecast'));
 const CrayfishForm  = lazy(() => import('@/pages/CrayfishForm'));
-const AdminOverview = lazy(() => import('@/pages/AdminOverview'));
+const AdminOverview      = lazy(() => import('@/pages/AdminOverview'));
+const AdminMembers       = lazy(() => import('@/pages/Admin'));
+const AdminMembersManage = lazy(() => import('@/pages/AdminMembersManage'));
+const AdminVereinManage  = lazy(() => import('@/pages/AdminVereinManage'));
 const Calendar      = lazy(() => import('@/pages/Calendar'));
 const MapView       = lazy(() => import('@/pages/MapView'));
 const Regulations   = lazy(() => import('@/pages/Regulations'));
@@ -80,61 +84,71 @@ export default function AppRoutes({
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {isLoggedIn ? (
-        // Eingeloggt: zentrales Layout mit Navbar
-        <Route element={<AppLayout name={anglerName} isAdmin={isAdmin} canAccessBoard={canAccessBoard} />}>
-          <Route index element={<Home />} />
+        // Eingeloggt
+        <>
+          {/* Admin-Bereich mit eigenem Layout */}
+          <Route element={<AdminLayout />}>
+            <Route path="admin" element={<AdminMembers />} />
+            <Route path="admin/members" element={<AdminMembersManage />} />
+            <Route path="admin/verein" element={<AdminVereinManage />} />
+          </Route>
 
-          <Route
-            path="new-catch"
-            element={
-              <FishCatchForm
-                anglerName={anglerName}
-              />
-            }
-          />
-          <Route
-            path="crayfish"
-            element={<CrayfishForm anglerName={anglerName} />}
-          />
-          <Route path="catches"      element={<CatchList anglerName={anglerName} />} />
-          <Route path="analysis"     element={<Analysis anglerName={anglerName} />} />
-          <Route path="leaderboard"  element={<Leaderboard />} />
-          <Route path="top-fishes"   element={<TopFishes />} />
-          <Route path="calendar"     element={<Calendar />} />
-          <Route path="map"          element={<MapView />} />
-          <Route path="forecast"     element={<Forecast />} />
-          <Route path="regeln"       element={<Regulations />} />
-          <Route path="downloads"    element={<DownloadsPage />} />
-          <Route path="fun"          element={<FunFacts />} />
-          <Route
-            path="vorstand"
-            element={
-              <RequireManagement canAccessBoard={canAccessBoard}>
-                <BoardOverview />
-              </RequireManagement>
-            }
-          />
-          <Route
-            path="admin"
-            element={
-              <RequireManagement canAccessBoard={canAccessBoard}>
-                <AdminOverview isAdmin={isAdmin} canAccessBoard={canAccessBoard} />
-              </RequireManagement>
-            }
-          />
-          <Route
-            path="superadmin"
-            element={
-              <RequireSuperAdmin isSuperAdmin={isSuperAdmin}>
-                <SuperAdmin />
-              </RequireSuperAdmin>
-            }
-          />
-          <Route path="settings" element={<SettingsPage />} />
+          {/* App-Bereich mit Standard-Navigation */}
+          <Route element={<AppLayout name={anglerName} isAdmin={isAdmin} canAccessBoard={canAccessBoard} />}>
+            <Route index element={<Home />} />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
+            <Route
+              path="new-catch"
+              element={
+                <FishCatchForm
+                  anglerName={anglerName}
+                />
+              }
+            />
+            <Route
+              path="crayfish"
+              element={<CrayfishForm anglerName={anglerName} />}
+            />
+            <Route path="catches"      element={<CatchList anglerName={anglerName} />} />
+            <Route path="analysis"     element={<Analysis anglerName={anglerName} />} />
+            <Route path="leaderboard"  element={<Leaderboard />} />
+            <Route path="top-fishes"   element={<TopFishes />} />
+            <Route path="calendar"     element={<Calendar />} />
+            <Route path="map"          element={<MapView />} />
+            <Route path="forecast"     element={<Forecast />} />
+            <Route path="regeln"       element={<Regulations />} />
+            <Route path="downloads"    element={<DownloadsPage />} />
+            <Route path="fun"          element={<FunFacts />} />
+            <Route
+              path="vorstand"
+              element={
+                <RequireManagement canAccessBoard={canAccessBoard}>
+                  <BoardOverview />
+                </RequireManagement>
+              }
+            />
+            <Route
+              path="admin2"
+              element={
+                <RequireManagement canAccessBoard={canAccessBoard}>
+                  <AdminOverview isAdmin={isAdmin} canAccessBoard={canAccessBoard} />
+                </RequireManagement>
+              }
+            />
+            <Route
+              path="superadmin"
+              element={
+                <RequireSuperAdmin isSuperAdmin={isSuperAdmin}>
+                  <SuperAdmin />
+                </RequireSuperAdmin>
+              }
+            />
+            <Route path="settings" element={<SettingsPage />} />
+
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </>
       ) : (
         // Nicht eingeloggt
         <>

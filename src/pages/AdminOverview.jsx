@@ -500,7 +500,7 @@ export default function AdminOverview() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
-      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Admin‑Übersicht</h2>
+      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Admin2‑Übersicht</h2>
 
       <Section title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
       <Section title="🎣 Gesamtanzahl Fänge" value={catchCount === null ? 'Lade...' : catchCount} />
