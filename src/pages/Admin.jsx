@@ -6,9 +6,7 @@ export default function Admin() {
   const navigate = useNavigate();
 
   const [whitelistCount, setWhitelistCount] = useState(null);
-  const [whitelistLoading, setWhitelistLoading] = useState(false);
   const [profilesCount, setProfilesCount] = useState(null);
-  const [profilesLoading, setProfilesLoading] = useState(false);
   const [fishCount, setFishCount] = useState(null);
 
   useEffect(() => {
@@ -55,10 +53,10 @@ export default function Admin() {
           </p>
           <div className="mt-4 flex flex-wrap gap-2 text-sm text-gray-700 dark:text-gray-200">
             <span className="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">
-              Mitglieder: {profilesLoading ? '…' : profilesCount}
+              Mitglieder: {profilesCount}
             </span>
             <span className="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">
-              Whitelist: {whitelistLoading ? '…' : whitelistCount}
+              Whitelist: {whitelistCount}
             </span>
           </div>
         </button>

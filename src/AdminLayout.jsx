@@ -1,14 +1,23 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
-const navLinks = [
-  { path: '/admin', label: 'Administration' },
-  { path: '/admin/members', label: 'Mitgliederverwaltung' },
-  { path: '/admin/verein', label: 'Verein & App' },
-];
-
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const path = location.pathname;
+
+  const navLinks = (() => {
+    // Administration immer anzeigen
+    const links = [{ path: '/admin', label: 'Administration' }];
+    // Mitglieder-Link sichtbar auf Hub oder Mitgliederseite
+    if (path === '/admin' || path.startsWith('/admin/members')) {
+      links.push({ path: '/admin/members', label: 'Mitgliederverwaltung' });
+    }
+    // Vereins-Link sichtbar auf Hub oder Vereinsseite
+    if (path === '/admin' || path.startsWith('/admin/verein')) {
+      links.push({ path: '/admin/verein', label: 'Verein & App' });
+    }
+    return links;
+  })();
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-50">
