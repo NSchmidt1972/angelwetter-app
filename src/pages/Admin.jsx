@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchProfiles, fetchWhitelist, fetchFishAggregates } from '@/services/boardService';
+import { getActiveClubId } from '@/utils/clubId';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -8,6 +9,7 @@ export default function Admin() {
   const [whitelistCount, setWhitelistCount] = useState(null);
   const [profilesCount, setProfilesCount] = useState(null);
   const [fishCount, setFishCount] = useState(null);
+   const [activeClubId] = useState(() => getActiveClubId());
 
   useEffect(() => {
     const load = async () => {
@@ -53,10 +55,13 @@ export default function Admin() {
           </p>
           <div className="mt-4 flex flex-wrap gap-2 text-sm text-gray-700 dark:text-gray-200">
             <span className="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">
-              Mitglieder: {profilesCount}
+              Mitglieder: {profilesCount ?? '…'}
             </span>
             <span className="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">
-              Whitelist: {whitelistCount}
+              Whitelist: {whitelistCount ?? '…'}
+            </span>
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs dark:bg-gray-800">
+              Club: {activeClubId || '–'}
             </span>
           </div>
         </button>

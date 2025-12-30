@@ -10,6 +10,7 @@ import {
   removeWhitelistEmail,
 } from '@/services/boardService';
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -70,6 +71,7 @@ export default function AdminMembersManage() {
   const [savingMember, setSavingMember] = useState(false);
   const [newMemberMessage, setNewMemberMessage] = useState('');
   const [newMemberError, setNewMemberError] = useState('');
+  const [activeClubId] = useState(() => getActiveClubId());
 
   useEffect(() => {
     refreshProfiles();
@@ -275,6 +277,7 @@ export default function AdminMembersManage() {
         name,
         email: email || null,
         role: normalizeRoleValue(newMember.role),
+        club_id: getActiveClubId(),
       };
       const { error: insertError } = await supabase.from('profiles').insert([payload]);
       if (insertError) throw insertError;
@@ -298,6 +301,9 @@ export default function AdminMembersManage() {
             <p className="text-sm text-gray-600 dark:text-gray-300">
               Legt sofort einen neuen Datensatz in der Tabelle „profiles“ an. Felder sind optional, außer dem Namen.
             </p>
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+              Aktiver Club: {activeClubId || '–'}
+            </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1 md:col-span-2">

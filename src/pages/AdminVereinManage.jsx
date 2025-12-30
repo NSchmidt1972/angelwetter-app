@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { getActiveClubId } from '@/utils/clubId';
 
 const themes = [
   { key: 'light', label: 'Hell', desc: 'Helle Oberfläche mit Akzentfarbe' },
@@ -20,6 +21,7 @@ const modules = [
 export default function AdminVereinManage() {
   const [activeTheme, setActiveTheme] = useState('lake');
   const [activeModules, setActiveModules] = useState(new Set(['forecast', 'map', 'leaderboard', 'downloads', 'regulations']));
+  const activeClubId = useMemo(() => getActiveClubId(), []);
 
   const toggleModule = (key) => {
     setActiveModules((prev) => {
@@ -38,6 +40,9 @@ export default function AdminVereinManage() {
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
           Vereinstitel, Logo und Theme festlegen. Module und Funktionen aktivieren/deaktivieren. (Platzhalter – ohne Speicherung)
         </p>
+        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+          Aktiver Club: {activeClubId || '–'}
+        </div>
       </header>
 
       <section className="grid gap-6 lg:grid-cols-[2fr,1fr]">

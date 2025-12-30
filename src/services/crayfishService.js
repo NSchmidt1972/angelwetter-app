@@ -1,5 +1,6 @@
 // src/services/crayfishService.js
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 export const CRAYFISH_SPECIES = [
   'Roter amerikanischer Flusskrebs',
@@ -26,6 +27,7 @@ export async function saveCrayfishCatch({ angler, species, count, timestamp, not
     count: countNum,
     catch_timestamp: ts.toISOString(),
     note: note || null,
+    club_id: getActiveClubId(),
   };
 
   const { data, error } = await supabase.from('crayfish_catches').insert(payload).select().single();

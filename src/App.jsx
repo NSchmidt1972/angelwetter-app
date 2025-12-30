@@ -122,10 +122,12 @@ function AppContent() {
 
     const loadProfile = async () => {
       try {
+        const clubId = getActiveClubId();
         const { data, error } = await supabase
           .from('profiles')
           .select('name, role')
           .eq('id', user.id)
+          .eq('club_id', clubId)
           .single();
 
         if (!isActive) return;
@@ -151,7 +153,8 @@ function AppContent() {
                 const { count } = await supabase
                   .from('profiles')
                   .select('id', { count: 'exact', head: true })
-                  .ilike('name', `${first} %`);
+                  .ilike('name', `${first} %`)
+                  .eq('club_id', clubId);
 
                 if (!isActive) return;
                 const shortName =

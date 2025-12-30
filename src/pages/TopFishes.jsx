@@ -66,7 +66,8 @@ export default function TopFishes() {
 
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('name');
+        .select('name')
+        .eq('club_id', clubId);
 
       if (profileError) {
         console.error('Fehler beim Laden der Profile:', profileError);

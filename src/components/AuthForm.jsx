@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 export default function AuthForm() {
   const [mode, setMode] = useState('login'); // "login" oder "register"
@@ -82,9 +83,11 @@ export default function AuthForm() {
 
     const userId = signUpResponse?.user?.id;
     if (userId) {
+      const clubId = getActiveClubId();
       const { error: profileError } = await supabase.from('profiles').insert({
         id: userId,
         name: name.trim(),
+        club_id: clubId,
       });
 
       if (profileError) {

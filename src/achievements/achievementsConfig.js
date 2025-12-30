@@ -1,11 +1,20 @@
 // src/achievements/achievementsConfig.js
 
+import { getActiveClubId } from '@/utils/clubId';
+
 /**
  * Robuste Zählfunktion über Supabase-Header-Count.
  * filters: Array von [key, op, value] mit op ∈ {eq, gte, lte, lt, gt}
+ * Hinweis: Fügt automatisch club_id=activeClubId hinzu, falls verfügbar.
  */
 export async function getCount(supabase, table, filters = []) {
   let query = supabase.from(table).select("id", { count: "exact", head: true });
+
+  const clubId = getActiveClubId();
+  if (clubId) {
+    query = query.eq('club_id', clubId);
+  }
+
   for (const [key, op, val] of filters) {
     if (op === "eq")  query = query.eq(key, val);
     if (op === "gte") query = query.gte(key, val);

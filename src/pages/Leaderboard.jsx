@@ -49,7 +49,8 @@ export default function Leaderboard() {
     async function prepareFormattedNames() {
       const { data: profileData, error } = await supabase
         .from('profiles')
-        .select('name');
+        .select('name')
+        .eq('club_id', getActiveClubId());
 
       if (error) {
         console.error('Fehler beim Laden der Profile:', error);
