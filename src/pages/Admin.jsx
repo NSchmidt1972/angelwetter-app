@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { fetchProfiles, fetchWhitelist, fetchFishAggregates } from '@/services/boardService';
 import { getActiveClubId } from '@/utils/clubId';
 
 export default function Admin() {
   const navigate = useNavigate();
+  const { clubSlug } = useParams();
+  const clubBasePath = clubSlug ? `/${clubSlug}` : '';
 
   const [whitelistCount, setWhitelistCount] = useState(null);
   const [profilesCount, setProfilesCount] = useState(null);
@@ -45,7 +47,7 @@ export default function Admin() {
       <section className="grid gap-6 md:grid-cols-2">
         <button
           type="button"
-          onClick={() => navigate('/admin/members')}
+          onClick={() => navigate(`${clubBasePath}/admin/members`)}
           className="rounded-xl bg-white p-6 text-left shadow-sm shadow-gray-200 transition hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-900 dark:shadow-black/20"
         >
           <p className="text-xs uppercase tracking-[0.2em] text-gray-500">MITGLIEDERVERWALTUNG</p>
@@ -68,7 +70,7 @@ export default function Admin() {
 
         <button
           type="button"
-          onClick={() => navigate('/admin/verein')}
+          onClick={() => navigate(`${clubBasePath}/admin/verein`)}
           className="rounded-xl bg-white p-6 text-left shadow-sm shadow-gray-200 transition hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-900 dark:shadow-black/20"
         >
           <p className="text-xs uppercase tracking-[0.2em] text-gray-500">VEREINSADMINISTRATION</p>

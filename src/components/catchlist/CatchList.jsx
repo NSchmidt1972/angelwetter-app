@@ -1,6 +1,6 @@
 // src/components/catchlist/CatchList.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useCatches } from '../../hooks/useCatches';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 
@@ -40,6 +40,8 @@ export default function CatchList({ anglerName }) {
   const reactionMenuRef = useRef(null);
 
   const navigate = useNavigate();
+  const { clubSlug } = useParams();
+  const clubBasePath = clubSlug ? `/${clubSlug}` : '';
 
   useInfiniteScroll({ ref: sentinelRef, hasMore, loading, onHit: loadNext });
 
@@ -304,7 +306,7 @@ export default function CatchList({ anglerName }) {
                     {topInfo && (
                       <button
                         type="button"
-                        onClick={() => navigate(`/top-fishes?fish=${encodeURIComponent(entry.fish || '')}`)}
+                        onClick={() => navigate(`${clubBasePath}/top-fishes?fish=${encodeURIComponent(entry.fish || '')}`)}
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold dark:bg-amber-900/60 dark:text-amber-200 whitespace-nowrap transition hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-400"
                         title={`Top 10 für ${entry.fish}`}
                       >

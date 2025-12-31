@@ -1,6 +1,6 @@
 // src/components/Navbar.jsx
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import { supabase } from "@/supabaseClient";
 
@@ -18,6 +18,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { clubSlug } = useParams();
 
   // ⛔️ WICHTIG: Hooks IMMER zuerst – ohne Bedingungen/Returns
   const { dark, toggle } = useDarkMode();
@@ -98,19 +99,35 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
 
   const shouldShowUpdateBanner = updateReady && !updating;
 
+  const prefixWithClub = (path) => {
+    if (!clubSlug) return path;
+    if (!path || path === "/") return `/${clubSlug}`;
+    return `/${clubSlug}${path.startsWith("/") ? path : `/${path}`}`;
+  };
+
 
   // ✅ EARLY RETURN ERST NACH ALLEN HOOKS
   if (!user) return null;
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'global' });
     localStorage.removeItem("anglerName");
     localStorage.removeItem("shortAnglerName");
+    localStorage.removeItem("angelwetter_profile_cache_v2");
+    localStorage.removeItem("activeClubId");
     setUser(null);
-    navigate("/");
+    navigate(prefixWithClub("/auth"));
   };
 
-  const navItems = navItemsFor({ isAdmin: !!isAdmin, canAccessBoard: !!canAccessBoard, anglerName: name });
+  const navItems = navItemsFor({ isAdmin: !!isAdmin, canAccessBoard: !!canAccessBoard, anglerName: name }).map((item) => (
+    item.children
+      ? {
+          ...item,
+          path: item.path ? prefixWithClub(item.path) : undefined,
+          children: item.children.map((child) => ({ ...child, path: prefixWithClub(child.path) })),
+        }
+      : { ...item, path: prefixWithClub(item.path) }
+  ));
   const currentPath = location.pathname;
 
   const handleToggleDropdown = (next) => {
@@ -119,7 +136,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
 
   const handleNavigateAdmin = () => {
     setShowMenu(false);
-    navigate("/admin2");
+    navigate(prefixWithClub("/admin2"));
   };
 
   const handleToggleDataFilter = () => {
@@ -169,6 +186,11 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
                 ☰
               </button>
             )}
+
+            {/* Club-Label */}
+            <span className="px-3 py-1 rounded-full text-sm font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-100 border border-blue-200/60 dark:border-blue-800/60">
+              Verein: {clubSlug || '–'}
+            </span>
 
             {/* Desktop-Navigation */}
             {!showHamburger && (

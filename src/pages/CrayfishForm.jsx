@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import { CRAYFISH_SPECIES, saveCrayfishCatch } from '@/services/crayfishService';
 
@@ -12,6 +12,8 @@ const CRAYFISH_IMAGES = {
 
 export default function CrayfishForm({ anglerName }) {
   const navigate = useNavigate();
+  const { clubSlug } = useParams();
+  const clubBasePath = clubSlug ? `/${clubSlug}` : '/';
   const [species, setSpecies] = useState('');
   const [count, setCount] = useState(1);
   const [note, setNote] = useState('');
@@ -65,7 +67,7 @@ export default function CrayfishForm({ anglerName }) {
         note,
       });
       alert(`Krebsfang gespeichert: ${species || 'Unbekannte Art'} (${count}x)`);
-      navigate('/');
+      navigate(clubBasePath);
       setSpecies('');
       setCount(1);
       setNote('');

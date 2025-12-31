@@ -1,12 +1,31 @@
-# React + Vite
+# app.petriundcloud.de
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Angelwetter ist eine React/Vite PWA für Fangmeldungen, Auswertungen und Push-Benachrichtigungen. Supabase liefert Auth, Datenbank und Edge Functions; OneSignal versorgt die Pushes.
 
-Currently, two official plugins are available:
+## Voraussetzungen
+- Node.js 20+ und npm
+- Supabase-Projekt mit passendem Schema (siehe Ordner `sql/` und `supabase/`)
+- `.env.local` mit deinen Schlüsseln (nie committen)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Lokale Entwicklung
+1. `cp .env.example .env.local` und Variablen ausfüllen.
+2. `npm install`
+3. `npm run dev` startet Vite auf Port 5173 (per `--host` im Netzwerk erreichbar).
+4. `npm run lint` für einen schnellen ESLint-Check.
+5. `npm run build` erzeugt das Production-Bundle unter `dist/`.
 
-## Expanding the ESLint configuration
+## Wichtige Umgebungsvariablen
+- `VITE_SUPABASE_URL` – Basis-URL deiner Supabase-Instanz (ohne Slash am Ende).
+- `VITE_SUPABASE_ANON_KEY` – öffentlicher Anon-Key für das Frontend.
+- `VITE_DEFAULT_CLUB_ID` – optionaler Fallback-Verein, wenn kein Mapping greift.
+- `VITE_AI_BASE_URL` – optionaler AI-Endpunkt (Default: `https://ai.asv-rotauge.de`).
+- `VITE_APP_VERSION`, `VITE_BUILD_DATE`, `VITE_GIT_COMMIT` – optional, falls du Build-Metadaten selbst setzen willst.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Deployment & Releases
+- `./deploy-github.sh` committet und pusht den aktuellen Stand (Commit-Message enthält Datum/Uhrzeit).
+- `./release.sh <version>` taggt, pusht und legt ein GitHub-Release an. Erfordert `GITHUB_TOKEN` und `jq`.
+- Service Worker & PWA kommen aus `vite-plugin-pwa`; Supabase-Requests werden über die in `.env.local` hinterlegte Domain gecacht.
+
+## Hinweise
+- Die App nutzt OneSignal (Web SDK v16) für Pushes und Supabase Edge Functions für Wetter-Zusammenfassungen. Achte darauf, die jeweiligen Keys/IDs nur per `.env.local` zu setzen.
+- Produktiv-Builds erhalten Build-Infos (Commit, Datum, Version) automatisch über `vite.config.js`.

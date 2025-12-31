@@ -1,21 +1,19 @@
 // src/supabaseClient.js
 import { createClient } from '@supabase/supabase-js';
 
-const envUrl = import.meta.env?.VITE_SUPABASE_URL;
-const envKey = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+const envUrl = import.meta.env?.VITE_SUPABASE_URL?.trim();
+const envKey = import.meta.env?.VITE_SUPABASE_ANON_KEY?.trim();
 
 if (!envUrl || !envKey) {
-  console.warn(
-    '[supabaseClient] VITE_SUPABASE_URL oder VITE_SUPABASE_ANON_KEY fehlen. ' +
-    'Bitte in .env(.local) setzen.'
+  throw new Error(
+    '[supabaseClient] VITE_SUPABASE_URL und VITE_SUPABASE_ANON_KEY müssen gesetzt sein. ' +
+    'Lege eine .env.local an (siehe .env.example).'
   );
 }
 
-const supabaseUrl = envUrl || 'https://kirevrwmmthqgceprbhl.supabase.co';
-const supabaseAnonKey = envKey ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpcmV2cndtbXRocWdjZXByYmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc1OTM2NzgsImV4cCI6MjA2MzE2OTY3OH0.93U4CZz2QdKTZV5k0NsAO7pJA-xSXumzoeKP2NL-D9w';
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const SUPABASE_URL = envUrl;
+export const SUPABASE_ANON_KEY = envKey;
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Optional: Supabase-Client fürs Debugging im Browser verfügbar machen
 if (typeof window !== 'undefined') {

@@ -1,20 +1,27 @@
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { clubSlug } = useParams();
   const path = location.pathname;
+
+  const prefixWithClub = (target) => {
+    if (!clubSlug) return target;
+    if (!target || target === '/') return `/${clubSlug}`;
+    return `/${clubSlug}${target.startsWith('/') ? target : `/${target}`}`;
+  };
 
   const navLinks = (() => {
     // Administration immer anzeigen
-    const links = [{ path: '/admin', label: 'Administration' }];
+    const links = [{ path: prefixWithClub('/admin'), label: 'Administration' }];
     // Mitglieder-Link sichtbar auf Hub oder Mitgliederseite
-    if (path === '/admin' || path.startsWith('/admin/members')) {
-      links.push({ path: '/admin/members', label: 'Mitgliederverwaltung' });
+    if (path === prefixWithClub('/admin') || path.startsWith(prefixWithClub('/admin/members'))) {
+      links.push({ path: prefixWithClub('/admin/members'), label: 'Mitgliederverwaltung' });
     }
     // Vereins-Link sichtbar auf Hub oder Vereinsseite
-    if (path === '/admin' || path.startsWith('/admin/verein')) {
-      links.push({ path: '/admin/verein', label: 'Verein & App' });
+    if (path === prefixWithClub('/admin') || path.startsWith(prefixWithClub('/admin/verein'))) {
+      links.push({ path: prefixWithClub('/admin/verein'), label: 'Verein & App' });
     }
     return links;
   })();
@@ -25,7 +32,7 @@ export default function AdminLayout() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate(prefixWithClub('/'))}
             className="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
           >
             ← Zur App

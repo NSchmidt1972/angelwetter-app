@@ -13,6 +13,15 @@ import { NetworkFirst, StaleWhileRevalidate, CacheFirst } from 'workbox-strategi
 import { ExpirationPlugin } from 'workbox-expiration';
 import { enable } from 'workbox-navigation-preload';
 
+const SUPABASE_ORIGIN = (() => {
+  try {
+    const url = import.meta.env?.VITE_SUPABASE_URL;
+    return url ? new URL(url).origin : null;
+  } catch {
+    return null;
+  }
+})();
+
 // Neuer SW übernimmt sofort
 self.skipWaiting();
 clientsClaim();
@@ -24,10 +33,18 @@ self.addEventListener('activate', (evt) => { evt.waitUntil(enable()); });
 // Build-Assets
 precacheAndRoute(self.__WB_MANIFEST || []);
 
-// HTML frisch, offline-fähig
+// HTML frisch, offline-fähig + SPA-Fallback
+const documentStrategy = new NetworkFirst({ cacheName: 'app-documents', networkTimeoutSeconds: 5 });
 registerRoute(
-  ({ request }) => request.destination === 'document',
-  new NetworkFirst({ cacheName: 'app-documents', networkTimeoutSeconds: 5 })
+  ({ request }) => request.mode === 'navigate',
+  async (options) => {
+    try {
+      const response = await documentStrategy.handle(options);
+      if (response && response.status !== 404) return response;
+    } catch { /* offline fallback below */ }
+
+    return caches.match('/index.html');
+  }
 );
 
 // JS/CSS schnell + Hintergrund-Update
@@ -41,12 +58,13 @@ registerRoute(
 );
 
 // Supabase-API (GET)
-registerRoute(
-  ({ url, request }) =>
-    request.method === 'GET' &&
-    /^https:\/\/kirevrwmmthqgceprbhl\.supabase\.co\/.*/i.test(url.href),
-  new NetworkFirst({ cacheName: 'supabase-data', networkTimeoutSeconds: 5 })
-);
+if (SUPABASE_ORIGIN) {
+  registerRoute(
+    ({ url, request }) =>
+      request.method === 'GET' && url.origin === SUPABASE_ORIGIN,
+    new NetworkFirst({ cacheName: 'supabase-data', networkTimeoutSeconds: 5 })
+  );
+}
 
 // OWM-Icons
 registerRoute(

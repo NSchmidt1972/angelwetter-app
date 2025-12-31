@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
+import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
 
 export default function AuthForm() {
   const [mode, setMode] = useState('login'); // "login" oder "register"
@@ -12,6 +12,9 @@ export default function AuthForm() {
   const [error, setError] = useState('');
 
   const navigate = useNavigate();
+  const { clubSlug } = useParams();
+
+  const clubBasePath = clubSlug ? `/${clubSlug}` : '/';
 
   const resetForm = () => {
     setEmail('');
@@ -27,7 +30,7 @@ export default function AuthForm() {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: sessionData, error } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
       password,
     });
@@ -41,7 +44,42 @@ export default function AuthForm() {
         setError(error.message);
       }
     } else {
-      navigate('/');
+      const userId = sessionData?.user?.id;
+      const activeSlug = clubSlug || null;
+      let resolvedClubId = getActiveClubId();
+
+      if (activeSlug) {
+        const { data: clubRow, error: clubErr } = await supabase
+          .from('clubs')
+          .select('id')
+          .eq('slug', activeSlug)
+          .maybeSingle();
+
+        if (clubErr || !clubRow?.id) {
+          setError('Verein konnte nicht ermittelt werden.');
+          await supabase.auth.signOut();
+          setLoading(false);
+          return;
+        }
+        resolvedClubId = clubRow.id;
+        setActiveClubId(resolvedClubId);
+      }
+
+      const { data: profileRow, error: profileErr } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .eq('club_id', resolvedClubId)
+        .maybeSingle();
+
+      if (profileErr || !profileRow) {
+        setError('Du bist für diesen Verein nicht freigeschaltet.');
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
+      }
+
+      navigate(clubBasePath);
     }
 
     setLoading(false);

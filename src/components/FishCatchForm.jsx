@@ -1,6 +1,6 @@
 // src/components/FishCatchForm.jsx
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 
 // Utils
 import { validateCatchForm } from "@/utils/validation";
@@ -63,6 +63,8 @@ export default function FishCatchForm({
 
   // Misc
   const navigate = useNavigate();
+  const { clubSlug } = useParams();
+  const clubBasePath = clubSlug ? `/${clubSlug}` : '';
   const { position } = useGeoPosition();
   const { updateWeather } = useWeatherCache();
 
@@ -180,7 +182,7 @@ export default function FishCatchForm({
         /* ignore */
       }
 
-      navigate("/catches");
+      navigate(`${clubBasePath}/catches`);
     } catch (err) {
       console.error(err);
       alert(err.message || "Fehler beim Speichern des Fangs.");
@@ -198,7 +200,7 @@ export default function FishCatchForm({
     setLoadingBlank(true);
     try {
       await saveBlankDay(anglerName, hours, fishingType, position);
-      navigate("/");
+      navigate(`${clubBasePath || '/'}`);
     } catch (err) {
       console.error(err);
       alert(err.message || "Fehler beim Speichern.");

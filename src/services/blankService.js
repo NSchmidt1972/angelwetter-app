@@ -1,5 +1,7 @@
-import { supabase } from '../supabaseClient';
+import { SUPABASE_URL, supabase } from '../supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
+
+const FUNCTIONS_BASE = `${SUPABASE_URL}/functions/v1`;
 
 /**
  * Fügt eine Schneidersession hinzu.
@@ -33,7 +35,7 @@ async function insertBlankSession(anglerName, hours, fishingType, position) {
  */
 async function sendBlankWeatherSummary(anglerName, hours, accessToken) {
   const response = await fetch(
-    'https://kirevrwmmthqgceprbhl.supabase.co/functions/v1/blank_weather_summary',
+    `${FUNCTIONS_BASE}/blank_weather_summary`,
     {
       method: 'POST',
       headers: {

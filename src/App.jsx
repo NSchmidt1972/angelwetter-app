@@ -6,7 +6,7 @@ import { supabase } from '@/supabaseClient';
 import PushInit from '@/components/PushInit';
 import AppRoutes from '@/AppRoutes';
 import { WeatherProvider } from '@/hooks/useWeatherCache';
-import { getActiveClubId } from '@/utils/clubId';
+import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
@@ -66,7 +66,7 @@ function scheduleLater(callback, delay = 400) {
 }
 
 function AppContent() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, profile, profileLoading } = useAuth();
   const [anglerName, setAnglerName] = useState(() => readProfileCache()?.name ?? null);
   const [userEmail, setUserEmail] = useState(null);
   const [profileRole, setProfileRole] = useState(() => readProfileCache()?.role ?? null);
@@ -108,6 +108,25 @@ function AppContent() {
     }
 
     setUserEmail(user.email);
+
+    // Profil aus globalem Context bevorzugen
+    const resolvedName = profile?.name || profile?.angler_name || null;
+    if (!profileLoading && resolvedName) {
+      const fullName = (resolvedName || '').trim();
+      setAnglerName(fullName);
+      const rawRole = profile?.role ? String(profile.role).trim() : null;
+      setProfileRole(rawRole || null);
+
+      const [first, last] = fullName.split(' ');
+      const fallbackShort = first || 'Profil';
+      writeProfileCache({ userId: user.id, name: fullName, shortName: fallbackShort, role: rawRole || null });
+
+      setNameLoading(false);
+      return () => {
+        isActive = false;
+        cancelShortNameCheck?.();
+      };
+    }
 
     const cached = readProfileCache();
     const hasValidCache = cached && cached.userId === user.id && cached.name;
@@ -184,7 +203,7 @@ function AppContent() {
       isActive = false;
       cancelShortNameCheck?.();
     };
-  }, [user]);
+  }, [user, profile, profileLoading]);
 
   // Aktivität pingen
   useEffect(() => {
@@ -218,6 +237,13 @@ function AppContent() {
       clearInterval(interval);
     };
   }, [user]);
+
+  // Club aus Profil in den aktiven Kontext übernehmen
+  useEffect(() => {
+    if (profile?.club_id) {
+      setActiveClubId(profile.club_id);
+    }
+  }, [profile]);
 
   if (authLoading || nameLoading || user === undefined || showSplash) {
     return (

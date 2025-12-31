@@ -47,7 +47,7 @@ git push origin main
 git push origin "v$VERSION"
 
 # 📦 Release via GitHub-API erstellen
-REPO="NSchmidt1972/angelwetter-app"
+REPO="NSchmidt1972/app.petriundcloud.de"
 TAG="v$VERSION"
 RELEASE_DATA=$(jq -n \
   --arg tag "$TAG" \
