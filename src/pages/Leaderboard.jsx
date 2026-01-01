@@ -4,6 +4,8 @@ import { getActiveClubId } from '@/utils/clubId';
 import PageContainer from '../components/PageContainer';
 import { isFerkensbruchLocation } from '@/utils/location';
 
+const PRESET_YEARS = [2025, 2026];
+
 export default function Leaderboard() {
   const [fishes, setFishes] = useState([]);
   const [formattedNamesMap, setFormattedNamesMap] = useState({});
@@ -109,6 +111,7 @@ export default function Leaderboard() {
 
   const availableYears = useMemo(() => {
     const years = new Set();
+    PRESET_YEARS.forEach((y) => years.add(y));
     years.add(currentYear);
     eligibleFishes.forEach((f) => {
       const ts = f.timestamp ? new Date(f.timestamp) : null;
@@ -120,14 +123,10 @@ export default function Leaderboard() {
 
   useEffect(() => {
     if (availableYears.length === 0) return;
-    if (selectedYear == null) {
-      setSelectedYear(currentYear);
-      return;
-    }
     if (selectedYear !== 'all' && !availableYears.includes(selectedYear)) {
-      setSelectedYear(currentYear);
+      setSelectedYear('all');
     }
-  }, [availableYears, selectedYear, currentYear]);
+  }, [availableYears, selectedYear]);
 
   const filteredFishes = useMemo(() => {
     if (selectedYear === 'all' || !Number.isFinite(selectedYear)) return eligibleFishes;
@@ -167,16 +166,6 @@ export default function Leaderboard() {
     .sort((a, b) => b.totalPoints - a.totalPoints);
 
   const wertungsCount = filteredFishes.length;
-
-  if (filteredFishes.length === 0) {
-    return (
-      <PageContainer>
-        <p className="text-center text-gray-500 dark:text-gray-400 mt-6">
-          Keine Fänge zum Anzeigen.
-        </p>
-      </PageContainer>
-    );
-  }
 
   return (
     <PageContainer>
@@ -226,7 +215,7 @@ export default function Leaderboard() {
                 }`}
                 aria-pressed={selectedYear === year}
               >
-                {isAll ? 'Alle Jahre' : year}
+                {isAll ? 'Alle' : year}
               </button>
             );
           })}
@@ -234,59 +223,65 @@ export default function Leaderboard() {
       )}
 
       <div className="space-y-6 max-w-3xl mx-auto">
-        {ranking.map((a, i) => (
-          <div
-            key={i}
-            className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
-          >
-            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">
-              #{i + 1} {formattedNamesMap[a.name] || a.name}
-            </h3>
+        {ranking.length === 0 ? (
+          <p className="text-center text-gray-500 dark:text-gray-400 mt-6">
+            Keine Fänge zum Anzeigen.
+          </p>
+        ) : (
+          ranking.map((a, i) => (
+            <div
+              key={i}
+              className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
+            >
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">
+                #{i + 1} {formattedNamesMap[a.name] || a.name}
+              </h3>
 
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt:{' '}
-              {(a.sizeSum / a.total).toFixed(1)} cm
-            </p>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                🎣 {a.total} {a.total === 1 ? 'Fang' : 'Fänge'} • 📏 Durchschnitt:{' '}
+                {(a.sizeSum / a.total).toFixed(1)} cm
+              </p>
 
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              🏆 Punkte:{' '}
-              <span className="font-mono font-semibold text-green-700 dark:text-green-300">
-                {a.totalPoints.toFixed(0)} Punkte
-              </span>
-            </p>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+                🏆 Punkte:{' '}
+                <span className="font-mono font-semibold text-green-700 dark:text-green-300">
+                  {a.totalPoints.toFixed(0)} Punkte
+                </span>
+              </p>
 
-            <table className="w-full text-sm text-left font-mono text-gray-700 dark:text-gray-300">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-1 font-sans">Fischart</th>
-                  <th className="text-right py-1">Ø Größe</th>
-                  <th className="text-right pr-2 py-1">Punkte</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(a.byFish)
-                  .sort(([, pA], [, pB]) => pB - pA)
-                  .map(([f, p]) => {
-                    const sizeData = a.sizesByFish?.[f];
-                    const avg =
-                      sizeData && sizeData.count > 0
-                        ? (sizeData.sum / sizeData.count).toFixed(1)
-                        : '-';
-                    return (
-                      <tr
-                        key={f}
-                        className="border-b border-gray-100 dark:border-gray-700"
-                      >
-                        <td className="font-sans py-1">{f}</td>
-                        <td className="text-right py-1">{avg} cm</td>
-                        <td className="text-right pr-2 py-1">{p.toFixed(0)} Pkt.</td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        ))}
+              <table className="w-full text-sm text-left font-mono text-gray-700 dark:text-gray-300">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-1 font-sans">Fischart</th>
+                    <th className="text-right py-1">Ø Größe</th>
+                    <th className="text-right pr-2 py-1">Punkte</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(a.byFish)
+                    .sort(([, pA], [, pB]) => pB - pA)
+                    .map(([f, p]) => {
+                      const sizeData = a.sizesByFish?.[f];
+                      const avg =
+                        sizeData && sizeData.count > 0
+                          ? (sizeData.sum / sizeData.count).toFixed(1)
+                          : '-';
+                      return (
+                        <tr
+                          key={f}
+                          className="border-b border-gray-100 dark:border-gray-700"
+                        >
+                          <td className="font-sans py-1">{f}</td>
+                          <td className="text-right py-1">{avg} cm</td>
+                          <td className="text-right pr-2 py-1">{p.toFixed(0)} Pkt.</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          ))
+        )}
       </div>
     </PageContainer>
   );
