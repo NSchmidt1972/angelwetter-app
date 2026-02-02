@@ -71,13 +71,17 @@ export async function fetchFishAggregates() {
 export async function updateProfileRole(profileId, role) {
   const clubId = getActiveClubId();
   const normalizedRole = role ? role.trim() : null;
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({ role: normalizedRole || null })
     .eq('id', profileId)
-    .eq('club_id', clubId);
+    .eq('club_id', clubId)
+    .select('id');
 
   if (error) throw new Error(error.message || 'Rolle konnte nicht aktualisiert werden.');
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error('Rolle konnte nicht gespeichert werden (keine Berechtigung oder Datensatz nicht gefunden).');
+  }
   return true;
 }
 
@@ -85,13 +89,17 @@ export async function deleteProfile(profileId) {
   if (!profileId) throw new Error('Ungültige Profil-ID.');
   const clubId = getActiveClubId();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .delete()
     .eq('id', profileId)
-    .eq('club_id', clubId);
+    .eq('club_id', clubId)
+    .select('id');
 
   if (error) throw new Error(error.message || 'Mitglied konnte nicht gelöscht werden.');
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error('Mitglied konnte nicht gelöscht werden (keine Berechtigung oder Datensatz nicht gefunden).');
+  }
   return true;
 }
 

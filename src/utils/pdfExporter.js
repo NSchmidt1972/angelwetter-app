@@ -61,9 +61,15 @@ function sanitizePdfText(value) {
   return Array.from(asString).map((char) => sanitizeChar(char)).join('');
 }
 
-export async function createCatchPDF(anglerName, data, reportYear = new Date().getFullYear()) {
+export async function createCatchPDF(
+  anglerName,
+  data,
+  reportYear = new Date().getFullYear(),
+  options = {}
+) {
+  const { allowEmpty = false } = options;
 
-  if (!data || data.length === 0) {
+  if (!allowEmpty && (!data || data.length === 0)) {
     throw new Error('Keine entnommenen Fische gefunden.');
   }
 

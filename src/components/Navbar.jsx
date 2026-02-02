@@ -187,11 +187,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
               </button>
             )}
 
-            {/* Club-Label */}
-            <span className="px-3 py-1 rounded-full text-sm font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-100 border border-blue-200/60 dark:border-blue-800/60">
-              Verein: {clubSlug || '–'}
-            </span>
-
             {/* Desktop-Navigation */}
             {!showHamburger && (
               <DesktopNav

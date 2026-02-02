@@ -80,12 +80,16 @@ export default function DownloadsPage() {
 
     const ferkensbruchOnly = (data || []).filter((entry) => isFerkensbruchLocation(entry?.location_name));
     if (ferkensbruchOnly.length === 0) {
-      alert('Keine Entnahmen am Ferkensbruch gefunden.');
-      return;
+      const shouldDownloadEmpty = window.confirm(
+        'Du hast keine Fische entnommen. Willst du die PDF dennoch downloaden?'
+      );
+      if (!shouldDownloadEmpty) return;
     }
 
     try {
-      const pdfBytes = await createCatchPDF(anglerName, ferkensbruchOnly, pdfYear);
+      const pdfBytes = await createCatchPDF(anglerName, ferkensbruchOnly, pdfYear, {
+        allowEmpty: true,
+      });
       downloadFile(pdfBytes, `entnahmeliste_${pdfYear}.pdf`, 'application/pdf');
     } catch (err) {
       alert(err.message);

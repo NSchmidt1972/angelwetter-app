@@ -12,6 +12,18 @@ export default function WhitelistSection({
   onRemoveEmail,
   formatDate,
 }) {
+  const whitelistEmails = Array.isArray(whitelist)
+    ? whitelist.map((entry) => String(entry?.email || '').trim()).filter(Boolean)
+    : [];
+  const bccList = whitelistEmails.join(',');
+  const mailtoHref = bccList ? `mailto:?bcc=${encodeURIComponent(bccList)}` : 'mailto:';
+
+  const handleEmailAll = () => {
+    if (!bccList) return;
+    if (typeof window === 'undefined') return;
+    window.location.href = mailtoHref;
+  };
+
   return (
     <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -21,18 +33,32 @@ export default function WhitelistSection({
             Nur E-Mail-Adressen auf der Whitelist dürfen neue Accounts erstellen.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onToggleWhitelist}
-          aria-expanded={showWhitelist}
-          className={`rounded px-4 py-2 text-sm font-semibold transition ${
-            showWhitelist
-              ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          {showWhitelist ? 'Liste verbergen' : 'Liste anzeigen'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleEmailAll}
+            disabled={!bccList}
+            className={`rounded px-4 py-2 text-sm font-semibold transition ${
+              bccList
+                ? 'border border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-200 dark:hover:bg-emerald-900/30'
+                : 'cursor-not-allowed border border-emerald-200 text-emerald-300 dark:border-emerald-800/40 dark:text-emerald-400/60'
+            }`}
+          >
+            E-Mail an alle
+          </button>
+          <button
+            type="button"
+            onClick={onToggleWhitelist}
+            aria-expanded={showWhitelist}
+            className={`rounded px-4 py-2 text-sm font-semibold transition ${
+              showWhitelist
+                ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {showWhitelist ? 'Liste verbergen' : 'Liste anzeigen'}
+          </button>
+        </div>
       </div>
 
       {showWhitelist && (

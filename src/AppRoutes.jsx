@@ -141,7 +141,7 @@ export default function AppRoutes({
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/asv-test" replace />} />
+      <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
 
       {/* Öffentliche Routen */}
       <Route path="/update-password" element={<UpdatePassword />} />

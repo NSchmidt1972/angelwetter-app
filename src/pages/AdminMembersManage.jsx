@@ -56,7 +56,7 @@ export default function AdminMembersManage() {
   const [whitelistMessage, setWhitelistMessage] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [addingEmail, setAddingEmail] = useState(false);
-  const [showWhitelist, setShowWhitelist] = useState(true);
+  const [showWhitelist, setShowWhitelist] = useState(false);
 
   // Mitglieder
   const [profiles, setProfiles] = useState([]);
@@ -65,7 +65,7 @@ export default function AdminMembersManage() {
   const [roleMessage, setRoleMessage] = useState('');
   const [updatingRoleId, setUpdatingRoleId] = useState(null);
   const [deletingProfileId, setDeletingProfileId] = useState(null);
-  const [showMemberList, setShowMemberList] = useState(true);
+  const [showMemberList, setShowMemberList] = useState(false);
   const [search, setSearch] = useState('');
   const [newMember, setNewMember] = useState({ name: '', email: '', role: 'mitglied' });
   const [savingMember, setSavingMember] = useState(false);
@@ -203,7 +203,7 @@ export default function AdminMembersManage() {
 
     try {
       await updateProfileRole(profileId, nextRole);
-      setProfiles((prev) => prev.map((profile) => (profile.id === profileId ? { ...profile, role: nextRole } : profile)));
+      await refreshProfiles();
       setRoleMessage('Rolle wurde aktualisiert.');
     } catch (error) {
       setProfilesError(error.message || 'Rolle konnte nicht gespeichert werden.');
@@ -229,7 +229,7 @@ export default function AdminMembersManage() {
 
     try {
       await deleteProfile(profile.id);
-      setProfiles((prev) => prev.filter((item) => item.id !== profile.id));
+      await refreshProfiles();
       setRoleMessage('Mitglied wurde entfernt.');
     } catch (error) {
       setProfilesError(error.message || 'Mitglied konnte nicht gelöscht werden.');
@@ -293,77 +293,6 @@ export default function AdminMembersManage() {
 
   return (
     <div className="space-y-8">
-      <section className="grid gap-6 md:grid-cols-[2fr,1fr]">
-        <div className="rounded-xl bg-white p-6 shadow-sm shadow-gray-200 dark:bg-gray-900 dark:shadow-black/20">
-          <div className="mb-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Mitgliederverwaltung</p>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Schnellanlage</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Legt sofort einen neuen Datensatz in der Tabelle „profiles“ an. Felder sind optional, außer dem Namen.
-            </p>
-            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-              Aktiver Club: {activeClubId || '–'}
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-300">Name*</label>
-              <input
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-blue-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                value={newMember.name}
-                onChange={(e) => setNewMember((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="z.B. Max Mustermann"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-300">E-Mail</label>
-              <input
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-blue-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                value={newMember.email}
-                onChange={(e) => setNewMember((prev) => ({ ...prev, email: e.target.value }))}
-                placeholder="max@example.com"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-300">Rolle</label>
-              <select
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-blue-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                value={newMember.role}
-                onChange={(e) => setNewMember((prev) => ({ ...prev, role: e.target.value }))}
-              >
-                {BASE_ROLE_OPTIONS.concat(ADMIN_OPTION).map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-              <button
-                onClick={handleCreateMember}
-                disabled={savingMember}
-                className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:bg-blue-300"
-              >
-                {savingMember ? 'Speichert...' : 'Mitglied anlegen'}
-              </button>
-              {newMemberMessage ? <span className="text-sm text-emerald-700 dark:text-emerald-300">{newMemberMessage}</span> : null}
-              {newMemberError ? <span className="text-sm text-red-600 dark:text-red-300">{newMemberError}</span> : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-blue-700 text-white p-6 shadow-md shadow-blue-900/20">
-          <h2 className="text-lg font-semibold">Hinweis</h2>
-          <p className="mt-2 text-sm text-blue-100">
-            Name ist Pflicht. E-Mail und Rolle sind optional (Standard: Mitglied). Nach dem Speichern kannst du in der Liste Rollen ändern,
-            sperren/aktivieren oder löschen.
-          </p>
-          <p className="mt-3 text-xs text-blue-100/80">
-            Admin-Rolle ist nur für Nicol Schmidt zulässig (wie in der Vorstandsansicht).
-          </p>
-        </div>
-      </section>
-
       <section ref={detailSectionRef} className="space-y-6">
         <WhitelistSection
           showWhitelist={showWhitelist}

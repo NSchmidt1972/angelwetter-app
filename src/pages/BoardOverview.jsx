@@ -5,6 +5,7 @@ import YearSelectorSection from '@/components/YearSelectorSection';
 import { MonthlyCatchSection, SessionSection } from '@/components/FishTrendsSection';
 import SeasonalSection from '@/components/SeasonalSection';
 import CrayfishSection from '@/components/CrayfishSection';
+import AdminMembersManage from '@/pages/AdminMembersManage';
 import {
   fetchProfiles,
   fetchWhitelist,
@@ -267,8 +268,6 @@ const ACTIVITY_RANGE_OPTIONS = [
   { value: '30d', label: 'Letzte 30 Tage' },
   { value: '90d', label: 'Letzte 90 Tage' },
   { value: '180d', label: 'Letzte 180 Tage' },
-  { value: 'current-year', label: 'Aktuelles Jahr' },
-  { value: 'last-year', label: 'Letztes Jahr' },
 ];
 
 function filterEntriesByRange(entries = [], range, referenceTime = Date.now()) {
@@ -359,7 +358,7 @@ export default function BoardOverview() {
   const [selectedFishDetail, setSelectedFishDetail] = useState('');
   const [activeSeasonalFish, setActiveSeasonalFish] = useState([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [activityRange, setActivityRange] = useState('current-year');
+  const [activityRange, setActivityRange] = useState('30d');
   const detailSectionRef = useRef(null);
 
   const availableYears = useMemo(() => {
@@ -1017,6 +1016,15 @@ export default function BoardOverview() {
         </div>
       </section>
 
+      <AdminMembersManage />
+
+      <YearSelectorSection
+        yearOptions={yearOptions}
+        selectedYear={selectedYear}
+        onSelectYear={(value) => setSelectedYear(value)}
+        selectedYearLabel={selectedYearLabel}
+      />
+
       <ActivitySection
         activityRange={activityRange}
         activityRangeLabel={activityRangeLabel}
@@ -1028,13 +1036,6 @@ export default function BoardOverview() {
         formatDecimal={formatDecimal}
         formatPercent={formatPercent}
         rangeOptions={ACTIVITY_RANGE_OPTIONS}
-      />
-
-      <YearSelectorSection
-        yearOptions={yearOptions}
-        selectedYear={selectedYear}
-        onSelectYear={(value) => setSelectedYear(value)}
-        selectedYearLabel={selectedYearLabel}
       />
 
       <MonthlyCatchSection
