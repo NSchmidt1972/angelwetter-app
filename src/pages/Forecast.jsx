@@ -7,6 +7,7 @@ import PageContainer from "../components/PageContainer";
 
 export default function Forecast() {
   const { loading, weatherData, aiPrediction, dailyPredictions, reload } = useForecast();
+  const modelTrainingRows = getModelTrainingRows(aiPrediction);
 
         
   const [expanded, setExpanded] = useState({}); // key: idx, value: bool
@@ -63,6 +64,23 @@ export default function Forecast() {
                   </ul>
                 </div>
               )}
+
+              <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+                <h4 className="font-semibold mb-1">🕒 Modellstand</h4>
+                {modelTrainingRows.length > 0 ? (
+                  <ul className="ml-2 list-disc list-inside space-y-1">
+                    {modelTrainingRows.map((row) => (
+                      <li key={row.label}>
+                        {row.label}: {row.value}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs italic text-gray-500 dark:text-gray-400">
+                    Zeitstempel der trainierten Modelle wird vom KI-Service aktuell nicht mitgeliefert.
+                  </p>
+                )}
+              </div>
 
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
@@ -221,6 +239,79 @@ export default function Forecast() {
       </div>
     </PageContainer>
   );
+}
+
+function getModelTrainingRows(aiPrediction) {
+  if (!aiPrediction || typeof aiPrediction !== "object") return [];
+
+  const rows = [
+    {
+      label: "Hauptmodell",
+      value: pickFirstFormattedDate(
+        aiPrediction?.trained_at,
+        aiPrediction?.model_trained_at,
+        aiPrediction?.last_trained_at,
+        aiPrediction?.models?.main?.trained_at,
+        aiPrediction?.models?.main?.model_trained_at,
+        aiPrediction?.models?.main?.last_trained_at,
+        aiPrediction?.stats?.trained_at,
+        aiPrediction?.stats?.model_trained_at,
+        aiPrediction?.stats?.last_trained_at,
+        aiPrediction?.metadata?.trained_at,
+        aiPrediction?.meta?.trained_at
+      ),
+    },
+    {
+      label: "Fischarten-Modell",
+      value: pickFirstFormattedDate(
+        aiPrediction?.models?.per_fish_type?.trained_at,
+        aiPrediction?.models?.species?.trained_at,
+        aiPrediction?.stats?.per_fish_model_trained_at,
+        aiPrediction?.stats?.species_model_trained_at,
+        aiPrediction?.metadata?.per_fish_model_trained_at
+      ),
+    },
+  ].filter((row) => !!row.value);
+
+  return rows;
+}
+
+function pickFirstFormattedDate(...candidates) {
+  for (const candidate of candidates) {
+    const formatted = formatDateTime(candidate);
+    if (formatted) return formatted;
+  }
+  return null;
+}
+
+function formatDateTime(value) {
+  if (value == null || value === "") return null;
+
+  let date = null;
+  if (typeof value === "number") {
+    const timestamp = value < 1_000_000_000_000 ? value * 1000 : value;
+    date = new Date(timestamp);
+  } else if (typeof value === "string") {
+    const asNumber = Number(value);
+    if (Number.isFinite(asNumber)) {
+      const timestamp = asNumber < 1_000_000_000_000 ? asNumber * 1000 : asNumber;
+      date = new Date(timestamp);
+    } else {
+      date = new Date(value);
+    }
+  } else if (value instanceof Date) {
+    date = value;
+  }
+
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleString("de-DE", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function VolatilityBadge({ v }) {

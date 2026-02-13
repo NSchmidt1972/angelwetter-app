@@ -475,7 +475,7 @@ export default function BoardOverview() {
   }, [profiles, whitelist]);
 
   const fishStats = useMemo(() => {
-    const grouped = fishEntries.reduce((acc, entry) => {
+    const grouped = filteredFishEntries.reduce((acc, entry) => {
       const fishName = entry?.fish ? String(entry.fish).trim() : '';
       if (!fishName || entry?.blank === true) return acc;
 
@@ -492,7 +492,7 @@ export default function BoardOverview() {
     return Object.values(grouped).sort(
       (a, b) => b.total - a.total || a.fish.localeCompare(b.fish)
     );
-  }, [fishEntries]);
+  }, [filteredFishEntries]);
 
   const fishOverviewTotals = useMemo(() => {
     if (!Array.isArray(fishStats) || fishStats.length === 0) {
@@ -1081,6 +1081,7 @@ export default function BoardOverview() {
         fishStatsLoading={fishStatsLoading}
         fishStatsError={fishStatsError}
         fishOverviewTotals={fishOverviewTotals}
+        selectedYearLabel={selectedYearLabel}
         selectedFishDetail={selectedFishDetail}
         onSelectFishDetail={setSelectedFishDetail}
         fishDetailData={fishDetailData}

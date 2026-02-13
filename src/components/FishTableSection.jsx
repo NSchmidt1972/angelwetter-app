@@ -3,6 +3,7 @@ export default function FishTableSection({
   fishStatsLoading,
   fishStatsError,
   fishOverviewTotals,
+  selectedYearLabel,
   selectedFishDetail,
   onSelectFishDetail,
   fishDetailData,
@@ -14,7 +15,9 @@ export default function FishTableSection({
     <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Fänge nach Fischart</h2>
+          <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">
+            Fänge nach Fischart ({selectedYearLabel || '12 Monate'})
+          </h2>
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Gegenüberstellung aller Fänge sowie entnommener Fische pro Art.
           </p>

@@ -3,10 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CurrentPanel from '@/components/weather/CurrentPanel';
 import HourlyScroller from '@/components/weather/HourlyScroller';
 import DailyScroller from '@/components/weather/DailyScroller';
+import { predictForWeather } from '@/services/aiService';
 
 // --- prediction utils (unverändert gelassen) ---
 const PREDICTION_TTL_MS = 12 * 60 * 60 * 1000;
-const PREDICTION_CACHE_KEY = 'ai_pred_cache_v1';
+const PREDICTION_CACHE_KEY = 'ai_pred_cache_v3';
+const REQUIRED_AI_MODEL_VERSION = '2026-02-13-aal-weighting-v3';
 const MAX_CONCURRENCY = 3;
 const INITIAL_HOURS = 12;
 const CHUNK_HOURS = 6;
@@ -42,6 +44,8 @@ function usePredictionCache() {
     const entry = ref.current[key];
     if (!entry) return null;
     if (Date.now() - entry.ts > PREDICTION_TTL_MS) return null;
+    const cachedVersion = entry?.v?.api_model_version;
+    if (cachedVersion !== REQUIRED_AI_MODEL_VERSION) return null;
     return entry.v;
   }, []);
 
@@ -60,13 +64,7 @@ function usePredictionCache() {
   return useMemo(() => ({ get, set, persist }), [get, set, persist]);
 }
 async function fetchPrediction(weather, signal) {
-  const res = await fetch('https://ai.asv-rotauge.de/predict', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(weather),
-    signal
-  });
-  return res.json();
+  return predictForWeather(weather, { signal });
 }
 async function runBatched(tasks, limit = MAX_CONCURRENCY) {
   const out = new Array(tasks.length);

@@ -12,9 +12,19 @@ async function postJSON(url, body, { signal } = {}) {
   return res.json();
 }
 
+async function getJSON(url, { signal } = {}) {
+  const res = await fetch(url, { method: "GET", signal });
+  if (!res.ok) throw new Error(`AI request failed: ${res.status}`);
+  return res.json();
+}
+
 // Einzel-Prognose
 export async function predictForWeather(weather, options = {}) {
   return postJSON(`${AI_BASE}/predict`, weather, options);
+}
+
+export async function getModelInfo(options = {}) {
+  return getJSON(`${AI_BASE}/modelinfo`, options);
 }
 
 // Optional: Batch-Endpoint (falls du ihn später anbietest)
