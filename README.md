@@ -17,6 +17,8 @@ Angelwetter ist eine React/Vite PWA für Fangmeldungen, Auswertungen und Push-Be
 ## Wichtige Umgebungsvariablen
 - `VITE_SUPABASE_URL` – Basis-URL deiner Supabase-Instanz (ohne Slash am Ende).
 - `VITE_SUPABASE_ANON_KEY` – öffentlicher Anon-Key für das Frontend.
+- `SUPABASE_URL` – Supabase-URL für das AI-Backend (`ai/server.py`, `ai/train.py`).
+- `SUPABASE_SERVICE_ROLE_KEY` – Service-Role-Key für das AI-Backend (nur Server/Train, nie ins Frontend).
 - `VITE_DEFAULT_CLUB_ID` – optionaler Fallback-Verein, wenn kein Mapping greift.
 - `VITE_AI_BASE_URL` – optionaler AI-Endpunkt (Default: `https://ai.asv-rotauge.de`).
 - `VITE_APP_VERSION`, `VITE_BUILD_DATE`, `VITE_GIT_COMMIT` – optional, falls du Build-Metadaten selbst setzen willst.

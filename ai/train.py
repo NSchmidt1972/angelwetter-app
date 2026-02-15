@@ -17,8 +17,10 @@ from supabase import create_client
 # =====================================================
 # Supabase Zugang
 # =====================================================
-SUPABASE_URL = "https://kirevrwmmthqgceprbhl.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpcmV2cndtbXRocWdjZXByYmhsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzU5MzY3OCwiZXhwIjoyMDYzMTY5Njc4fQ.OFce0qhDdeMl6Bd1iM-MEXV1kQ8t1xmgXRJuzFwRRac"
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kirevrwmmthqgceprbhl.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+if not SUPABASE_KEY:
+    raise RuntimeError("Missing Supabase service key. Set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_KEY).")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 MODEL_DIR = "/model"

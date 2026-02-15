@@ -76,7 +76,6 @@ export default function AdminOverview() {
     return new Date(now.getFullYear(), 0, 1);
   });
   const [pageViewRows, setPageViewRows] = useState([]);
-  const [activeAnglerPageViewRows, setActiveAnglerPageViewRows] = useState([]);
   const [pageViewLoading, setPageViewLoading] = useState(false);
   const [pageViewError, setPageViewError] = useState('');
   const [latestAppActivityByName, setLatestAppActivityByName] = useState({});
@@ -513,7 +512,7 @@ export default function AdminOverview() {
       }
     }
     loadData();
-  }, []);
+  }, [pageViewYearStart]);
 
   useEffect(() => {
     let active = true;
@@ -570,52 +569,6 @@ export default function AdminOverview() {
       active = false;
     };
   }, [pageViewYearStart]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadActiveAnglerPageViews() {
-      const activeNames = [...new Set(
-        (activeUsers || [])
-          .map((u) => (typeof u?.name === 'string' ? u.name.trim() : ''))
-          .filter(Boolean)
-      )];
-
-      if (activeNames.length === 0) {
-        setActiveAnglerPageViewRows([]);
-        return;
-      }
-
-      const since = pageViewYearStart.toISOString();
-      const { data, error } = await supabase
-        .from('page_views')
-        .select('path, full_path, angler, session_id, created_at, metadata')
-        .in('angler', activeNames)
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
-        .limit(PAGE_VIEW_LIMIT);
-
-      if (!active) return;
-      if (error) {
-        console.error('PageViews (aktive Angler): Laden fehlgeschlagen', error);
-        setActiveAnglerPageViewRows([]);
-        return;
-      }
-
-      const safeRows = Array.isArray(data) ? data : [];
-      const rows = safeRows.filter((row) => {
-        const anglerKey = normalizeName(row?.angler);
-        if (anglerKey && EXCLUDED_PAGE_VIEW_ANGLERS.has(anglerKey)) return false;
-        return true;
-      });
-      setActiveAnglerPageViewRows(rows);
-    }
-
-    loadActiveAnglerPageViews();
-    return () => {
-      active = false;
-    };
-  }, [activeUsers, pageViewYearStart]);
 
   useEffect(() => {
     setPageViewLastLimit(20);

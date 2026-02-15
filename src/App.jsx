@@ -117,7 +117,7 @@ function AppContent() {
       const rawRole = profile?.role ? String(profile.role).trim() : null;
       setProfileRole(rawRole || null);
 
-      const [first, last] = fullName.split(' ');
+      const [first] = fullName.split(' ');
       const fallbackShort = first || 'Profil';
       writeProfileCache({ userId: user.id, name: fullName, shortName: fallbackShort, role: rawRole || null });
 
@@ -212,16 +212,33 @@ function AppContent() {
 
     const updateActivity = async () => {
       const clubId = getActiveClubId();
+      const payload = {
+        user_id: user.id,
+        angler_name: user.email,
+        last_active: new Date().toISOString(),
+        club_id: clubId,
+      };
+
       try {
-        await supabase.from('user_activity').upsert(
-          {
-            user_id: user.id,
-            angler_name: user.email,
-            last_active: new Date().toISOString(),
-            club_id: clubId,
-          },
-          { onConflict: 'user_id' } // vermeidet Duplikate
-        );
+        let updateQuery = supabase
+          .from('user_activity')
+          .update({
+            angler_name: payload.angler_name,
+            last_active: payload.last_active,
+          })
+          .eq('user_id', user.id);
+
+        updateQuery = clubId ? updateQuery.eq('club_id', clubId) : updateQuery.is('club_id', null);
+
+        const { data: updatedRows, error: updateError } = await updateQuery
+          .select('user_id')
+          .limit(1);
+
+        if (updateError) throw updateError;
+        if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
+          const { error: insertError } = await supabase.from('user_activity').insert(payload);
+          if (insertError) throw insertError;
+        }
       } catch (err) {
         console.warn('⚠️ user_activity konnte nicht aktualisiert werden:', err?.message || err);
       }
