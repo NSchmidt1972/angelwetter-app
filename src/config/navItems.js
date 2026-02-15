@@ -18,7 +18,7 @@ export const baseNav = [
   },
 ];
 
-export function navItemsFor({ isAdmin = false, canAccessBoard = false, anglerName = '' } = {}) {
+export function navItemsFor({ isAdmin = false, canAccessBoard = false } = {}) {
   const items = [...baseNav];
 
   // Krebsformular für Vorstand sowie Admins

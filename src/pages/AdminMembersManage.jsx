@@ -9,8 +9,6 @@ import {
   deleteProfile,
   removeWhitelistEmail,
 } from '@/services/boardService';
-import { supabase } from '@/supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
 import { Card } from '@/components/ui';
 
 function formatDate(value) {
@@ -68,16 +66,6 @@ export default function AdminMembersManage() {
   const [deletingProfileId, setDeletingProfileId] = useState(null);
   const [showMemberList, setShowMemberList] = useState(false);
   const [search, setSearch] = useState('');
-  const [newMember, setNewMember] = useState({ name: '', email: '', role: 'mitglied' });
-  const [savingMember, setSavingMember] = useState(false);
-  const [newMemberMessage, setNewMemberMessage] = useState('');
-  const [newMemberError, setNewMemberError] = useState('');
-  const [activeClubId] = useState(() => getActiveClubId());
-
-  useEffect(() => {
-    refreshProfiles();
-    refreshWhitelist();
-  }, []);
 
   const canAssignAdmin = useCallback((profile) => {
     if (!profile?.name) return false;
@@ -263,34 +251,10 @@ export default function AdminMembersManage() {
     }
   };
 
-  const handleCreateMember = async () => {
-    setNewMemberMessage('');
-    setNewMemberError('');
-    const name = newMember.name.trim();
-    const email = newMember.email.trim().toLowerCase();
-    if (!name) {
-      setNewMemberError('Bitte Name angeben.');
-      return;
-    }
-    setSavingMember(true);
-    try {
-      const payload = {
-        name,
-        email: email || null,
-        role: normalizeRoleValue(newMember.role),
-        club_id: getActiveClubId(),
-      };
-      const { error: insertError } = await supabase.from('profiles').insert([payload]);
-      if (insertError) throw insertError;
-      setNewMemberMessage('Mitglied angelegt.');
-      setNewMember({ name: '', email: '', role: 'mitglied' });
-      refreshProfiles();
-    } catch (error) {
-      setNewMemberError(error.message || 'Mitglied konnte nicht angelegt werden.');
-    } finally {
-      setSavingMember(false);
-    }
-  };
+  useEffect(() => {
+    refreshProfiles();
+    refreshWhitelist();
+  }, [refreshProfiles, refreshWhitelist]);
 
   return (
     <Card className="space-y-8">

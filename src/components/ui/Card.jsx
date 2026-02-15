@@ -1,12 +1,10 @@
+import { createElement } from 'react';
+
 export default function Card({
-  as: Component = 'div',
+  as: component = 'div',
   className = '',
   children,
   ...props
 }) {
-  return (
-    <Component className={className} {...props}>
-      {children}
-    </Component>
-  );
+  return createElement(component, { className, ...props }, children);
 }

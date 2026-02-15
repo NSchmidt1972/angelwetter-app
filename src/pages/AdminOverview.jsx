@@ -1,64 +1,33 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
-import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
 import { formatDateOnly, formatDateTime, parseTimestamp, formatTimeOnly } from '@/utils/dateUtils';
 import { navItemsFor } from '@/config/navItems';
 import { APP_VERSION } from '@/utils/buildInfo';
 import { Card } from '@/components/ui';
-
-const PAGE_VIEW_LIMIT = 5000;
-const PAGE_VIEW_PAGE_SIZE = 1000;
-const EXCLUDED_PAGE_VIEW_ANGLERS = new Set(['nicol schmidt']);
-
-function normalizePath(value) {
-  if (!value) return '/';
-  const pathOnly = value.split('?')[0].split('#')[0];
-  const ensured = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
-  if (ensured.length > 1 && ensured.endsWith('/')) return ensured.slice(0, -1);
-  return ensured || '/';
-}
-
-function normalizeName(value) {
-  if (!value) return '';
-  return String(value).trim().toLowerCase();
-}
-
-function groupPageViews(rows) {
-  const counts = new Map();
-
-  rows.forEach((row) => {
-    const key = row.path || '—';
-    const entry = counts.get(key) || {
-      path: key,
-      total: 0,
-      uniqueAnglers: new Set(),
-      lastSeen: null,
-    };
-
-    entry.total += 1;
-    if (row.angler) entry.uniqueAnglers.add(row.angler);
-
-    const createdAt = row.created_at ? new Date(row.created_at) : null;
-    if (createdAt && (!entry.lastSeen || createdAt > entry.lastSeen)) {
-      entry.lastSeen = createdAt;
-    }
-
-    counts.set(key, entry);
-  });
-
-  return [...counts.values()]
-    .map((entry) => ({
-      path: entry.path,
-      total: entry.total,
-      uniqueAnglers: entry.uniqueAnglers.size,
-      lastSeen: entry.lastSeen,
-    }))
-    .sort((a, b) => {
-      if (b.total !== a.total) return b.total - a.total;
-      return (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0);
-    });
-}
+import PageViewsSection from '@/features/adminOverview/components/PageViewsSection';
+import ActiveUsersSection from '@/features/adminOverview/components/ActiveUsersSection';
+import ExternalCatchesSection from '@/features/adminOverview/components/ExternalCatchesSection';
+import LatestCatchSection from '@/features/adminOverview/components/LatestCatchSection';
+import OneSignalDebugSection from '@/features/adminOverview/components/OneSignalDebugSection';
+import OverviewSection from '@/features/adminOverview/components/OverviewSection';
+import PushSubscribersSection from '@/features/adminOverview/components/PushSubscribersSection';
+import RecentBlanksSection from '@/features/adminOverview/components/RecentBlanksSection';
+import RegisteredUsersSection from '@/features/adminOverview/components/RegisteredUsersSection';
+import TakenCatchesSection from '@/features/adminOverview/components/TakenCatchesSection';
+import {
+  PAGE_VIEW_LIMIT,
+  PAGE_VIEW_PAGE_SIZE,
+  buildPageViewAnglersByPath,
+  buildPageViewLastEvents,
+  buildPageViewMonthlyStats,
+  buildPageViewTopAnglers,
+  filterPageViewRows,
+  getUniqueAnglersForPath,
+  groupPageViews,
+  normalizeName,
+  normalizePath,
+} from '@/features/adminOverview/pageViewUtils';
 
 export default function AdminOverview() {
   const [weatherUpdatedAt, setWeatherUpdatedAt] = useState(null);
@@ -133,15 +102,7 @@ export default function AdminOverview() {
     return formatTimeOnly(parsed);
   };
 
-  const filteredPageViewRows = useMemo(() => {
-    if (!Array.isArray(pageViewRows) || pageViewRows.length === 0) return [];
-    return pageViewRows.filter((row) => {
-      const anglerKey = normalizeName(row?.angler);
-      if (anglerKey && EXCLUDED_PAGE_VIEW_ANGLERS.has(anglerKey)) return false;
-
-      return true;
-    });
-  }, [pageViewRows]);
+  const filteredPageViewRows = useMemo(() => filterPageViewRows(pageViewRows), [pageViewRows]);
 
   const pageViewAggregates = useMemo(
     () => groupPageViews(filteredPageViewRows).map((entry) => ({
@@ -150,134 +111,40 @@ export default function AdminOverview() {
     })),
     [filteredPageViewRows, labelForPath],
   );
-  const pageViewAnglersByPath = useMemo(() => {
-    const map = new Map();
-    filteredPageViewRows.forEach((row) => {
-      const key = row?.path || '—';
-      const name = typeof row?.angler === 'string' ? row.angler.trim() : '';
-      if (!name) return;
-      if (!map.has(key)) map.set(key, new Set());
-      map.get(key).add(name);
-    });
-    return map;
-  }, [filteredPageViewRows]);
+  const pageViewAnglersByPath = useMemo(
+    () => buildPageViewAnglersByPath(filteredPageViewRows),
+    [filteredPageViewRows]
+  );
   const uniqueAnglersForPath = useCallback((path) => {
-    const set = pageViewAnglersByPath.get(path);
-    if (!set) return [];
-    return [...set].sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+    return getUniqueAnglersForPath(pageViewAnglersByPath, path);
   }, [pageViewAnglersByPath]);
   const pageViewTotal = filteredPageViewRows.length;
   const pageViewAverage = pageViewAggregates.length > 0
     ? (pageViewTotal / pageViewAggregates.length).toFixed(1)
     : '0.0';
-  const pageViewMonthlyStats = useMemo(() => {
-    const year = pageViewYearStart.getFullYear();
-    const months = [];
-    for (let month = 0; month < 12; month += 1) {
-      const bucketDate = new Date(year, month, 1);
-      months.push({
-        key: `${year}-${String(month + 1).padStart(2, '0')}`,
-        label: bucketDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
-        total: 0,
-      });
-    }
-    const monthMap = new Map(months.map((entry) => [entry.key, entry]));
-    filteredPageViewRows.forEach((row) => {
-      const createdAt = parseTimestamp(row?.created_at);
-      if (!createdAt) return;
-      if (createdAt.getFullYear() !== year) return;
-      const key = `${year}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
-      const bucket = monthMap.get(key);
-      if (bucket) bucket.total += 1;
-    });
-    return months.filter((entry) => entry.total > 0);
-  }, [filteredPageViewRows, pageViewYearStart]);
+  const pageViewMonthlyStats = useMemo(
+    () => buildPageViewMonthlyStats(filteredPageViewRows, pageViewYearStart),
+    [filteredPageViewRows, pageViewYearStart]
+  );
   const currentBuildLabel = useMemo(
     () => (APP_VERSION ? String(APP_VERSION).trim() : null),
     [],
   );
-  const pageViewTopAnglers = useMemo(() => {
-    const stats = new Map();
-
-    filteredPageViewRows.forEach((row) => {
-      const rawName = typeof row?.angler === 'string' ? row.angler.trim() : '';
-      if (!rawName) return;
-      const name = rawName;
-      const entry = stats.get(name) || { name, total: 0, lastSeen: null };
-      entry.total += 1;
-
-      const createdAt = row?.created_at ? new Date(row.created_at) : null;
-      if (createdAt && (!entry.lastSeen || createdAt > entry.lastSeen)) {
-        entry.lastSeen = createdAt;
-      }
-
-      stats.set(name, entry);
-    });
-
-    const merged = [...stats.values()].map((entry) => {
-      const key = normalizeName(entry.name);
-      const latestAppTs = parseTimestamp(latestAppActivityByName?.[key]);
-      if (latestAppTs && (!entry.lastSeen || latestAppTs > entry.lastSeen)) {
-        return { ...entry, lastSeen: latestAppTs };
-      }
-      return entry;
-    });
-
-    return merged
-      .sort((a, b) => {
-        if (b.total !== a.total) return b.total - a.total;
-        const timeDiff = (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0);
-        if (timeDiff !== 0) return timeDiff;
-        return a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
-      })
-      .slice(0, 20);
-  }, [filteredPageViewRows, latestAppActivityByName]);
-  const pageViewLastEvents = useMemo(() => {
-    const latestPageByAngler = new Map();
-    filteredPageViewRows.forEach((row) => {
-      const rawName = typeof row?.angler === 'string' ? row.angler.trim() : '';
-      if (!rawName) return;
-      const key = normalizeName(rawName);
-      if (!key) return;
-      const rowTs = parseTimestamp(row?.created_at);
-      if (!rowTs) return;
-      const prev = latestPageByAngler.get(key);
-      const prevTs = parseTimestamp(prev?.created_at);
-      if (!prevTs || rowTs > prevTs) {
-        latestPageByAngler.set(key, row);
-      }
-    });
-
-    const events = pageViewTopAnglers.map((entry, idx) => {
-      const key = normalizeName(entry.name);
-      const pageRow = latestPageByAngler.get(key);
-      const metadataObj = pageRow?.metadata && typeof pageRow.metadata === 'object'
-        ? pageRow.metadata
-        : null;
-      const build = metadataObj?.build || metadataObj?.version || null;
-      const createdAt = parseTimestamp(entry.lastSeen);
-      return {
-        kind: 'top_activity',
-        key: `top-${key || idx}-${idx}`,
-        angler: entry.name,
-        label: pageRow?.path ? labelForPath(pageRow.path) : 'Seite unbekannt',
-        path: pageRow?.path || null,
-        created_at: createdAt ? createdAt.toISOString() : null,
-        matchesCurrentBuild: (() => {
-          const trimmed = build ? String(build).trim() : '';
-          return Boolean(trimmed) && Boolean(currentBuildLabel) && trimmed === currentBuildLabel;
-        })(),
-      };
-    });
-
-    return events
-      .sort(
-        (a, b) =>
-          (parseTimestamp(b?.created_at)?.getTime() || 0) -
-          (parseTimestamp(a?.created_at)?.getTime() || 0)
-      )
-      .slice(0, pageViewLastLimit);
-  }, [pageViewTopAnglers, filteredPageViewRows, labelForPath, currentBuildLabel, pageViewLastLimit]);
+  const pageViewTopAnglers = useMemo(
+    () => buildPageViewTopAnglers(filteredPageViewRows, latestAppActivityByName),
+    [filteredPageViewRows, latestAppActivityByName]
+  );
+  const pageViewLastEvents = useMemo(
+    () =>
+      buildPageViewLastEvents({
+        filteredRows: filteredPageViewRows,
+        pageViewTopAnglers,
+        labelForPath,
+        currentBuildLabel,
+        pageViewLastLimit,
+      }),
+    [pageViewTopAnglers, filteredPageViewRows, labelForPath, currentBuildLabel, pageViewLastLimit]
+  );
   const pageViewLastEventsSourceCount = pageViewTopAnglers.length;
 
   useEffect(() => {
@@ -579,412 +446,92 @@ export default function AdminOverview() {
     setPageViewUniqueOpenPath(null);
   }, [pageViewAggregates]);
 
-
-  const Section = ({ title, value, children }) => (
-    <Card className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="text-lg font-semibold text-blue-700 dark:text-blue-400">{title}</h3>
-        {value && <div className="text-sm text-gray-700 dark:text-gray-300">{value}</div>}
-      </div>
-      {children}
-    </Card>
-  );
-
   const listItemClass = "list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-200";
   const fallbackTextClass = "text-sm text-gray-700 dark:text-gray-300";
   const metaTextClass = "text-xs text-gray-400 dark:text-gray-400";
-  const totalPushSubscriptions = pushDeviceSummary.reduce((sum, entry) => sum + entry.total, 0);
-  const activePushSubscriptions = pushDeviceSummary.reduce((sum, entry) => sum + entry.active, 0);
-  const pushSectionLabelBase = totalPushSubscriptions === 1 ? '1 gespeichertes Abo' : `${totalPushSubscriptions} gespeicherte Abos`;
-  const pushSectionLabel = `${pushSectionLabelBase} (${activePushSubscriptions} aktiv)`;
-  const anglerGroupCount = pushByAngler.length;
-  const deviceGroupCount = pushDeviceSummary.length;
 
   return (
     <Card className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
       <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Admin2‑Übersicht</h2>
 
-      <Section title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
-      <Section title="🎣 Gesamtanzahl Fänge" value={catchCount === null ? 'Lade...' : catchCount} />
+      <OverviewSection title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
+      <OverviewSection title="🎣 Gesamtanzahl Fänge" value={catchCount === null ? 'Lade...' : catchCount} />
 
-      <Section title="🐟 Letzter Fang (7 Tage)">
-        {latestCatch ? (
-          <div className="max-h-60 overflow-y-auto">
-            <ul className={listItemClass}>
-              <li>
-                {nameShort} – {latestCatch.fish} ({latestCatch.size} cm)
-                <span className={metaTextClass}> {' am '}
-                  {formatDateTimeLabel(latestCatch.timestamp)}
-                </span>
-              </li>
-            </ul>
-          </div>
-        ) : (
-          <div className={fallbackTextClass}>Keine Daten</div>
-        )}
-      </Section>
+      <LatestCatchSection
+        latestCatch={latestCatch}
+        nameShort={nameShort}
+        formatDateTimeLabel={formatDateTimeLabel}
+        listItemClass={listItemClass}
+        fallbackTextClass={fallbackTextClass}
+        metaTextClass={metaTextClass}
+      />
 
+      <RecentBlanksSection
+        recentBlanks={recentBlanks}
+        formatDateTimeLabel={formatDateTimeLabel}
+        listItemClass={listItemClass}
+        fallbackTextClass={fallbackTextClass}
+        metaTextClass={metaTextClass}
+      />
 
-      <Section title="❌ Letzte Schneidersessions (7 Tage)">
-        {recentBlanks.length > 0 ? (
-          <div className="max-h-60 overflow-y-auto">
-            <ul className={listItemClass}>
-              {recentBlanks.map((b, i) => (
-                <li key={i}>
-                  {b.angler}
-                  <span className={metaTextClass}> {' am '}
-                    {formatDateTimeLabel(b.timestamp)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <div className={fallbackTextClass}>Keine Schneidersessions</div>
-        )}
-      </Section>
+      <ActiveUsersSection
+        activeUsers={activeUsers}
+        formatDateTimeLabel={formatDateTimeLabel}
+        listItemClass={listItemClass}
+        metaTextClass={metaTextClass}
+      />
 
-      <Section title="👥 Aktive Angler (7 Tage)" value={`${activeUsers.length} aktive Angler`}>
-        <div className="max-h-60 overflow-y-auto">
-          <ul className={listItemClass}>
-            {activeUsers
-              .slice()
-              .sort(
-                (a, b) =>
-                  (parseTimestamp(b.last_active)?.getTime() || 0) -
-                  (parseTimestamp(a.last_active)?.getTime() || 0)
-              )
-              .map((u, i) => (
-              <li key={i}>
-                {u.name} <span className={metaTextClass}>(aktiv am {formatDateTimeLabel(u.last_active)})</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Section>
+      <TakenCatchesSection
+        takenCatches={takenCatches}
+        formatDateTimeLabel={formatDateTimeLabel}
+        listItemClass={listItemClass}
+        fallbackTextClass={fallbackTextClass}
+        metaTextClass={metaTextClass}
+      />
 
-      <Section title="🧺 Entnommene Fische" value={`${takenCatches.length} Einträge`}>
-        {takenCatches.length > 0 ? (
-          <div className="max-h-60 overflow-y-auto">
-            <ul className={listItemClass}>
-              {takenCatches.map((entry, i) => (
-                <li key={i}>
-                  {entry.angler} – {entry.fish}
-                  <span className={metaTextClass}>
-                    {' am '}
-                    {entry.timestamp ? formatDateTimeLabel(entry.timestamp) : 'unbekannt'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <div className={fallbackTextClass}>Keine entnommenen Fische</div>
-        )}
-      </Section>
+      <ExternalCatchesSection
+        externalCatches={externalCatches}
+        formatDateTimeLabel={formatDateTimeLabel}
+        listItemClass={listItemClass}
+        fallbackTextClass={fallbackTextClass}
+        metaTextClass={metaTextClass}
+      />
 
-      <Section title="🌍 Externe Fänge (außer Lobberich)">
-        {externalCatches.length > 0 ? (
-          <div className="max-h-60 overflow-y-auto">
-            <ul className={listItemClass}>
-              {externalCatches.map((entry, i) => (
-                <li key={i}>
-                  {entry.angler} – {entry.fish} ({entry.size} cm)
-                  <span className={metaTextClass}>
-                    {' am '}
-                    {formatDateTimeLabel(entry.timestamp)}
-                    {' bei '}
-                    {entry.location_name || 'unbekannt'} ({entry.lat.toFixed(4)}, {entry.lon.toFixed(4)})
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <div className={fallbackTextClass}>Keine externen Fänge</div>
-        )}
-      </Section>
+      <PageViewsSection
+        pageViewLoading={pageViewLoading}
+        pageViewTotal={pageViewTotal}
+        pageViewYearLabel={pageViewYearLabel}
+        pageViewAggregates={pageViewAggregates}
+        pageViewAverage={pageViewAverage}
+        pageViewError={pageViewError}
+        pageViewMonthlyStats={pageViewMonthlyStats}
+        pageViewTopAnglers={pageViewTopAnglers}
+        fallbackTextClass={fallbackTextClass}
+        formatDateTimeLabel={formatDateTimeLabel}
+        pageViewUniqueOpenPath={pageViewUniqueOpenPath}
+        uniqueAnglersForPath={uniqueAnglersForPath}
+        setPageViewUniqueOpenPath={setPageViewUniqueOpenPath}
+        pageViewLastEvents={pageViewLastEvents}
+        pageViewLastEventsSourceCount={pageViewLastEventsSourceCount}
+        pageViewLastLimit={pageViewLastLimit}
+        setPageViewLastLimit={setPageViewLastLimit}
+      />
+      <RegisteredUsersSection
+        allProfiles={allProfiles}
+        formatDateLabel={formatDateLabel}
+        listItemClass={listItemClass}
+        metaTextClass={metaTextClass}
+      />
 
-      <Section
-        title="📊 Seitenaufrufe"
-        value={pageViewLoading ? 'Lade…' : `${pageViewTotal} Aufrufe`}
-      >
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
-            <span>Zeitraum: Gesamtjahr {pageViewYearLabel}</span>
-            <span>Seiten: {pageViewAggregates.length}</span>
-            <span>Ø je Seite: {pageViewAverage}</span>
-          </div>
+      <PushSubscribersSection
+        pushByAngler={pushByAngler}
+        pushDeviceSummary={pushDeviceSummary}
+        listItemClass={listItemClass}
+        fallbackTextClass={fallbackTextClass}
+        metaTextClass={metaTextClass}
+      />
 
-          {pageViewError ? (
-            <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200">
-              {pageViewError}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6">
-              <div>
-                <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Monatliche Aufrufe ({pageViewYearLabel})</h4>
-                {pageViewLoading ? (
-                  <div className={fallbackTextClass}>Lädt…</div>
-                ) : pageViewMonthlyStats.length === 0 ? (
-                  <div className={fallbackTextClass}>Keine Daten im Zeitraum.</div>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Monat</th>
-                          <th className="px-3 py-2 text-right">Aufrufe</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {pageViewMonthlyStats.map((entry) => (
-                          <tr key={entry.key} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                            <td className="px-3 py-2 capitalize text-xs sm:text-sm">{entry.label}</td>
-                            <td className="px-3 py-2 text-right font-semibold text-blue-700 dark:text-blue-300">{entry.total}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Aktivste Angler</h4>
-                {pageViewLoading ? (
-                  <div className={fallbackTextClass}>Lädt…</div>
-                ) : pageViewTopAnglers.length === 0 ? (
-                  <div className={fallbackTextClass}>Keine Aufrufe im Zeitraum.</div>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Angler</th>
-                          <th className="px-3 py-2 text-right">Aufrufe</th>
-                          <th className="px-3 py-2 text-right">Zuletzt aktiv</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {pageViewTopAnglers.map((entry) => (
-                          <tr key={entry.name} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                            <td className="px-3 py-2 text-xs sm:text-sm">{entry.name}</td>
-                            <td className="px-3 py-2 text-right font-semibold text-blue-700 dark:text-blue-300">{entry.total}</td>
-                            <td className="px-3 py-2 text-right text-xs sm:text-sm">
-                              {entry.lastSeen ? formatDateTimeLabel(entry.lastSeen) : '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Beliebteste Seiten</h4>
-                {pageViewLoading ? (
-                  <div className={fallbackTextClass}>Lädt…</div>
-                ) : pageViewAggregates.length === 0 ? (
-                  <div className={fallbackTextClass}>Keine Daten im Zeitraum.</div>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Menüpunkt</th>
-                          <th className="px-3 py-2 text-right">Aufrufe</th>
-                          <th className="px-3 py-2 text-right">Unique</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {pageViewAggregates.slice(0, 20).map((row) => {
-                          const isOpen = pageViewUniqueOpenPath === row.path;
-                          const uniqueNames = isOpen ? uniqueAnglersForPath(row.path) : [];
-                          return (
-                            <Fragment key={row.path}>
-                              <tr className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                                <td className="px-3 py-2 text-xs sm:text-sm">
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="font-medium text-gray-800 dark:text-gray-100">{row.label}</span>
-                                    {row.label !== row.path && row.path && row.path !== '—' && (
-                                      <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500">{row.path}</span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 text-right font-semibold text-green-700 dark:text-green-300">{row.total}</td>
-                                <td className="px-3 py-2 text-right">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-200">
-                                      {row.uniqueAnglers}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setPageViewUniqueOpenPath((current) => (current === row.path ? null : row.path))}
-                                      className="inline-flex items-center justify-center rounded px-1.5 py-1 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:text-blue-200 dark:hover:bg-blue-800/40 dark:focus:ring-blue-500"
-                                      title="Angler anzeigen"
-                                      aria-label={isOpen ? 'Angler verbergen' : 'Angler anzeigen'}
-                                    >
-                                      <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">{isOpen ? '▼' : '▶'}</span>
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                              {isOpen && (
-                                <tr className="bg-blue-50/60 dark:bg-blue-900/20">
-                                  <td colSpan={3} className="px-3 py-2 text-xs sm:text-sm">
-                                    {uniqueNames.length === 0 ? (
-                                      <span className="text-gray-600 dark:text-gray-300">Keine Angler erfasst.</span>
-                                    ) : (
-                                      <div className="flex flex-wrap gap-1.5">
-                                        {uniqueNames.map((name) => (
-                                          <span
-                                            key={name}
-                                            className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-blue-800 shadow-sm ring-1 ring-blue-200 dark:bg-blue-950/60 dark:text-blue-100 dark:ring-blue-700/50"
-                                          >
-                                            {name}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              )}
-                            </Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Letzte Ereignisse</h4>
-                {pageViewLoading ? (
-                  <div className={fallbackTextClass}>Lädt…</div>
-                ) : pageViewLastEvents.length === 0 ? (
-                  <div className={fallbackTextClass}>Keine Aufrufe im Zeitraum.</div>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Menüpunkt</th>
-                          <th className="px-3 py-2 text-left">Angler</th>
-                          <th className="px-3 py-2 text-left">Zeit</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {pageViewLastEvents.map((row) => (
-                          <tr key={row.key} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                            <td className="px-3 py-2 text-xs sm:text-sm">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-medium text-gray-800 dark:text-gray-100">{row.label || '—'}</span>
-                                {row.label !== row.path && row.path && row.path !== '—' && (
-                                  <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500">{row.path}</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-xs sm:text-sm">
-                              <span
-                                className={`${row.matchesCurrentBuild
-                                  ? 'text-green-600 dark:text-green-300 font-semibold'
-                                  : 'text-gray-800 dark:text-gray-200'
-                                }`}
-                              >
-                                {row.angler || '—'}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-xs sm:text-sm">{formatDateTimeLabel(row.created_at)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {pageViewLastEventsSourceCount > pageViewLastLimit && (
-                  <div className="mt-3 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setPageViewLastLimit((limit) => Math.min(limit + 20, pageViewLastEventsSourceCount))}
-                      className="inline-flex items-center justify-center rounded border border-blue-500 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-600 transition hover:bg-blue-50 dark:border-blue-400 dark:text-blue-300 dark:hover:bg-blue-400/10"
-                    >
-                      Mehr anzeigen
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </Section>
-
-
-      <Section title="🗓 Registrierte User" value={`${allProfiles.length} registrierte Nutzer`}>
-        <div className="max-h-60 overflow-y-auto">
-          <ul className={listItemClass}>
-            {allProfiles.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map((p, i) => (
-              <li key={i}>
-                {p.name} <span className={metaTextClass}>(seit {formatDateLabel(p.created_at)})</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Section>
-
-      <Section title="📣 Push-Abonnenten" value={pushSectionLabel}>
-        {pushByAngler.length > 0 || pushDeviceSummary.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Angler ({anglerGroupCount})</h4>
-              {pushByAngler.length > 0 ? (
-                <div className="max-h-60 overflow-y-auto">
-                  <ul className={listItemClass}>
-                    {pushByAngler.map((entry) => (
-                      <li key={entry.name}>
-                        {entry.name}
-                        <span className={metaTextClass}>
-                          {` – ${entry.total} Gerät${entry.total !== 1 ? 'e' : ''} (${entry.active} aktiv)`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <div className={fallbackTextClass}>Keine Anglerdaten</div>
-              )}
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Geräte ({deviceGroupCount})</h4>
-              {pushDeviceSummary.length > 0 ? (
-                <div className="max-h-60 overflow-y-auto">
-                  <ul className={listItemClass}>
-                    {pushDeviceSummary.map((entry) => (
-                      <li key={entry.device}>
-                        {entry.total}x {entry.device}
-                        <span className={metaTextClass}>
-                          {` (${entry.active} aktiv)`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <div className={fallbackTextClass}>Keine Gerätedaten</div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className={fallbackTextClass}>Keine Push-Daten</div>
-        )}
-      </Section>
-
-
-      <Section title="🔔 OneSignal Debug">
-        <OneSignalHealthCheck />
-      </Section>
+      <OneSignalDebugSection />
     </Card>
   );
 }

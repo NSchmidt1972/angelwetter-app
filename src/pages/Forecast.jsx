@@ -1,21 +1,17 @@
-// src/pages/Forecast.jsx
-import { renderFishRating, formatPercent, getPressureTrendLabel, formatDateFromUnix } from "../utils/formatters";
-import { useForecast } from "../hooks/useForecast";
-import { useState } from "react";
-import PageContainer from "../components/PageContainer";
-import { Card } from '@/components/ui';
-
+import { useState } from 'react';
+import { useForecast } from '@/features/forecast/hooks/useForecast';
+import PageContainer from '../components/PageContainer';
+import DailyOutlookCard from '@/features/forecast/components/DailyOutlookCard';
+import ForecastAiCard from '@/features/forecast/components/ForecastAiCard';
+import { InitialForecastLoader } from '@/features/forecast/components/ForecastLoadingPanels';
+import { getModelTrainingRows } from '@/features/forecast/utils';
 
 export default function Forecast() {
   const { weatherData, aiPrediction, dailyPredictions, loading } = useForecast();
   const modelTrainingRows = getModelTrainingRows(aiPrediction);
+  const [expanded, setExpanded] = useState({});
 
-        
-  const [expanded, setExpanded] = useState({}); // key: idx, value: bool
-
-  const toggle = (idx) =>
-    setExpanded((e) => ({ ...e, [idx]: !e[idx] }));
-
+  const toggle = (idx) => setExpanded((state) => ({ ...state, [idx]: !state[idx] }));
 
   return (
     <PageContainer>
@@ -30,380 +26,26 @@ export default function Forecast() {
 
       <div className="max-w-2xl mx-auto">
         {weatherData ? (
-          <Card className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6 mb-6">
-            <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg shadow-inner">
-              <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">🤖 KI-Prognose</h3>
-
-              {aiPrediction ? (
-                <>
-                  <p className="text-xl text-blue-700 dark:text-blue-300 font-bold">
-                    🎯 Fangwahrscheinlichkeit: {formatPercent(aiPrediction.probability, 0)}{" "}
-                    {renderFishRating(aiPrediction.probability)}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                    {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidersession wahrscheinlich"}
-                  </p>
-
-                  {aiPrediction.stats && (
-                    <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
-                      <h4 className="font-semibold mb-1">🧮 Trainingsdaten</h4>
-                      <ul className="ml-2 list-disc list-inside space-y-1">
-                        <li>Gesamtanzahl: {aiPrediction.stats.total_samples}</li>
-                        <li>🎣 Fänge: {aiPrediction.stats.positive_samples}</li>
-                        <li>❌ Schneidersessions: {aiPrediction.stats.negative_samples}</li>
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
-                    <h4 className="font-semibold mb-1">🕒 Modellstand</h4>
-                    {modelTrainingRows.length > 0 ? (
-                      <ul className="ml-2 list-disc list-inside space-y-1">
-                        {modelTrainingRows.map((row) => (
-                          <li key={row.label}>
-                            {row.label}: {row.value}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs italic text-gray-500 dark:text-gray-400">
-                        Zeitstempel der trainierten Modelle wird vom KI-Service aktuell nicht mitgeliefert.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="text-sm text-gray-700 dark:text-gray-300">
-                    <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
-                    <div className="space-y-2">
-                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                        <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
-                        <div className="ml-2">{getPressureTrendLabel(aiPrediction?.trend?.pressure_trend_5d)}</div>
-                      </div>
-                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                        <div className="font-medium">Luftdruck-Änderung (24h):</div>
-                        <div className="ml-2">{formatSignedMetric(aiPrediction?.trend?.pressure_delta_24h, "hPa")}</div>
-                      </div>
-                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                        <div className="font-medium">Luftdruck-Schwankung (48h):</div>
-                        <div className="ml-2">{formatMetric(aiPrediction?.trend?.pressure_volatility_48h, "hPa")}</div>
-                      </div>
-                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                        <div className="font-medium">Temp-Mittel (3 Tage):</div>
-                        <div className="ml-2">
-                          {aiPrediction?.trend?.temp_mean_3d != null ? `${aiPrediction.trend.temp_mean_3d.toFixed(2)} °C` : "n/a"}
-                        </div>
-                      </div>
-                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                        <div className="font-medium">Temp-Volatilität (3 Tage):</div>
-                        <div className="ml-2 flex items-center gap-2">
-                          {aiPrediction?.trend?.temp_volatility_3d != null ? (
-                            <>
-                              <span>{aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C</span>
-                              <VolatilityBadge v={aiPrediction.trend.temp_volatility_3d} />
-                            </>
-                          ) : ("n/a")}
-                        </div>
-                      </div>
-                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                        <div className="font-medium">Temp-Änderung (24h):</div>
-                        <div className="ml-2">{formatSignedMetric(aiPrediction?.trend?.temp_delta_24h, "°C")}</div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-                ) : (
-                  loading ? (
-                    <LoadingPanel label="KI-Prognose wird berechnet..." />
-                  ) : (
-                    <p className="text-sm italic text-gray-500 dark:text-gray-300">
-                      KI-Prognose aktuell nicht verfügbar.
-                    </p>
-                  )
-                )}
-            </div>
-
-            
-          </Card>
+          <ForecastAiCard
+            aiPrediction={aiPrediction}
+            modelTrainingRows={modelTrainingRows}
+            loading={loading}
+          />
+        ) : loading ? (
+          <InitialForecastLoader />
         ) : (
-          loading ? (
-            <InitialForecastLoader />
-          ) : (
-            <p className="text-center text-gray-500 dark:text-gray-400">Wetterdaten konnten nicht geladen werden.</p>
-          )
+          <p className="text-center text-gray-500 dark:text-gray-400">
+            Wetterdaten konnten nicht geladen werden.
+          </p>
         )}
 
-
-  
-    {/* 🗓️ 7-Tage-Ausblick */}
-    {dailyPredictions?.length > 0 && (
-      <Card className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6">
-        <h3 className="font-bold text-lg mb-4 text-gray-800 dark:text-gray-100">🗓️ 7-Tage-Ausblick</h3>
-
-        <div className="space-y-3">
-          {dailyPredictions.map((d, idx) => {
-            const icon = d.weather?.[0]?.icon;
-            const desc = d.weather?.[0]?.description ?? "Wetter";
-            const tempDay = d?.temp?.day != null ? Math.round(d.temp.day) : null;
-            const fishMap = d.aiPrediction?.per_fish_type || {};
-            const sortedFish = Object.entries(fishMap).sort(([, a], [, b]) => b - a);
-
-            const top = sortedFish.slice(0, 3);
-            const rest = sortedFish.slice(3);
-            const moreCount = rest.length;
-
-            const isOpen = !!expanded[idx];
-
-            return (
-              <div key={idx} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    {icon ? (
-                      <img
-                        src={`https://openweathermap.org/img/wn/${icon}@2x.png`}
-                        alt={desc}
-                        className="w-10 h-10"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded bg-gray-200 dark:bg-gray-600" />
-                    )}
-                    <div>
-                      <div className="font-medium text-gray-900 dark:text-gray-100">
-                        {formatDateFromUnix(d.dt)}
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-300 capitalize">{desc}</div>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                      {tempDay != null ? `${tempDay}°C` : "–"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2">
-                  {sortedFish.length > 0 ? (
-                    <>
-                      {/* Top 3 */}
-                      <div className="flex flex-wrap gap-2">
-                        {top.map(([fish, prob]) => (
-                          <div
-                            key={fish}
-                            className="px-2 py-1 rounded-md bg-white/70 dark:bg-black/20 border border-gray-200/50 dark:border-white/10 text-sm flex items-center gap-2"
-                          >
-                            <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
-                            <span className="font-mono text-gray-700 dark:text-gray-200">
-                              {Number(prob).toFixed(1)}%
-                            </span>
-                            <span className="leading-none">{renderFishRating(prob)}</span>
-                          </div>
-                        ))}
-
-                        {/* Toggle-Button */}
-                        {moreCount > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => toggle(idx)}
-                            aria-expanded={isOpen}
-                            className="px-2 py-1 rounded-md bg-white/50 dark:bg-black/10 border border-dashed border-gray-300/60 dark:border-white/20 text-sm hover:bg-white/70 dark:hover:bg-black/20 transition"
-                          >
-                            {isOpen ? "– ausblenden" : `+${moreCount} weitere`}
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Aufklappbarer Bereich für restliche Fischarten */}
-                      {moreCount > 0 && (
-                        <div
-                          className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
-                            isOpen ? "max-h-96 opacity-100 mt-2" : "max-h-0 opacity-0"
-                          }`}
-                          id={`more-fishes-${idx}`}
-                        >
-                          <div className="flex flex-wrap gap-2">
-                            {rest.map(([fish, prob]) => (
-                              <div
-                                key={fish}
-                                className="px-2 py-1 rounded-md bg-white/60 dark:bg-black/10 border border-gray-200/40 dark:border-white/10 text-sm flex items-center gap-2"
-                              >
-                                <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
-                                <span className="font-mono text-gray-700 dark:text-gray-200">
-                                  {Number(prob).toFixed(1)}%
-                                </span>
-                                <span className="leading-none">{renderFishRating(prob)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    loading ? (
-                      <FishChipsLoader />
-                    ) : (
-                      <div className="text-sm italic text-gray-500 dark:text-gray-300">
-                        Keine Fischarten-Prognose verfügbar.
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-    )}
-  
-
+        <DailyOutlookCard
+          dailyPredictions={dailyPredictions}
+          expanded={expanded}
+          onToggle={toggle}
+          loading={loading}
+        />
       </div>
     </PageContainer>
-  );
-}
-
-function getModelTrainingRows(aiPrediction) {
-  if (!aiPrediction || typeof aiPrediction !== "object") return [];
-
-  const rows = [
-    {
-      label: "Hauptmodell",
-      value: pickFirstFormattedDate(
-        aiPrediction?.trained_at,
-        aiPrediction?.model_trained_at,
-        aiPrediction?.last_trained_at,
-        aiPrediction?.models?.main?.trained_at,
-        aiPrediction?.models?.main?.model_trained_at,
-        aiPrediction?.models?.main?.last_trained_at,
-        aiPrediction?.stats?.trained_at,
-        aiPrediction?.stats?.model_trained_at,
-        aiPrediction?.stats?.last_trained_at,
-        aiPrediction?.metadata?.trained_at,
-        aiPrediction?.meta?.trained_at
-      ),
-    },
-    {
-      label: "Fischarten-Modell",
-      value: pickFirstFormattedDate(
-        aiPrediction?.models?.per_fish_type?.trained_at,
-        aiPrediction?.models?.species?.trained_at,
-        aiPrediction?.stats?.per_fish_model_trained_at,
-        aiPrediction?.stats?.species_model_trained_at,
-        aiPrediction?.metadata?.per_fish_model_trained_at
-      ),
-    },
-  ].filter((row) => !!row.value);
-
-  return rows;
-}
-
-function pickFirstFormattedDate(...candidates) {
-  for (const candidate of candidates) {
-    const formatted = formatDateTime(candidate);
-    if (formatted) return formatted;
-  }
-  return null;
-}
-
-function formatDateTime(value) {
-  if (value == null || value === "") return null;
-
-  let date = null;
-  if (typeof value === "number") {
-    const timestamp = value < 1_000_000_000_000 ? value * 1000 : value;
-    date = new Date(timestamp);
-  } else if (typeof value === "string") {
-    const asNumber = Number(value);
-    if (Number.isFinite(asNumber)) {
-      const timestamp = asNumber < 1_000_000_000_000 ? asNumber * 1000 : asNumber;
-      date = new Date(timestamp);
-    } else {
-      date = new Date(value);
-    }
-  } else if (value instanceof Date) {
-    date = value;
-  }
-
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
-
-  return date.toLocaleString("de-DE", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function VolatilityBadge({ v }) {
-  if (v < 3) return <span className="text-green-600 dark:text-green-400 font-semibold">✅ günstig</span>;
-  if (v < 6) return <span className="text-yellow-600 dark:text-yellow-300 font-semibold">⚠️ wechselhaft</span>;
-  return <span className="text-red-600 dark:text-red-400 font-semibold">❌ ungünstig</span>;
-}
-
-function formatMetric(value, unit) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return "n/a";
-  return `${num.toFixed(2)} ${unit}`;
-}
-
-function formatSignedMetric(value, unit) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return "n/a";
-  const sign = num > 0 ? "+" : "";
-  return `${sign}${num.toFixed(2)} ${unit}`;
-}
-
-function LoadingPanel({ label }) {
-  return (
-    <div className="py-3">
-      <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
-        <SegmentedSpinner className="h-5 w-5" />
-        <span>{label}</span>
-      </div>
-    </div>
-  );
-}
-
-function InitialForecastLoader() {
-  return (
-    <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6 mb-6">
-      <div className="bg-gray-100 dark:bg-gray-700 p-5 rounded-lg shadow-inner">
-        <div className="flex items-center gap-3 text-gray-700 dark:text-gray-200">
-          <SegmentedSpinner className="h-6 w-6" />
-          <span className="font-medium">Wetterdaten werden geladen...</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FishChipsLoader() {
-  return (
-    <div className="flex items-center gap-2">
-      <SegmentedSpinner className="h-4 w-4" />
-      <span className="text-xs text-gray-600 dark:text-gray-300">wird geladen...</span>
-    </div>
-  );
-}
-
-function SegmentedSpinner({ className = "h-5 w-5" }) {
-  const segments = 12;
-  return (
-    <span
-      className={`relative inline-block animate-spin ${className}`}
-      aria-hidden="true"
-    >
-      {Array.from({ length: segments }).map((_, i) => (
-        <span
-          // Segmentierter Spinner im Apple-Stil: rotierende, abgestufte Balken.
-          key={i}
-          className="absolute left-1/2 top-1/2 block h-[28%] w-[12%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-500 dark:bg-gray-300"
-          style={{
-            transform: `translate(-50%, -50%) rotate(${(360 / segments) * i}deg) translateY(-155%)`,
-            opacity: (i + 1) / segments,
-          }}
-        />
-      ))}
-    </span>
   );
 }
