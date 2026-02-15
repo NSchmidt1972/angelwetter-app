@@ -9,14 +9,9 @@ export default function Home() {
 
   return (
     <div className="p-4 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans">
-      {!weatherData && loading && (
-        <p className="text-gray-500 dark:text-gray-400 text-center">
-          Lade Wetterdaten…
-        </p>
-      )}
       {errorMessage && <p className="text-red-600 text-center">{errorMessage}</p>}
-      {weatherData && (
-        <WeatherNow data={weatherData} onRefresh={() => refresh()} />
+      {(weatherData || loading) && (
+        <WeatherNow data={weatherData} loading={loading} onRefresh={() => refresh()} />
       )}
     </div>
   );

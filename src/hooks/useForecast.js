@@ -89,12 +89,17 @@ function withModelTimestamps(prediction, modelInfo) {
   };
 }
 
+function isAbortError(error) {
+  return error?.name === "AbortError" || /aborted|abort/i.test(error?.message ?? "");
+}
+
 export function useForecast() {
   const [loading, setLoading] = useState(false);
   const [weatherData, setWeatherData] = useState(null);     // kompaktes current-Set
   const [aiPrediction, setAiPrediction] = useState(null);   // KI für jetzt
   const [dailyPredictions, setDailyPredictions] = useState([]); // 7-Tage inkl. KI
   const abortRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   const toModelInput = useCallback((src) => {
     const dt = src?.dt != null ? Number(src.dt) : null;
@@ -118,42 +123,78 @@ export function useForecast() {
   const load = useCallback(async () => {
     setLoading(true);
     abortRef.current?.abort();
-    abortRef.current = new AbortController();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
 
     try {
       const { current, daily } = await getLatestWeather();
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
 
       const currentModelIn = toModelInput({ ...current, moon_phase: daily?.[0]?.moon_phase ?? null });
       setWeatherData(currentModelIn);
+      setAiPrediction(null);
+
+      const safeDaily = Array.isArray(daily) ? daily : [];
+      setDailyPredictions(safeDaily.map((d) => ({ ...d, aiPrediction: null })));
 
       // "Jetzt"-Prognose und Tagesprognosen parallel laden.
-      // Tag 0 wird nicht doppelt gepredictet, sondern aus nowPrediction übernommen.
-      const dayInputs = daily.map(d => toModelInput(d));
+      // Wetterkarten sind bereits sichtbar; KI-Daten werden sukzessive eingepflegt.
+      const dayInputs = safeDaily.map((d) => toModelInput(d));
       const dayInputsWithoutNow = dayInputs.slice(1);
-      const [nowPredictionRaw, remainingDailyResults] = await Promise.all([
-        predictForWeather(currentModelIn, { signal: abortRef.current.signal }),
+
+      const nowTask = predictForWeather(currentModelIn, { signal: controller.signal })
+        .then((nowPredictionRaw) => {
+          if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+          const nowPrediction = withModelTimestamps(nowPredictionRaw, null);
+          setAiPrediction(nowPrediction);
+          setDailyPredictions((prev) => {
+            if (prev.length === 0) return prev;
+            const next = [...prev];
+            next[0] = { ...next[0], aiPrediction: nowPrediction };
+            return next;
+          });
+        })
+        .catch((e) => {
+          if (!isAbortError(e)) {
+            console.warn("⚠️ KI-Prognose für jetzt fehlgeschlagen:", e);
+          }
+          if (requestId === requestIdRef.current) setAiPrediction(null);
+        });
+
+      const batchTask =
         dayInputsWithoutNow.length > 0
-          ? predictBatch(dayInputsWithoutNow, { signal: abortRef.current.signal })
-          : Promise.resolve([]),
-      ]);
+          ? predictBatch(dayInputsWithoutNow, { signal: controller.signal })
+              .then((remainingDailyResults) => {
+                if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+                setDailyPredictions((prev) =>
+                  prev.map((day, i) => {
+                    if (i === 0) return day;
+                    const predictionRaw = remainingDailyResults[i - 1] ?? null;
+                    return {
+                      ...day,
+                      aiPrediction: withModelTimestamps(predictionRaw, null),
+                    };
+                  })
+                );
+              })
+              .catch((e) => {
+                if (!isAbortError(e)) {
+                  console.warn("⚠️ KI-Prognosen für 7-Tage-Ausblick fehlgeschlagen:", e);
+                }
+              })
+          : Promise.resolve();
 
-      const nowPrediction = withModelTimestamps(nowPredictionRaw, null);
-      setAiPrediction(nowPrediction);
-
-      const merged = daily.map((d, i) => {
-        const predictionRaw = i === 0 ? nowPredictionRaw : (remainingDailyResults[i - 1] ?? null);
-        return {
-          ...d,
-          aiPrediction: withModelTimestamps(predictionRaw, null),
-        };
-      });
-      setDailyPredictions(merged);
+      await Promise.all([nowTask, batchTask]);
     } catch (e) {
-      console.warn("⚠️ Forecast laden/predict fehlgeschlagen:", e);
+      if (!isAbortError(e)) {
+        console.warn("⚠️ Forecast laden/predict fehlgeschlagen:", e);
+      }
       setAiPrediction(null);
       setDailyPredictions([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [toModelInput]);
 

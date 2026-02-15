@@ -76,8 +76,10 @@ export default function AdminOverview() {
     return new Date(now.getFullYear(), 0, 1);
   });
   const [pageViewRows, setPageViewRows] = useState([]);
+  const [activeAnglerPageViewRows, setActiveAnglerPageViewRows] = useState([]);
   const [pageViewLoading, setPageViewLoading] = useState(false);
   const [pageViewError, setPageViewError] = useState('');
+  const [latestAppActivityByName, setLatestAppActivityByName] = useState({});
   const [pageViewLastLimit, setPageViewLastLimit] = useState(20);
   const [pageViewUniqueOpenPath, setPageViewUniqueOpenPath] = useState(null);
   const pageViewYearLabel = pageViewYearStart.getFullYear();
@@ -112,25 +114,6 @@ export default function AdminOverview() {
     },
     [navLabelMap],
   );
-
-  const formatBuildLabel = useCallback((value) => {
-    if (!value || typeof value !== 'string') return null;
-    if (value === 'dev') return 'dev';
-
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})\.(\d{2})(\d{2})(?:\+.+)?$/);
-    if (!match) return value;
-
-    const [, year, month, day, hh, mm] = match;
-    const asDate = new Date(Date.UTC(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hh),
-      Number(mm),
-    ));
-
-    return formatDateTime(asDate);
-  }, []);
 
   const formatDateTimeLabel = (value) => {
     const parsed = parseTimestamp(value);
@@ -213,26 +196,6 @@ export default function AdminOverview() {
     () => (APP_VERSION ? String(APP_VERSION).trim() : null),
     [],
   );
-  const pageViewLastEvents = useMemo(
-    () => filteredPageViewRows.slice(0, pageViewLastLimit).map((row, idx) => {
-      const metadata = row && typeof row === 'object' ? row.metadata : null;
-      const metadataObj = metadata && typeof metadata === 'object' ? metadata : null;
-      const build = metadataObj?.build || metadataObj?.version || null;
-
-      return {
-        ...row,
-        label: labelForPath(row.path),
-        buildLabel: build,
-        buildDisplay: formatBuildLabel(build),
-        matchesCurrentBuild: (() => {
-          const trimmed = build ? String(build).trim() : '';
-          return Boolean(trimmed) && Boolean(currentBuildLabel) && trimmed === currentBuildLabel;
-        })(),
-        key: `${row.created_at || idx}-${row.session_id || 'sess'}`,
-      };
-    }),
-    [filteredPageViewRows, labelForPath, formatBuildLabel, currentBuildLabel, pageViewLastLimit],
-  );
   const pageViewTopAnglers = useMemo(() => {
     const stats = new Map();
 
@@ -251,7 +214,16 @@ export default function AdminOverview() {
       stats.set(name, entry);
     });
 
-    return [...stats.values()]
+    const merged = [...stats.values()].map((entry) => {
+      const key = normalizeName(entry.name);
+      const latestAppTs = parseTimestamp(latestAppActivityByName?.[key]);
+      if (latestAppTs && (!entry.lastSeen || latestAppTs > entry.lastSeen)) {
+        return { ...entry, lastSeen: latestAppTs };
+      }
+      return entry;
+    });
+
+    return merged
       .sort((a, b) => {
         if (b.total !== a.total) return b.total - a.total;
         const timeDiff = (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0);
@@ -259,12 +231,62 @@ export default function AdminOverview() {
         return a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
       })
       .slice(0, 20);
-  }, [filteredPageViewRows]);
+  }, [filteredPageViewRows, latestAppActivityByName]);
+  const pageViewLastEvents = useMemo(() => {
+    const latestPageByAngler = new Map();
+    filteredPageViewRows.forEach((row) => {
+      const rawName = typeof row?.angler === 'string' ? row.angler.trim() : '';
+      if (!rawName) return;
+      const key = normalizeName(rawName);
+      if (!key) return;
+      const rowTs = parseTimestamp(row?.created_at);
+      if (!rowTs) return;
+      const prev = latestPageByAngler.get(key);
+      const prevTs = parseTimestamp(prev?.created_at);
+      if (!prevTs || rowTs > prevTs) {
+        latestPageByAngler.set(key, row);
+      }
+    });
+
+    const events = pageViewTopAnglers.map((entry, idx) => {
+      const key = normalizeName(entry.name);
+      const pageRow = latestPageByAngler.get(key);
+      const metadataObj = pageRow?.metadata && typeof pageRow.metadata === 'object'
+        ? pageRow.metadata
+        : null;
+      const build = metadataObj?.build || metadataObj?.version || null;
+      const createdAt = parseTimestamp(entry.lastSeen);
+      return {
+        kind: 'top_activity',
+        key: `top-${key || idx}-${idx}`,
+        angler: entry.name,
+        label: pageRow?.path ? labelForPath(pageRow.path) : 'Seite unbekannt',
+        path: pageRow?.path || null,
+        created_at: createdAt ? createdAt.toISOString() : null,
+        matchesCurrentBuild: (() => {
+          const trimmed = build ? String(build).trim() : '';
+          return Boolean(trimmed) && Boolean(currentBuildLabel) && trimmed === currentBuildLabel;
+        })(),
+      };
+    });
+
+    return events
+      .sort(
+        (a, b) =>
+          (parseTimestamp(b?.created_at)?.getTime() || 0) -
+          (parseTimestamp(a?.created_at)?.getTime() || 0)
+      )
+      .slice(0, pageViewLastLimit);
+  }, [pageViewTopAnglers, filteredPageViewRows, labelForPath, currentBuildLabel, pageViewLastLimit]);
+  const pageViewLastEventsSourceCount = pageViewTopAnglers.length;
 
   useEffect(() => {
     async function loadData() {
       try {
         const clubId = getActiveClubId();
+        const sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const sinceIso = sinceDate.toISOString();
+        const pageViewYearStartIso = pageViewYearStart.toISOString();
         const { data: weatherData } = await supabase
           .from('weather_cache')
           .select('updated_at')
@@ -278,25 +300,108 @@ export default function AdminOverview() {
 
         const { data: users } = await supabase
           .from('user_activity')
-          .select('user_id, last_active')
-          .eq('club_id', clubId)
-          .gt(
-            'last_active',
-            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-          );
+          .select('user_id, angler_name, last_active')
+          .eq('club_id', clubId);
 
-        const userIds = users.map((u) => u.user_id);
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', userIds);
-        const enriched = users
-          .map((u) => {
-            const match = profiles.find((p) => p.id === u.user_id);
-            return match ? { ...u, name: match.name } : null;
-          })
-          .filter(Boolean);
-        setActiveUsers(enriched);
+        const safeUsers = Array.isArray(users) ? users : [];
+        const userIds = safeUsers.map((u) => u?.user_id).filter(Boolean);
+        let profileById = new Map();
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, name')
+            .in('id', userIds);
+          profileById = new Map((profiles || []).map((p) => [p.id, p.name]));
+        }
+
+        // Aktivität nicht nur aus user_activity, sondern auch aus echten Sessions (inkl. Schneider).
+        const activeByName = new Map();
+        const latestByName = new Map();
+
+        const upsertLatest = (rawName, rawTimestamp) => {
+          const name = String(rawName || '').trim();
+          if (!name) return;
+          const parsed = parseTimestamp(rawTimestamp);
+          if (!parsed) return;
+          const key = normalizeName(name);
+          if (!key) return;
+          const prev = latestByName.get(key);
+          if (!prev || parsed > prev.lastActive) {
+            latestByName.set(key, {
+              name,
+              lastActive: parsed,
+            });
+          }
+        };
+
+        const upsertActive = (rawName, rawTimestamp) => {
+          const name = String(rawName || '').trim();
+          if (!name) return;
+          const parsed = parseTimestamp(rawTimestamp);
+          if (!parsed) return;
+          const key = normalizeName(name);
+          if (!key) return;
+          const prev = activeByName.get(key);
+          if (!prev || parsed > prev.lastActive) {
+            activeByName.set(key, {
+              name,
+              lastActive: parsed,
+            });
+          }
+        };
+
+        safeUsers.forEach((entry) => {
+          const profileName = entry?.user_id ? profileById.get(entry.user_id) : null;
+          const resolvedName = profileName || entry?.angler_name || null;
+          const parsedLastActive = parseTimestamp(entry?.last_active);
+          upsertLatest(resolvedName, entry?.last_active);
+          if (parsedLastActive && parsedLastActive > sinceDate) {
+            upsertActive(resolvedName, entry?.last_active);
+          }
+        });
+
+        const { data: sessionsForTopAnglers } = await supabase
+          .from('fishes')
+          .select('angler, timestamp')
+          .eq('club_id', clubId)
+          .gte('timestamp', pageViewYearStartIso)
+          .order('timestamp', { ascending: false })
+          .limit(5000);
+
+        (sessionsForTopAnglers || []).forEach((entry) => {
+          upsertLatest(entry?.angler, entry?.timestamp);
+        });
+
+        setLatestAppActivityByName(
+          Object.fromEntries(
+            [...latestByName.entries()].map(([key, entry]) => [key, entry.lastActive.toISOString()])
+          )
+        );
+
+        const { data: recentSessions } = await supabase
+          .from('fishes')
+          .select('angler, timestamp, blank, fish')
+          .eq('club_id', clubId)
+          .gt('timestamp', sinceIso)
+          .order('timestamp', { ascending: false })
+          .limit(1000);
+
+        (recentSessions || []).forEach((entry) => {
+          upsertActive(entry?.angler, entry?.timestamp);
+        });
+
+        setActiveUsers(
+          [...activeByName.values()]
+            .map((entry) => ({
+              name: entry.name,
+              last_active: entry.lastActive.toISOString(),
+            }))
+            .sort(
+              (a, b) =>
+                (parseTimestamp(b.last_active)?.getTime() || 0) -
+                (parseTimestamp(a.last_active)?.getTime() || 0)
+            )
+        );
 
         // ⬇️ Entnommene Fische (taken = true)
         const { data: taken } = await supabase
@@ -334,10 +439,7 @@ export default function AdminOverview() {
           .select('angler, timestamp')
           .eq('club_id', clubId)
           .eq('blank', true)
-          .gt(
-            'timestamp',
-            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-          )
+          .gt('timestamp', sinceIso)
           .order('timestamp', { ascending: false });
         setRecentBlanks(blanks);
 
@@ -470,6 +572,52 @@ export default function AdminOverview() {
   }, [pageViewYearStart]);
 
   useEffect(() => {
+    let active = true;
+
+    async function loadActiveAnglerPageViews() {
+      const activeNames = [...new Set(
+        (activeUsers || [])
+          .map((u) => (typeof u?.name === 'string' ? u.name.trim() : ''))
+          .filter(Boolean)
+      )];
+
+      if (activeNames.length === 0) {
+        setActiveAnglerPageViewRows([]);
+        return;
+      }
+
+      const since = pageViewYearStart.toISOString();
+      const { data, error } = await supabase
+        .from('page_views')
+        .select('path, full_path, angler, session_id, created_at, metadata')
+        .in('angler', activeNames)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_VIEW_LIMIT);
+
+      if (!active) return;
+      if (error) {
+        console.error('PageViews (aktive Angler): Laden fehlgeschlagen', error);
+        setActiveAnglerPageViewRows([]);
+        return;
+      }
+
+      const safeRows = Array.isArray(data) ? data : [];
+      const rows = safeRows.filter((row) => {
+        const anglerKey = normalizeName(row?.angler);
+        if (anglerKey && EXCLUDED_PAGE_VIEW_ANGLERS.has(anglerKey)) return false;
+        return true;
+      });
+      setActiveAnglerPageViewRows(rows);
+    }
+
+    loadActiveAnglerPageViews();
+    return () => {
+      active = false;
+    };
+  }, [activeUsers, pageViewYearStart]);
+
+  useEffect(() => {
     setPageViewLastLimit(20);
   }, [filteredPageViewRows.length]);
 
@@ -542,7 +690,7 @@ export default function AdminOverview() {
         )}
       </Section>
 
-      <Section title="👥 Aktive User (7 Tage)" value={`${activeUsers.length} aktive Nutzer`}>
+      <Section title="👥 Aktive Angler (7 Tage)" value={`${activeUsers.length} aktive Angler`}>
         <div className="max-h-60 overflow-y-auto">
           <ul className={listItemClass}>
             {activeUsers
@@ -802,11 +950,11 @@ export default function AdminOverview() {
                     </table>
                   </div>
                 )}
-                {filteredPageViewRows.length > pageViewLastLimit && (
+                {pageViewLastEventsSourceCount > pageViewLastLimit && (
                   <div className="mt-3 text-center">
                     <button
                       type="button"
-                      onClick={() => setPageViewLastLimit((limit) => Math.min(limit + 20, filteredPageViewRows.length))}
+                      onClick={() => setPageViewLastLimit((limit) => Math.min(limit + 20, pageViewLastEventsSourceCount))}
                       className="inline-flex items-center justify-center rounded border border-blue-500 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-600 transition hover:bg-blue-50 dark:border-blue-400 dark:text-blue-300 dark:hover:bg-blue-400/10"
                     >
                       Mehr anzeigen

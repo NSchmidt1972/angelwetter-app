@@ -44,6 +44,10 @@ MAIN_MIN_SPECIES_POSITIVE_SAMPLES = 10
 WEATHER_LOG_CACHE_TTL_SECONDS = max(0, int(os.getenv("WEATHER_LOG_CACHE_TTL_SECONDS", "90")))
 FISH_STATS_CACHE_TTL_SECONDS = max(0, int(os.getenv("FISH_STATS_CACHE_TTL_SECONDS", "300")))
 MAX_WEATHER_LOG_CACHE_ENTRIES = max(1, int(os.getenv("MAX_WEATHER_LOG_CACHE_ENTRIES", "16")))
+PRESSURE_PA_THRESHOLD = 2000.0
+PRESSURE_HPA_MIN = 850.0
+PRESSURE_HPA_MAX = 1100.0
+PRESSURE_TREND_CLIP_HPA_PER_DAY = 25.0
 
 SPECIES_PROFILE = {
     "aal": {"active_months": [5, 6, 7, 8, 9], "min_temp": 12, "type": "warm"},
@@ -90,6 +94,31 @@ def load_model_metadata():
     except Exception as error:
         print("⚠️ model_metadata.json konnte nicht gelesen werden:", repr(error))
         return {}
+
+def normalize_pressure_to_hpa(value) -> float:
+    try:
+        pressure = float(value)
+    except Exception:
+        return np.nan
+
+    if not np.isfinite(pressure):
+        return np.nan
+
+    if PRESSURE_PA_THRESHOLD < abs(pressure) < 200_000:
+        pressure = pressure / 100.0
+
+    if pressure < PRESSURE_HPA_MIN or pressure > PRESSURE_HPA_MAX:
+        return np.nan
+
+    return float(pressure)
+
+def normalize_pressure_series(values) -> pd.Series:
+    if values is None:
+        return pd.Series(dtype=float)
+    numeric = pd.to_numeric(values, errors="coerce")
+    if isinstance(numeric, pd.Series):
+        return numeric.apply(normalize_pressure_to_hpa)
+    return pd.Series([normalize_pressure_to_hpa(numeric)], dtype=float)
 
 model           = load_model(main_model_file)
 main_from_species_model = load_model(main_from_species_model_file)
@@ -224,23 +253,111 @@ class WeatherInput(BaseModel):
 # ──────────────────────────────────────────────────────────────────────────────
 # Trendberechnung
 # ──────────────────────────────────────────────────────────────────────────────
-def berechne_steigung(df: pd.DataFrame) -> float:
+def berechne_steigung(df: pd.DataFrame, with_meta: bool = False):
     if len(df) < 3:
+        if with_meta:
+            return 0.0, {"raw": 0.0, "clipped": False, "points": 0}
         return 0.0
     df = df.sort_values("timestamp").copy()
+    df["pressure"] = normalize_pressure_series(df["pressure"])
+    df = df.dropna(subset=["timestamp", "pressure"]).copy()
+    if len(df) < 3:
+        if with_meta:
+            return 0.0, {"raw": 0.0, "clipped": False, "points": int(len(df))}
+        return 0.0
     df["timestamp_unix"] = df["timestamp"].astype("int64") // 10**9
     slope, *_ = linregress(df["timestamp_unix"], df["pressure"])
-    # auf hPa/Tag umrechnen
-    return round(float(slope) * 60 * 60 * 24, 2)
+    # auf hPa/Tag umrechnen und robuste Grenzen setzen (Mess-/Einheiten-Ausreißer)
+    raw_trend_hpa_per_day = float(slope) * 60 * 60 * 24
+    if not np.isfinite(raw_trend_hpa_per_day):
+        if with_meta:
+            return 0.0, {"raw": 0.0, "clipped": False, "points": int(len(df))}
+        return 0.0
+    clipped_trend_hpa_per_day = float(np.clip(
+        raw_trend_hpa_per_day,
+        -PRESSURE_TREND_CLIP_HPA_PER_DAY,
+        PRESSURE_TREND_CLIP_HPA_PER_DAY,
+    ))
+    clipped = abs(raw_trend_hpa_per_day - clipped_trend_hpa_per_day) > 1e-9
+    if with_meta:
+        return round(clipped_trend_hpa_per_day, 2), {
+            "raw": round(raw_trend_hpa_per_day, 2),
+            "clipped": clipped,
+            "points": int(len(df)),
+        }
+    return round(clipped_trend_hpa_per_day, 2)
+
+def nearest_delta_with_lookback(
+    df: pd.DataFrame,
+    value_col: str,
+    lookback_hours: int = 24,
+    tolerance_hours: int = 6,
+):
+    if df.empty or value_col not in df.columns:
+        return None
+
+    work = df.dropna(subset=["timestamp", value_col]).sort_values("timestamp").copy()
+    if len(work) < 2:
+        return None
+
+    latest = work.iloc[-1]
+    latest_ts = latest["timestamp"]
+    target_ts = latest_ts - pd.Timedelta(hours=lookback_hours)
+
+    deltas = (work["timestamp"] - target_ts).abs()
+    nearest_idx = deltas.idxmin()
+    nearest = work.loc[nearest_idx]
+    diff_hours = abs((nearest["timestamp"] - target_ts).total_seconds()) / 3600
+    if diff_hours > tolerance_hours:
+        return None
+
+    latest_val = float(latest[value_col])
+    past_val = float(nearest[value_col])
+    delta = latest_val - past_val
+    if not np.isfinite(delta):
+        return None
+    return round(delta, 2)
 
 def berechne_trend(ts: pd.Timestamp, weather_log: pd.DataFrame) -> dict:
-    df_pressure = weather_log[(weather_log["timestamp"] >= ts - pd.Timedelta(days=5)) & (weather_log["timestamp"] < ts)]
-    df_temp     = weather_log[(weather_log["timestamp"] >= ts - pd.Timedelta(days=3)) & (weather_log["timestamp"] < ts)]
+    df_pressure = weather_log[(weather_log["timestamp"] >= ts - pd.Timedelta(days=5)) & (weather_log["timestamp"] < ts)].copy()
+    df_temp     = weather_log[(weather_log["timestamp"] >= ts - pd.Timedelta(days=3)) & (weather_log["timestamp"] < ts)].copy()
+    df_pressure_48h = weather_log[(weather_log["timestamp"] >= ts - pd.Timedelta(hours=48)) & (weather_log["timestamp"] < ts)].copy()
+
+    pressure_trend_5d, pressure_meta = berechne_steigung(df_pressure, with_meta=True)
+    pressure_delta_24h = nearest_delta_with_lookback(df_pressure, "pressure", lookback_hours=24, tolerance_hours=6)
+    temp_delta_24h = nearest_delta_with_lookback(df_temp, "temp", lookback_hours=24, tolerance_hours=6)
+
+    pressure_volatility_48h = None
+    if "pressure" in df_pressure_48h.columns:
+        pressure_48h = normalize_pressure_series(df_pressure_48h["pressure"]).dropna()
+        if len(pressure_48h) >= 3:
+            volatility = float(pressure_48h.std())
+            pressure_volatility_48h = round(volatility, 2) if np.isfinite(volatility) else None
+
+    temp_mean_3d = float(df_temp["temp"].mean()) if len(df_temp) >= 2 else 0.0
+    temp_volatility_3d = float(df_temp["temp"].std()) if len(df_temp) >= 2 else 0.0
+    if not np.isfinite(temp_mean_3d):
+        temp_mean_3d = 0.0
+    if not np.isfinite(temp_volatility_3d):
+        temp_volatility_3d = 0.0
+
+    trend_quality = "ok"
+    if pressure_meta.get("clipped"):
+        trend_quality = "limited_clipped"
+    elif pressure_meta.get("points", 0) < 24:
+        trend_quality = "limited_sparse"
 
     return {
-        "pressure_trend_5d": berechne_steigung(df_pressure),
-        "temp_mean_3d": float(df_temp["temp"].mean()) if len(df_temp) >= 2 else 0.0,
-        "temp_volatility_3d": float(df_temp["temp"].std()) if len(df_temp) >= 2 else 0.0,
+        "pressure_trend_5d": pressure_trend_5d,
+        "pressure_trend_raw_5d": pressure_meta.get("raw", pressure_trend_5d),
+        "pressure_trend_clipped": bool(pressure_meta.get("clipped", False)),
+        "pressure_points_5d": int(pressure_meta.get("points", 0)),
+        "pressure_delta_24h": pressure_delta_24h,
+        "pressure_volatility_48h": pressure_volatility_48h,
+        "temp_mean_3d": temp_mean_3d,
+        "temp_volatility_3d": temp_volatility_3d,
+        "temp_delta_24h": temp_delta_24h,
+        "quality": trend_quality,
     }
 
 def empty_weather_log_frame() -> pd.DataFrame:
@@ -277,7 +394,7 @@ def get_weather_log_window_cached(start_ts: pd.Timestamp, end_ts: pd.Timestamp) 
         else:
             frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
             frame["temp"] = pd.to_numeric(frame.get("temp"), errors="coerce")
-            frame["pressure"] = pd.to_numeric(frame.get("pressure"), errors="coerce")
+            frame["pressure"] = normalize_pressure_series(frame.get("pressure"))
             frame = frame.dropna(subset=["timestamp"]).copy()
             if "temp" not in frame.columns:
                 frame["temp"] = np.nan
@@ -643,8 +760,15 @@ async def predict(input_data: WeatherInput):
     # damit die Trendberechnung weiterhin auf realen Messdaten basiert.
     trend = {
         "pressure_trend_5d": 0.0,
+        "pressure_trend_raw_5d": 0.0,
+        "pressure_trend_clipped": False,
+        "pressure_points_5d": 0,
+        "pressure_delta_24h": None,
+        "pressure_volatility_48h": None,
         "temp_mean_3d": 0.0,
         "temp_volatility_3d": 0.0,
+        "temp_delta_24h": None,
+        "quality": "limited_sparse",
     }
     weather_log = get_weather_log_window_cached(
         trend_end_ts - pd.Timedelta(days=5),
@@ -656,7 +780,7 @@ async def predict(input_data: WeatherInput):
     # Gemeinsames Feature-Dict
     feature_dict = {
         "temp": input_data.temp,
-        "pressure": input_data.pressure,
+        "pressure": float(np.nan_to_num(normalize_pressure_to_hpa(input_data.pressure), nan=-1.0)),
         "humidity": input_data.humidity,
         "wind": input_data.wind,
         "wind_deg": input_data.wind_deg,

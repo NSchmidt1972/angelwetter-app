@@ -67,6 +67,10 @@ MAIN_CALIBRATION_PRIOR = 0.50
 MAIN_META_CALIBRATION_CAP = 0.90
 MAIN_BASE_CALIBRATION_CAP = 0.94
 SPECIES_CALIBRATION_CAP = 0.92
+PRESSURE_PA_THRESHOLD = 2000.0
+PRESSURE_HPA_MIN = 850.0
+PRESSURE_HPA_MAX = 1100.0
+PRESSURE_TREND_CLIP_HPA_PER_DAY = 25.0
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -110,16 +114,55 @@ def to_numeric_series(df, col_name, default=-1.0):
         return pd.to_numeric(df[col_name], errors="coerce").fillna(default).astype(float)
     return pd.Series(default, index=df.index, dtype=float)
 
+def normalize_pressure_to_hpa(value):
+    try:
+        pressure = float(value)
+    except Exception:
+        return np.nan
+
+    if not np.isfinite(pressure):
+        return np.nan
+
+    if PRESSURE_PA_THRESHOLD < abs(pressure) < 200_000:
+        pressure = pressure / 100.0
+
+    if pressure < PRESSURE_HPA_MIN or pressure > PRESSURE_HPA_MAX:
+        return np.nan
+
+    return float(pressure)
+
+def normalize_pressure_series(values):
+    if values is None:
+        return pd.Series(dtype=float)
+    numeric = pd.to_numeric(values, errors="coerce")
+    if isinstance(numeric, pd.Series):
+        return numeric.apply(normalize_pressure_to_hpa)
+    return pd.Series([normalize_pressure_to_hpa(numeric)], dtype=float)
+
+def normalize_pressure_feature_series(values, fallback=-1.0):
+    normalized = normalize_pressure_series(values)
+    return normalized.fillna(float(fallback)).astype(float)
+
 
 def berechne_steigung(df):
     if len(df) < 3:
         return 0.0
     df = df.dropna(subset=["timestamp", "pressure"]).sort_values("timestamp").copy()
+    df["pressure"] = normalize_pressure_series(df["pressure"])
+    df = df.dropna(subset=["timestamp", "pressure"]).copy()
     if len(df) < 3:
         return 0.0
     df["timestamp_unix"] = df["timestamp"].astype("int64") // 10**9
     slope, *_ = linregress(df["timestamp_unix"], df["pressure"])
-    return round(float(slope) * 60 * 60 * 24, 2)
+    trend_hpa_per_day = float(slope) * 60 * 60 * 24
+    if not np.isfinite(trend_hpa_per_day):
+        return 0.0
+    trend_hpa_per_day = float(np.clip(
+        trend_hpa_per_day,
+        -PRESSURE_TREND_CLIP_HPA_PER_DAY,
+        PRESSURE_TREND_CLIP_HPA_PER_DAY,
+    ))
+    return round(trend_hpa_per_day, 2)
 
 
 def trend_features_for_ts(ts, weather_log):
@@ -489,7 +532,7 @@ weather_log = pd.DataFrame(resp_log.data or [])
 if not weather_log.empty:
     weather_log["timestamp"] = pd.to_datetime(weather_log["timestamp"], utc=True, errors="coerce")
     weather_log = weather_log.dropna(subset=["timestamp"]).reset_index(drop=True)
-    weather_log["pressure"] = to_numeric_series(weather_log, "pressure", default=np.nan)
+    weather_log["pressure"] = normalize_pressure_series(weather_log.get("pressure"))
     weather_log["temp"] = to_numeric_series(weather_log, "temp", default=np.nan)
 else:
     weather_log = pd.DataFrame(columns=["timestamp", "pressure", "temp"])
@@ -515,6 +558,7 @@ if "weather" not in fish_data.columns:
 
 fish_data["temp"] = fish_data["weather"].apply(lambda w: weather_metric(w, "temp", -1))
 fish_data["pressure"] = fish_data["weather"].apply(lambda w: weather_metric(w, "pressure", -1))
+fish_data["pressure"] = normalize_pressure_feature_series(fish_data["pressure"], fallback=-1.0)
 fish_data["humidity"] = fish_data["weather"].apply(lambda w: weather_metric(w, "humidity", -1))
 fish_data["wind"] = fish_data["weather"].apply(lambda w: weather_metric(w, "wind", -1))
 fish_data["wind_deg"] = fish_data["weather"].apply(lambda w: weather_metric(w, "wind_deg", -1))
@@ -539,6 +583,7 @@ blank_data = add_time_features(blank_data)
 
 blank_data["temp"] = to_numeric_series(blank_data, "temp", -1)
 blank_data["pressure"] = to_numeric_series(blank_data, "pressure", -1)
+blank_data["pressure"] = normalize_pressure_feature_series(blank_data["pressure"], fallback=-1.0)
 blank_data["humidity"] = to_numeric_series(blank_data, "humidity", -1)
 if "wind_speed" in blank_data.columns:
     blank_data["wind"] = to_numeric_series(blank_data, "wind_speed", -1)

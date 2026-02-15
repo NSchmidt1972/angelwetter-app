@@ -6,7 +6,7 @@ import PageContainer from "../components/PageContainer";
 
 
 export default function Forecast() {
-  const { weatherData, aiPrediction, dailyPredictions } = useForecast();
+  const { weatherData, aiPrediction, dailyPredictions, loading } = useForecast();
   const modelTrainingRows = getModelTrainingRows(aiPrediction);
 
         
@@ -28,79 +28,107 @@ export default function Forecast() {
       </p>
 
       <div className="max-w-2xl mx-auto">
-        {weatherData && aiPrediction ? (
+        {weatherData ? (
           <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6 mb-6">
             <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg shadow-inner">
               <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">🤖 KI-Prognose</h3>
 
-              <p className="text-xl text-blue-700 dark:text-blue-300 font-bold">
-                🎯 Fangwahrscheinlichkeit: {formatPercent(aiPrediction.probability, 0)}{" "}
-                {renderFishRating(aiPrediction.probability)}
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidersession wahrscheinlich"}
-              </p>
-
-              {aiPrediction.stats && (
-                <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
-                  <h4 className="font-semibold mb-1">🧮 Trainingsdaten</h4>
-                  <ul className="ml-2 list-disc list-inside space-y-1">
-                    <li>Gesamtanzahl: {aiPrediction.stats.total_samples}</li>
-                    <li>🎣 Fänge: {aiPrediction.stats.positive_samples}</li>
-                    <li>❌ Schneidersessions: {aiPrediction.stats.negative_samples}</li>
-                  </ul>
-                </div>
-              )}
-
-              <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
-                <h4 className="font-semibold mb-1">🕒 Modellstand</h4>
-                {modelTrainingRows.length > 0 ? (
-                  <ul className="ml-2 list-disc list-inside space-y-1">
-                    {modelTrainingRows.map((row) => (
-                      <li key={row.label}>
-                        {row.label}: {row.value}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs italic text-gray-500 dark:text-gray-400">
-                    Zeitstempel der trainierten Modelle wird vom KI-Service aktuell nicht mitgeliefert.
+              {aiPrediction ? (
+                <>
+                  <p className="text-xl text-blue-700 dark:text-blue-300 font-bold">
+                    🎯 Fangwahrscheinlichkeit: {formatPercent(aiPrediction.probability, 0)}{" "}
+                    {renderFishRating(aiPrediction.probability)}
                   </p>
-                )}
-              </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                    {aiPrediction.prediction === 1 ? "Fang wahrscheinlich" : "Schneidersession wahrscheinlich"}
+                  </p>
 
-              <div className="text-sm text-gray-700 dark:text-gray-300">
-                <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
-                <div className="space-y-2">
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                    <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
-                    <div className="ml-2">{getPressureTrendLabel(aiPrediction?.trend?.pressure_trend_5d)}</div>
+                  {aiPrediction.stats && (
+                    <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+                      <h4 className="font-semibold mb-1">🧮 Trainingsdaten</h4>
+                      <ul className="ml-2 list-disc list-inside space-y-1">
+                        <li>Gesamtanzahl: {aiPrediction.stats.total_samples}</li>
+                        <li>🎣 Fänge: {aiPrediction.stats.positive_samples}</li>
+                        <li>❌ Schneidersessions: {aiPrediction.stats.negative_samples}</li>
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+                    <h4 className="font-semibold mb-1">🕒 Modellstand</h4>
+                    {modelTrainingRows.length > 0 ? (
+                      <ul className="ml-2 list-disc list-inside space-y-1">
+                        {modelTrainingRows.map((row) => (
+                          <li key={row.label}>
+                            {row.label}: {row.value}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs italic text-gray-500 dark:text-gray-400">
+                        Zeitstempel der trainierten Modelle wird vom KI-Service aktuell nicht mitgeliefert.
+                      </p>
+                    )}
                   </div>
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                    <div className="font-medium">Temp-Mittel (3 Tage):</div>
-                    <div className="ml-2">
-                      {aiPrediction?.trend?.temp_mean_3d != null ? `${aiPrediction.trend.temp_mean_3d.toFixed(2)} °C` : "n/a"}
+
+                  <div className="text-sm text-gray-700 dark:text-gray-300">
+                    <h4 className="font-semibold mb-1">📈 Trenddaten</h4>
+                    <div className="space-y-2">
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+                        <div className="font-medium">Luftdruck-Trend (5 Tage):</div>
+                        <div className="ml-2">{getPressureTrendLabel(aiPrediction?.trend?.pressure_trend_5d)}</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+                        <div className="font-medium">Luftdruck-Änderung (24h):</div>
+                        <div className="ml-2">{formatSignedMetric(aiPrediction?.trend?.pressure_delta_24h, "hPa")}</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+                        <div className="font-medium">Luftdruck-Schwankung (48h):</div>
+                        <div className="ml-2">{formatMetric(aiPrediction?.trend?.pressure_volatility_48h, "hPa")}</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+                        <div className="font-medium">Temp-Mittel (3 Tage):</div>
+                        <div className="ml-2">
+                          {aiPrediction?.trend?.temp_mean_3d != null ? `${aiPrediction.trend.temp_mean_3d.toFixed(2)} °C` : "n/a"}
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+                        <div className="font-medium">Temp-Volatilität (3 Tage):</div>
+                        <div className="ml-2 flex items-center gap-2">
+                          {aiPrediction?.trend?.temp_volatility_3d != null ? (
+                            <>
+                              <span>{aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C</span>
+                              <VolatilityBadge v={aiPrediction.trend.temp_volatility_3d} />
+                            </>
+                          ) : ("n/a")}
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
+                        <div className="font-medium">Temp-Änderung (24h):</div>
+                        <div className="ml-2">{formatSignedMetric(aiPrediction?.trend?.temp_delta_24h, "°C")}</div>
+                      </div>
                     </div>
                   </div>
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                    <div className="font-medium">Temp-Volatilität (3 Tage):</div>
-                    <div className="ml-2 flex items-center gap-2">
-                      {aiPrediction?.trend?.temp_volatility_3d != null ? (
-                        <>
-                          <span>{aiPrediction.trend.temp_volatility_3d.toFixed(2)} °C</span>
-                          <VolatilityBadge v={aiPrediction.trend.temp_volatility_3d} />
-                        </>
-                      ) : ("n/a")}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                </>
+                ) : (
+                  loading ? (
+                    <LoadingPanel label="KI-Prognose wird berechnet..." />
+                  ) : (
+                    <p className="text-sm italic text-gray-500 dark:text-gray-300">
+                      KI-Prognose aktuell nicht verfügbar.
+                    </p>
+                  )
+                )}
             </div>
 
             
           </div>
         ) : (
-          <p className="text-center text-gray-500 dark:text-gray-400">Lade KI-Prognose…</p>
+          loading ? (
+            <InitialForecastLoader />
+          ) : (
+            <p className="text-center text-gray-500 dark:text-gray-400">Wetterdaten konnten nicht geladen werden.</p>
+          )
         )}
 
 
@@ -210,9 +238,13 @@ export default function Forecast() {
                       )}
                     </>
                   ) : (
-                    <div className="text-sm italic text-gray-500 dark:text-gray-300">
-                      Keine Fischarten-Prognose verfügbar.
-                    </div>
+                    loading ? (
+                      <FishChipsLoader />
+                    ) : (
+                      <div className="text-sm italic text-gray-500 dark:text-gray-300">
+                        Keine Fischarten-Prognose verfügbar.
+                      </div>
+                    )
                   )}
                 </div>
               </div>
@@ -305,4 +337,72 @@ function VolatilityBadge({ v }) {
   if (v < 3) return <span className="text-green-600 dark:text-green-400 font-semibold">✅ günstig</span>;
   if (v < 6) return <span className="text-yellow-600 dark:text-yellow-300 font-semibold">⚠️ wechselhaft</span>;
   return <span className="text-red-600 dark:text-red-400 font-semibold">❌ ungünstig</span>;
+}
+
+function formatMetric(value, unit) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "n/a";
+  return `${num.toFixed(2)} ${unit}`;
+}
+
+function formatSignedMetric(value, unit) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "n/a";
+  const sign = num > 0 ? "+" : "";
+  return `${sign}${num.toFixed(2)} ${unit}`;
+}
+
+function LoadingPanel({ label }) {
+  return (
+    <div className="py-3">
+      <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+        <SegmentedSpinner className="h-5 w-5" />
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function InitialForecastLoader() {
+  return (
+    <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6 mb-6">
+      <div className="bg-gray-100 dark:bg-gray-700 p-5 rounded-lg shadow-inner">
+        <div className="flex items-center gap-3 text-gray-700 dark:text-gray-200">
+          <SegmentedSpinner className="h-6 w-6" />
+          <span className="font-medium">Wetterdaten werden geladen...</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FishChipsLoader() {
+  return (
+    <div className="flex items-center gap-2">
+      <SegmentedSpinner className="h-4 w-4" />
+      <span className="text-xs text-gray-600 dark:text-gray-300">wird geladen...</span>
+    </div>
+  );
+}
+
+function SegmentedSpinner({ className = "h-5 w-5" }) {
+  const segments = 12;
+  return (
+    <span
+      className={`relative inline-block animate-spin ${className}`}
+      aria-hidden="true"
+    >
+      {Array.from({ length: segments }).map((_, i) => (
+        <span
+          // Segmentierter Spinner im Apple-Stil: rotierende, abgestufte Balken.
+          key={i}
+          className="absolute left-1/2 top-1/2 block h-[28%] w-[12%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-500 dark:bg-gray-300"
+          style={{
+            transform: `translate(-50%, -50%) rotate(${(360 / segments) * i}deg) translateY(-155%)`,
+            opacity: (i + 1) / segments,
+          }}
+        />
+      ))}
+    </span>
+  );
 }

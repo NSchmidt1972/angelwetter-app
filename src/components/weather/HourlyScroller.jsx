@@ -1,6 +1,7 @@
 // src/components/weather/HourlyScroller.jsx
 import { owmIconUrl, degToDir, hour2 } from '@/utils/weatherFormat';
 import FishRating from '@/components/common/FishRating';
+import SegmentedSpinner from '@/components/weather/SegmentedSpinner';
 
 export default function HourlyScroller({ hours, hourPreds, onScroll, scrollRef, hasMore, onLoadMore }) {
   return (
@@ -34,10 +35,15 @@ export default function HourlyScroller({ hours, hourPreds, onScroll, scrollRef, 
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 🧭 {degToDir(h.wind_deg)} ({h.wind_speed?.toFixed ? h.wind_speed.toFixed(1) : Math.round(h.wind_speed * 10) / 10} m/s)
               </p>
-              {pred?.probability != null && (
+              {pred?.probability != null ? (
                 <p className="text-sm text-green-700 dark:text-green-300 font-semibold mt-1">
                   🎯 {Number(pred.probability).toFixed(0)} % <FishRating probability={pred.probability} />
                 </p>
+              ) : (
+                <div className="mt-1 flex items-center justify-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <SegmentedSpinner className="h-3.5 w-3.5" />
+                  <span>KI lädt...</span>
+                </div>
               )}
             </div>
           );

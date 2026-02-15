@@ -4,6 +4,7 @@ import CurrentPanel from '@/components/weather/CurrentPanel';
 import HourlyScroller from '@/components/weather/HourlyScroller';
 import DailyScroller from '@/components/weather/DailyScroller';
 import { predictForWeather } from '@/services/aiService';
+import SegmentedSpinner from '@/components/weather/SegmentedSpinner';
 
 // --- prediction utils (unverändert gelassen) ---
 const PREDICTION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -87,7 +88,7 @@ async function runBatched(tasks, limit = MAX_CONCURRENCY) {
   return out;
 }
 
-export default function WeatherNow({ data, onRefresh }) {
+export default function WeatherNow({ data, onRefresh, loading = false }) {
 
   // Daily (inkl. AI)
   const [dailyBase, setDailyBase] = useState([]);
@@ -284,6 +285,16 @@ export default function WeatherNow({ data, onRefresh }) {
   }, [dailyVisibleCount, dailyBase.length, loadMoreDays]);
 
   if (!data?.data) {
+    if (loading) {
+      return (
+        <div className="p-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow-md rounded-xl max-w-6xl mx-auto">
+          <div className="flex items-center justify-center gap-3 text-gray-600 dark:text-gray-300">
+            <SegmentedSpinner className="h-6 w-6" />
+            <span className="font-medium">Wetterdaten werden geladen...</span>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="p-4 bg-white dark:bg-gray-900 text-center text-red-600 rounded-xl shadow max-w-xl mx-auto">
         ⚠️ Keine Wetterdaten verfügbar.

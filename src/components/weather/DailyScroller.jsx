@@ -1,6 +1,7 @@
 // src/components/weather/DailyScroller.jsx
 import { owmIconUrl, degToDir, weekdayShort, moonPhaseText } from '@/utils/weatherFormat';
 import FishRating from '@/components/common/FishRating';
+import SegmentedSpinner from '@/components/weather/SegmentedSpinner';
 
 export default function DailyScroller({ days, onScroll, scrollRef }) {
   return (
@@ -32,10 +33,15 @@ export default function DailyScroller({ days, onScroll, scrollRef }) {
                 🧭 {degToDir(day.wind_deg)} ({day.wind_speed?.toFixed ? day.wind_speed.toFixed(1) : Math.round(day.wind_speed * 10) / 10} m/s)
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">{moonPhaseText(day.moon_phase)}</p>
-              {day.aiPrediction?.probability != null && (
+              {day.aiPrediction?.probability != null ? (
                 <p className="text-sm text-green-700 dark:text-green-300 font-semibold mt-2">
                   🎯 {Number(day.aiPrediction.probability).toFixed(0)} % <FishRating probability={day.aiPrediction.probability} />
                 </p>
+              ) : (
+                <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <SegmentedSpinner className="h-3.5 w-3.5" />
+                  <span>KI lädt...</span>
+                </div>
               )}
             </div>
           );
