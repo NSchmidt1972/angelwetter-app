@@ -6,7 +6,7 @@ import PageContainer from "../components/PageContainer";
 
 
 export default function Forecast() {
-  const { loading, weatherData, aiPrediction, dailyPredictions, reload } = useForecast();
+  const { weatherData, aiPrediction, dailyPredictions } = useForecast();
   const modelTrainingRows = getModelTrainingRows(aiPrediction);
 
         
@@ -26,19 +26,6 @@ export default function Forecast() {
       <p className="text-xs italic text-center text-gray-600 dark:text-gray-300 mb-6 max-w-xl mx-auto">
         Bitte auch Schneidersessions eintragen – sonst überschätzt die KI die Fangchancen.
       </p>
-
-      <div className="flex justify-center mb-6">
-        <button
-          onClick={reload}
-          disabled={loading}
-          className={`px-4 py-2 rounded-lg font-medium transition ${loading
-            ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-            : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-          }`}
-        >
-          {loading ? "Lädt..." : "🔄 Aktualisieren"}
-        </button>
-      </div>
 
       <div className="max-w-2xl mx-auto">
         {weatherData && aiPrediction ? (

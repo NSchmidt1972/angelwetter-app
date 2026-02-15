@@ -2,7 +2,7 @@
 import { owmIconUrl, degToDir, hour2 } from '@/utils/weatherFormat';
 import FishRating from '@/components/common/FishRating';
 
-export default function HourlyScroller({ hours, hourPreds, onScroll, scrollRef }) {
+export default function HourlyScroller({ hours, hourPreds, onScroll, scrollRef, hasMore, onLoadMore }) {
   return (
     <>
       <h3 className="text-lg font-semibold mt-4 mb-2 text-gray-700 dark:text-gray-200">🕒 Stündliche Vorhersage</h3>
@@ -42,6 +42,15 @@ export default function HourlyScroller({ hours, hourPreds, onScroll, scrollRef }
             </div>
           );
         })}
+        {hasMore && (
+          <button
+            type="button"
+            onClick={onLoadMore}
+            className="min-w-[160px] bg-blue-100 dark:bg-blue-900/30 rounded-xl p-4 shadow-sm text-center flex-shrink-0 hover:shadow-md transition text-blue-800 dark:text-blue-200 font-semibold"
+          >
+            + Mehr Stunden
+          </button>
+        )}
       </div>
     </>
   );

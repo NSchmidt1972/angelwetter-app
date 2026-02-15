@@ -2,12 +2,12 @@
 import { owmIconUrl, degToDir, weekdayShort, moonPhaseText } from '@/utils/weatherFormat';
 import FishRating from '@/components/common/FishRating';
 
-export default function DailyScroller({ days }) {
+export default function DailyScroller({ days, onScroll, scrollRef }) {
   return (
     <>
       <h3 className="text-lg font-semibold mt-2 mb-2 text-gray-700 dark:text-gray-200">🗓 7-Tage-Vorhersage</h3>
-      <div className="flex overflow-x-auto gap-4 pb-4">
-        {days.slice(0, 7).map((day, index) => {
+      <div ref={scrollRef} onScroll={onScroll} className="flex overflow-x-auto gap-4 pb-4">
+        {days.map((day, index) => {
           const iconUrl = owmIconUrl(day.weather?.[0]?.icon);
           return (
             <div key={index} className="min-w-[200px] bg-gray-100 dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center flex-shrink-0 hover:shadow-md transition">

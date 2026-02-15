@@ -1,7 +1,7 @@
 // src/hooks/useForecast.js
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLatestWeather } from "../services/weatherService";
-import { predictForWeather, predictBatch, getModelInfo } from "../services/aiService";
+import { predictForWeather, predictBatch } from "../services/aiService";
 
 function hasValue(value) {
   return value != null && value !== "";
@@ -96,14 +96,24 @@ export function useForecast() {
   const [dailyPredictions, setDailyPredictions] = useState([]); // 7-Tage inkl. KI
   const abortRef = useRef(null);
 
-  const toModelInput = useCallback((src) => ({
-    temp: src?.temp?.day ?? src?.temp,          // daily.temp.day oder current.temp
-    pressure: src?.pressure,
-    wind: src?.wind_speed,
-    humidity: src?.humidity,
-    wind_deg: src?.wind_deg,
-    moon_phase: src?.moon_phase ?? null,
-  }), []);
+  const toModelInput = useCallback((src) => {
+    const dt = src?.dt != null ? Number(src.dt) : null;
+    const timestamp =
+      Number.isFinite(dt)
+        ? new Date((dt < 1_000_000_000_000 ? dt * 1000 : dt)).toISOString()
+        : null;
+
+    return {
+      temp: src?.temp?.day ?? src?.temp,          // daily.temp.day oder current.temp
+      pressure: src?.pressure,
+      wind: src?.wind_speed,
+      humidity: src?.humidity,
+      wind_deg: src?.wind_deg,
+      moon_phase: src?.moon_phase ?? null,
+      dt: Number.isFinite(dt) ? dt : null,
+      timestamp,
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,22 +126,27 @@ export function useForecast() {
       const currentModelIn = toModelInput({ ...current, moon_phase: daily?.[0]?.moon_phase ?? null });
       setWeatherData(currentModelIn);
 
-      // 1) Sofort-Prognose (aktuell)
-      const [nowPredictionRaw, modelInfo] = await Promise.all([
+      // "Jetzt"-Prognose und Tagesprognosen parallel laden.
+      // Tag 0 wird nicht doppelt gepredictet, sondern aus nowPrediction übernommen.
+      const dayInputs = daily.map(d => toModelInput(d));
+      const dayInputsWithoutNow = dayInputs.slice(1);
+      const [nowPredictionRaw, remainingDailyResults] = await Promise.all([
         predictForWeather(currentModelIn, { signal: abortRef.current.signal }),
-        getModelInfo({ signal: abortRef.current.signal }).catch(() => null),
+        dayInputsWithoutNow.length > 0
+          ? predictBatch(dayInputsWithoutNow, { signal: abortRef.current.signal })
+          : Promise.resolve([]),
       ]);
-      const nowPrediction = withModelTimestamps(nowPredictionRaw, modelInfo);
+
+      const nowPrediction = withModelTimestamps(nowPredictionRaw, null);
       setAiPrediction(nowPrediction);
 
-      // 2) 7-Tage-Prognosen
-      const dayInputs = daily.map(d => toModelInput(d));
-      const results = await predictBatch(dayInputs, { signal: abortRef.current.signal });
-
-      const merged = daily.map((d, i) => ({
-        ...d,
-        aiPrediction: withModelTimestamps(results[i] ?? null, modelInfo),
-      }));
+      const merged = daily.map((d, i) => {
+        const predictionRaw = i === 0 ? nowPredictionRaw : (remainingDailyResults[i - 1] ?? null);
+        return {
+          ...d,
+          aiPrediction: withModelTimestamps(predictionRaw, null),
+        };
+      });
       setDailyPredictions(merged);
     } catch (e) {
       console.warn("⚠️ Forecast laden/predict fehlgeschlagen:", e);

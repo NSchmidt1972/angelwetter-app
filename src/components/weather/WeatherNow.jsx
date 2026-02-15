@@ -8,10 +8,12 @@ import { predictForWeather } from '@/services/aiService';
 // --- prediction utils (unverändert gelassen) ---
 const PREDICTION_TTL_MS = 12 * 60 * 60 * 1000;
 const PREDICTION_CACHE_KEY = 'ai_pred_cache_v3';
-const REQUIRED_AI_MODEL_VERSION = '2026-02-13-aal-weighting-v3';
+const REQUIRED_AI_MODEL_VERSION = '2026-02-14-main-max-agg-v10';
 const MAX_CONCURRENCY = 3;
 const INITIAL_HOURS = 12;
 const CHUNK_HOURS = 6;
+const INITIAL_DAYS = 3;
+const CHUNK_DAYS = 2;
 
 function idleCall(cb) {
   if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
@@ -88,7 +90,9 @@ async function runBatched(tasks, limit = MAX_CONCURRENCY) {
 export default function WeatherNow({ data, onRefresh }) {
 
   // Daily (inkl. AI)
-  const [dailyWithPrediction, setDailyWithPrediction] = useState([]);
+  const [dailyBase, setDailyBase] = useState([]);
+  const [dailyPreds, setDailyPreds] = useState({});
+  const [dailyVisibleCount, setDailyVisibleCount] = useState(INITIAL_DAYS);
 
   // Hourly Basis + KI + Sichtbarkeit
   const [hourlyBase, setHourlyBase] = useState([]);
@@ -99,9 +103,14 @@ export default function WeatherNow({ data, onRefresh }) {
     () => hourlyBase.slice(0, Math.min(visibleCount, hourlyBase.length)),
     [hourlyBase, visibleCount]
   );
+  const daysToRender = useMemo(() => {
+    const visible = dailyBase.slice(0, Math.min(dailyVisibleCount, dailyBase.length));
+    return visible.map((day, idx) => ({ ...day, aiPrediction: dailyPreds[idx] ?? null }));
+  }, [dailyBase, dailyPreds, dailyVisibleCount]);
 
   const cache = usePredictionCache();
   const hourlyRef = useRef(null);
+  const dailyRef = useRef(null);
 
   // ⏱ Auto-Refresh (nur sichtbar & online)
   useEffect(() => {
@@ -117,52 +126,69 @@ export default function WeatherNow({ data, onRefresh }) {
   // Basisdaten ohne KI
   useEffect(() => {
     if (!data?.data?.daily || !data?.data?.current || !data?.data?.hourly) return;
-    setDailyWithPrediction(data.data.daily);
+    const dailySlice = data.data.daily.slice(0, 7);
+    setDailyBase(dailySlice);
+    setDailyVisibleCount(Math.min(INITIAL_DAYS, dailySlice.length));
+    setDailyPreds({});
     const slice = data.data.hourly.slice(0, 24);
     setHourlyBase(slice);
     setVisibleCount(Math.min(INITIAL_HOURS, slice.length));
     setHourPreds({});
     if (hourlyRef.current) hourlyRef.current.scrollLeft = 0;
+    if (dailyRef.current) dailyRef.current.scrollLeft = 0;
   }, [data, cache]);
 
-  // KI-Prognosen: DAILY (idle)
+  // KI-Prognosen: sichtbare Daily-Karten
   useEffect(() => {
-    if (!data?.data?.daily) return;
+    if (!dailyBase.length || dailyVisibleCount <= 0) return;
     const cancelIdle = idleCall(() => {
       const ac = new AbortController();
       const { signal } = ac;
       (async () => {
-        const enriched = await runBatched(
-          data.data.daily.map(day => {
-            const dayDate = new Date(day.dt * 1000);
-            const w = {
-              temp: day.temp.day,
-              pressure: day.pressure,
-              wind: day.wind_speed,
-              humidity: day.humidity,
-              wind_deg: day.wind_deg,
-              moon_phase: day.moon_phase,
-              hour: 12,
-              date: dayDate.toISOString().slice(0, 10)
-            };
-            const key = makeKey(w);
-            return async () => {
-              const c = cache.get(key);
-              if (c) return { ...day, aiPrediction: c };
-              const pred = await fetchPrediction(w, signal);
-              cache.set(key, pred);
-              return { ...day, aiPrediction: pred };
-            };
-          })
-        );
-        setDailyWithPrediction(enriched);
+        const maxVisible = Math.min(dailyVisibleCount, dailyBase.length);
+        const indices = [];
+        for (let i = 0; i < maxVisible; i++) {
+          if (dailyPreds[i] == null) indices.push(i);
+        }
+        if (!indices.length) return;
+
+        const tasks = indices.map((i) => {
+          const day = dailyBase[i];
+          const dayDate = new Date(day.dt * 1000);
+          const w = {
+            temp: day.temp.day,
+            pressure: day.pressure,
+            wind: day.wind_speed,
+            humidity: day.humidity,
+            wind_deg: day.wind_deg,
+            moon_phase: day.moon_phase,
+            hour: 12,
+            date: dayDate.toISOString().slice(0, 10),
+            dt: day.dt,
+            timestamp: dayDate.toISOString(),
+          };
+          const key = makeKey(w);
+          return async () => {
+            const c = cache.get(key);
+            if (c) return { i, pred: c };
+            const pred = await fetchPrediction(w, signal);
+            cache.set(key, pred);
+            return { i, pred };
+          };
+        });
+
+        const results = await runBatched(tasks);
+        setDailyPreds((prev) => {
+          const next = { ...prev };
+          results.forEach((r) => { if (r) next[r.i] = r.pred; });
+          return next;
+        });
         cache.persist();
       })();
       return () => ac.abort();
     });
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.data?.daily]);
+  }, [dailyBase, dailyVisibleCount, dailyPreds, cache]);
 
   // KI-Prognosen: sichtbare Stunden
   useEffect(() => {
@@ -191,7 +217,9 @@ export default function WeatherNow({ data, onRefresh }) {
             wind_deg: h.wind_deg,
             moon_phase: moonPhase,
             hour: hDate.getHours(),
-            date: hDate.toISOString().slice(0, 10)
+            date: hDate.toISOString().slice(0, 10),
+            dt: h.dt,
+            timestamp: hDate.toISOString(),
           };
           const key = makeKey(w);
           return async () => {
@@ -216,19 +244,44 @@ export default function WeatherNow({ data, onRefresh }) {
     });
 
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleCount, hourlyBase, cache, data]);
+  }, [visibleCount, hourlyBase, hourPreds, cache, data]);
 
-  // Infinite-Scroll: sichtbare Stunden erhöhen
-  const onHourlyScroll = (e) => {
-    const el = e.currentTarget;
-    const nearEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 120;
-    if (!nearEnd) return;
-    setVisibleCount(vc => {
+  const loadMoreHours = useCallback(() => {
+    setVisibleCount((vc) => {
       const next = Math.min(vc + CHUNK_HOURS, hourlyBase.length);
       return next === vc ? vc : next;
     });
-  };
+  }, [hourlyBase.length]);
+
+  // Infinite-Scroll: sichtbare Stunden erhöhen
+  const onHourlyScroll = useCallback((e) => {
+    const el = e.currentTarget;
+    const nearEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 120;
+    if (!nearEnd) return;
+    loadMoreHours();
+  }, [loadMoreHours]);
+
+  const loadMoreDays = useCallback(() => {
+    setDailyVisibleCount((vc) => {
+      const next = Math.min(vc + CHUNK_DAYS, dailyBase.length);
+      return next === vc ? vc : next;
+    });
+  }, [dailyBase.length]);
+
+  const onDailyScroll = useCallback((e) => {
+    const el = e.currentTarget;
+    const nearEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 120;
+    if (!nearEnd) return;
+    loadMoreDays();
+  }, [loadMoreDays]);
+
+  useEffect(() => {
+    const el = dailyRef.current;
+    if (!el || dailyVisibleCount >= dailyBase.length) return;
+    if (el.scrollWidth <= el.clientWidth + 8) {
+      loadMoreDays();
+    }
+  }, [dailyVisibleCount, dailyBase.length, loadMoreDays]);
 
   if (!data?.data) {
     return (
@@ -241,7 +294,7 @@ export default function WeatherNow({ data, onRefresh }) {
   }
 
   const now = data.data.current;
-  const days = dailyWithPrediction || [];
+  const days = daysToRender || [];
 
   return (
     <div className="p-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow-md rounded-xl max-w-6xl mx-auto">
@@ -255,8 +308,14 @@ export default function WeatherNow({ data, onRefresh }) {
         hourPreds={hourPreds}
         onScroll={onHourlyScroll}
         scrollRef={hourlyRef}
+        hasMore={visibleCount < hourlyBase.length}
+        onLoadMore={loadMoreHours}
       />
-      <DailyScroller days={days} />
+      <DailyScroller
+        days={days}
+        onScroll={onDailyScroll}
+        scrollRef={dailyRef}
+      />
     </div>
   );
 }
