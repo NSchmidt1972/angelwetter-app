@@ -6,6 +6,7 @@ import { MonthlyCatchSection, SessionSection } from '@/components/FishTrendsSect
 import SeasonalSection from '@/components/SeasonalSection';
 import CrayfishSection from '@/components/CrayfishSection';
 import AdminMembersManage from '@/pages/AdminMembersManage';
+import { Card } from '@/components/ui';
 import {
   fetchProfiles,
   fetchWhitelist,
@@ -974,7 +975,7 @@ export default function BoardOverview() {
   // Whitelist wird nur für Kennzahlen geladen; Aktionen erfolgen in AdminMembers.
 
   return (
-    <div className="space-y-8">
+    <Card className="space-y-8">
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Kennzahlen</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
@@ -1102,6 +1103,6 @@ export default function BoardOverview() {
         formatDate={formatDate}
       />
 
-    </div>
+    </Card>
   );
 }

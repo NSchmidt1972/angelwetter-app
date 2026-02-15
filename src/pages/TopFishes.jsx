@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import PageContainer from '../components/PageContainer';
 import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
+import { Card } from '@/components/ui';
 
 const MARILOU_ALIASES = ['marilou boes', 'marilou'];
 
@@ -188,7 +189,7 @@ export default function TopFishes() {
           </p>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm text-left font-mono bg-white dark:bg-gray-800 shadow-md rounded-xl overflow-hidden">
+            <Card as="table" className="min-w-full text-sm text-left font-mono bg-white dark:bg-gray-800 shadow-md rounded-xl overflow-hidden">
               <thead className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-200">
                 <tr>
                   <th className="px-4 py-2">#</th>
@@ -239,7 +240,7 @@ export default function TopFishes() {
                   </tr>
                 )}
               </tbody>
-            </table>
+            </Card>
           </div>
         </div>
       )}

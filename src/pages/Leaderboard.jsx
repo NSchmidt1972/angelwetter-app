@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import PageContainer from '../components/PageContainer';
 import { isFerkensbruchLocation } from '@/utils/location';
+import { Card } from '@/components/ui';
 
 const PRESET_YEARS = [2025, 2026];
 
@@ -229,7 +230,7 @@ export default function Leaderboard() {
           </p>
         ) : (
           ranking.map((a, i) => (
-            <div
+            <Card
               key={i}
               className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 shadow-md"
             >
@@ -279,7 +280,7 @@ export default function Leaderboard() {
                     })}
                 </tbody>
               </table>
-            </div>
+            </Card>
           ))
         )}
       </div>

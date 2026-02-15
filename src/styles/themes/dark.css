@@ -1,0 +1,8 @@
+html.dark,
+html[data-theme="dark"] {
+  --theme-bg: #111827;
+  --theme-surface: #1f2937;
+  --theme-text: #f3f4f6;
+  --theme-text-muted: #d1d5db;
+  --theme-border: #374151;
+}

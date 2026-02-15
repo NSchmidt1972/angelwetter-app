@@ -1,6 +1,7 @@
 // src/pages/Regulations.jsx
 import { useEffect, useMemo, useState } from "react";
 import { fetchRules } from "../services/rulesService";
+import { Card } from "@/components/ui";
 
 function formatGermanDate(input) {
   if (!input) return "—";
@@ -47,7 +48,7 @@ export default function Regulations() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl p-4 text-gray-800 dark:text-gray-100">
+    <Card className="mx-auto max-w-5xl p-4 text-gray-800 dark:text-gray-100">
       <h1 className="text-2xl font-bold mb-2">📜 Regeln – Ferkensbruch</h1>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
         Diese Übersicht basiert auf den Vereinsregeln für den Ferkensbruch (über die
@@ -107,6 +108,6 @@ export default function Regulations() {
       <p className="text-xs text-gray-500 mt-3">
         Quelle: Vereinsvorgaben Ferkensbruch (ergänzend zur Landesfischereiordnung).
       </p>
-    </div>
+    </Card>
   );
 }

@@ -11,6 +11,7 @@ import {
 } from '@/services/boardService';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
+import { Card } from '@/components/ui';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -292,7 +293,7 @@ export default function AdminMembersManage() {
   };
 
   return (
-    <div className="space-y-8">
+    <Card className="space-y-8">
       <section ref={detailSectionRef} className="space-y-6">
         <WhitelistSection
           showWhitelist={showWhitelist}
@@ -326,6 +327,6 @@ export default function AdminMembersManage() {
           formatDate={formatDate}
         />
       </section>
-    </div>
+    </Card>
   );
 }

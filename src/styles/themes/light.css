@@ -1,0 +1,8 @@
+:root,
+html[data-theme="light"] {
+  --theme-bg: var(--color-bg);
+  --theme-surface: var(--color-surface);
+  --theme-text: var(--color-text);
+  --theme-text-muted: var(--color-text-muted);
+  --theme-border: var(--color-border);
+}

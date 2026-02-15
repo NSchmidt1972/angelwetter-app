@@ -3,6 +3,7 @@ import { renderFishRating, formatPercent, getPressureTrendLabel, formatDateFromU
 import { useForecast } from "../hooks/useForecast";
 import { useState } from "react";
 import PageContainer from "../components/PageContainer";
+import { Card } from '@/components/ui';
 
 
 export default function Forecast() {
@@ -29,7 +30,7 @@ export default function Forecast() {
 
       <div className="max-w-2xl mx-auto">
         {weatherData ? (
-          <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6 mb-6">
+          <Card className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6 mb-6">
             <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg shadow-inner">
               <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-100">🤖 KI-Prognose</h3>
 
@@ -122,7 +123,7 @@ export default function Forecast() {
             </div>
 
             
-          </div>
+          </Card>
         ) : (
           loading ? (
             <InitialForecastLoader />
@@ -135,7 +136,7 @@ export default function Forecast() {
   
     {/* 🗓️ 7-Tage-Ausblick */}
     {dailyPredictions?.length > 0 && (
-      <div className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6">
+      <Card className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6">
         <h3 className="font-bold text-lg mb-4 text-gray-800 dark:text-gray-100">🗓️ 7-Tage-Ausblick</h3>
 
         <div className="space-y-3">
@@ -251,7 +252,7 @@ export default function Forecast() {
             );
           })}
         </div>
-      </div>
+      </Card>
     )}
   
 

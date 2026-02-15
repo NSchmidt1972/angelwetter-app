@@ -1,10 +1,11 @@
 // src/pages/Catches.jsx
 import CatchList from '../components/CatchList';
+import { Card } from '@/components/ui';
 
 export default function Catches({ name }) {
   return (
-    <div>
+    <Card>
       <CatchList anglerName={name} />
-    </div>
+    </Card>
   );
 }

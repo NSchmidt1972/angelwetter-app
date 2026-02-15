@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { getActiveClubId } from '@/utils/clubId';
+import { Card } from '@/components/ui';
 
 const themes = [
   { key: 'light', label: 'Hell', desc: 'Helle Oberfläche mit Akzentfarbe' },
@@ -33,7 +34,7 @@ export default function AdminVereinManage() {
   };
 
   return (
-    <div className="space-y-8">
+    <Card className="space-y-8">
       <header className="rounded-xl bg-white p-6 shadow-sm shadow-gray-200 dark:bg-gray-900 dark:shadow-black/20">
         <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Vereinsadministration</p>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">Verein & App gestalten</h1>
@@ -154,6 +155,6 @@ export default function AdminVereinManage() {
           })}
         </div>
       </section>
-    </div>
+    </Card>
   );
 }

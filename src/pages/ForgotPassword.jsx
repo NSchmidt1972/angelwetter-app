@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { Card } from '@/components/ui';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -20,7 +21,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="p-6 max-w-md mx-auto">
+    <Card className="p-6 max-w-md mx-auto">
       <h2 className="text-xl font-bold text-blue-700 mb-4">🔑 Passwort vergessen</h2>
       <input
         type="email"
@@ -37,6 +38,6 @@ export default function ForgotPassword() {
       </button>
       {message && <p className="text-green-600 mt-4">{message}</p>}
       {error && <p className="text-red-600 mt-4">{error}</p>}
-    </div>
+    </Card>
   );
 }

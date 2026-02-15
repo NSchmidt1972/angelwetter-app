@@ -4,6 +4,10 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './AuthContext';
 import './index.css';
+import './styles/tokens.css';
+import './styles/themes/light.css';
+import './styles/themes/dark.css';
+import './styles/base.css';
 
 // ✅ KEINE eigene Service Worker Registrierung hier.
 // OneSignal + VitePWA kümmern sich darum (PushInit in App.jsx initialisiert OneSignal).

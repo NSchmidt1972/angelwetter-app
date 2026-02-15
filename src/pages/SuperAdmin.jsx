@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
+import { Card } from '@/components/ui';
 
 export default function SuperAdmin() {
   const [loading, setLoading] = useState(true);
@@ -64,14 +65,14 @@ export default function SuperAdmin() {
   }, [memberships, fishes]);
 
   if (loading) {
-    return <div className="p-6">Lade Superadmin-Daten…</div>;
+    return <Card className="p-6">Lade Superadmin-Daten…</Card>;
   }
   if (error) {
-    return <div className="p-6 text-red-600">Fehler: {error}</div>;
+    return <Card className="p-6 text-red-600">Fehler: {error}</Card>;
   }
 
   return (
-    <div className="p-6 space-y-4">
+    <Card className="p-6 space-y-4">
       <h1 className="text-2xl font-bold text-blue-700">Superadmin Übersicht</h1>
       <p className="text-gray-600">Clubs, Mitgliederzahlen, Fänge (club_id-basiert).</p>
       <div className="grid md:grid-cols-2 gap-4">
@@ -107,6 +108,6 @@ export default function SuperAdmin() {
           );
         })}
       </div>
-    </div>
+    </Card>
   );
 }

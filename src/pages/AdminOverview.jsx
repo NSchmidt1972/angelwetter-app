@@ -5,6 +5,7 @@ import OneSignalHealthCheck from '../components/OneSignalHealthCheck';
 import { formatDateOnly, formatDateTime, parseTimestamp, formatTimeOnly } from '@/utils/dateUtils';
 import { navItemsFor } from '@/config/navItems';
 import { APP_VERSION } from '@/utils/buildInfo';
+import { Card } from '@/components/ui';
 
 const PAGE_VIEW_LIMIT = 5000;
 const PAGE_VIEW_PAGE_SIZE = 1000;
@@ -580,13 +581,13 @@ export default function AdminOverview() {
 
 
   const Section = ({ title, value, children }) => (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+    <Card className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
       <div className="flex justify-between items-center mb-3">
         <h3 className="text-lg font-semibold text-blue-700 dark:text-blue-400">{title}</h3>
         {value && <div className="text-sm text-gray-700 dark:text-gray-300">{value}</div>}
       </div>
       {children}
-    </div>
+    </Card>
   );
 
   const listItemClass = "list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-200";
@@ -600,7 +601,7 @@ export default function AdminOverview() {
   const deviceGroupCount = pushDeviceSummary.length;
 
   return (
-    <div className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
+    <Card className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
       <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Admin2‑Übersicht</h2>
 
       <Section title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
@@ -984,6 +985,6 @@ export default function AdminOverview() {
       <Section title="🔔 OneSignal Debug">
         <OneSignalHealthCheck />
       </Section>
-    </div>
+    </Card>
   );
 }

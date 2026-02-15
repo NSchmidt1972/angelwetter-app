@@ -3,6 +3,7 @@ import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { createCatchPDF } from '@/utils/pdfExporter';
 import { isFerkensbruchLocation } from '@/utils/location';
+import { Card } from '@/components/ui';
 
 export default function DownloadsPage() {
   const [anglerName, setAnglerName] = useState('');
@@ -97,7 +98,7 @@ export default function DownloadsPage() {
   };
 
   return (
-    <div className="p-6 max-w-xl mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl text-gray-800 dark:text-gray-100 mt-10">
+    <Card className="p-6 max-w-xl mx-auto bg-white dark:bg-gray-900 shadow-md rounded-xl text-gray-800 dark:text-gray-100 mt-10">
       <h2 className="text-2xl font-bold mb-6 text-blue-700 dark:text-blue-300 text-center">
         📂 Downloads
       </h2>
@@ -139,6 +140,6 @@ export default function DownloadsPage() {
           </button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

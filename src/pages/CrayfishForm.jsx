@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import { CRAYFISH_SPECIES, saveCrayfishCatch } from '@/services/crayfishService';
+import { Card } from '@/components/ui';
 
 const CRAYFISH_IMAGES = {
   'Roter amerikanischer Flusskrebs': '/crayfish/roter-amerikanischer-flusskrebs.jpg',
@@ -80,8 +81,8 @@ export default function CrayfishForm({ anglerName }) {
 
   return (
     <PageContainer>
-      <div className="mx-auto max-w-3xl space-y-5">
-        <div className="rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-emerald-50 p-5 shadow-sm dark:border-blue-900/40 dark:from-blue-950/60 dark:to-emerald-950/40">
+      <Card className="mx-auto max-w-3xl space-y-5">
+        <Card className="rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-emerald-50 p-5 shadow-sm dark:border-blue-900/40 dark:from-blue-950/60 dark:to-emerald-950/40">
           <h2 className="text-2xl font-bold text-blue-800 dark:text-blue-100 flex items-center gap-2">
             <span role="img" aria-hidden>🦞</span>
             Krebsfang erfassen
@@ -125,7 +126,7 @@ export default function CrayfishForm({ anglerName }) {
               );
             })}
           </div>
-        </div>
+        </Card>
 
         {error && (
           <div className="rounded border px-3 py-2 text-sm border-red-200 bg-red-50 text-red-700 dark:border-red-800/50 dark:bg-red-900/30 dark:text-red-100">
@@ -133,7 +134,8 @@ export default function CrayfishForm({ anglerName }) {
           </div>
         )}
 
-        <form
+        <Card
+          as="form"
           onSubmit={handleSubmit}
           className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-md dark:border-gray-700 dark:bg-gray-800"
         >
@@ -186,8 +188,8 @@ export default function CrayfishForm({ anglerName }) {
               {saving ? 'Speichern...' : 'Speichern'}
             </button>
           </div>
-        </form>
-      </div>
+        </Card>
+      </Card>
 
       {previewSpecies && (
         <div

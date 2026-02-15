@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchProfiles, fetchWhitelist, fetchFishAggregates } from '@/services/boardService';
 import { getActiveClubId } from '@/utils/clubId';
+import { Card } from '@/components/ui';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -43,7 +44,7 @@ export default function Admin() {
   }, []);
 
   return (
-    <div className="space-y-8">
+    <Card className="space-y-8">
       <section className="grid gap-6 md:grid-cols-2">
         <button
           type="button"
@@ -86,6 +87,6 @@ export default function Admin() {
           </div>
         </button>
       </section>
-    </div>
+    </Card>
   );
 }

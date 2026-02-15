@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { fetchWeather } from '../api/weather';
 import PageContainer from '../components/PageContainer';
+import { Card } from '@/components/ui';
 
 function windDirection(deg) {
   const dirs = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
@@ -253,7 +254,7 @@ export default function Analysis({ anglerName }) {
   const renderStatList = (title, stats, activeKey) => (
     <div className="mb-6">
       <h3 className="text-lg font-semibold text-blue-700 dark:text-blue-300 mb-2">{title}</h3>
-      <ul className="bg-white dark:bg-gray-800 shadow rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
+      <Card as="ul" className="bg-white dark:bg-gray-800 shadow rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
         {Object.entries(stats).sort((a, b) => b[1] - a[1]).map(([label, count]) => {
           const iconCode = descIconMap[label];
           const iconUrl = iconCode ? `https://openweathermap.org/img/wn/${iconCode}.png` : null;
@@ -275,7 +276,7 @@ export default function Analysis({ anglerName }) {
             </li>
           );
         })}
-      </ul>
+      </Card>
     </div>
   );
 
@@ -290,7 +291,7 @@ export default function Analysis({ anglerName }) {
         </label>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700 dark:text-gray-300 max-w-xl mx-auto mb-8 bg-white dark:bg-gray-800 rounded-xl p-4 shadow">
+      <Card className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700 dark:text-gray-300 max-w-xl mx-auto mb-8 bg-white dark:bg-gray-800 rounded-xl p-4 shadow">
         <div className="flex items-center gap-2">
           <span className="text-xl">🐟</span>
           <span>Gesamtanzahl Fische:</span>
@@ -311,7 +312,7 @@ export default function Analysis({ anglerName }) {
           <span>Schneider-Anteil:</span>
           <span className="ml-auto font-bold text-right">{blankSessionRatio}%</span>
         </div>
-      </div>
+      </Card>
 
       <div className="flex flex-wrap gap-2 mb-6 justify-center">
         {sortedYears.map(year => (
@@ -365,7 +366,7 @@ export default function Analysis({ anglerName }) {
                 );
               })}
             {yearTotalCount > 0 && (
-              <div
+              <Card
                 className="min-w-[220px] rounded-lg p-4 text-center flex-shrink-0 shadow border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
               >
                 <h3 className="text-base font-bold mb-1 text-gray-800 dark:text-gray-100">Gesamt {selectedYear}</h3>
@@ -382,7 +383,7 @@ export default function Analysis({ anglerName }) {
                       </li>
                     ))}
                 </ul>
-              </div>
+              </Card>
             )}
           </div>
         </div>
