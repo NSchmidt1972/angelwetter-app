@@ -157,6 +157,7 @@ export default function AdminOverview() {
         const { data: weatherData } = await supabase
           .from('weather_cache')
           .select('updated_at')
+          .eq('club_id', clubId)
           .eq('id', 'latest')
           .single();
 
@@ -177,6 +178,7 @@ export default function AdminOverview() {
           const { data: profiles } = await supabase
             .from('profiles')
             .select('id, name')
+            .eq('club_id', clubId)
             .in('id', userIds);
           profileById = new Map((profiles || []).map((p) => [p.id, p.name]));
         }
@@ -313,6 +315,7 @@ export default function AdminOverview() {
         const { data: allProfilesData } = await supabase
           .from('profiles')
           .select('id, name, created_at, role')
+          .eq('club_id', clubId)
           .order('created_at', { ascending: false });
         setAllProfiles(allProfilesData);
 
@@ -390,6 +393,7 @@ export default function AdminOverview() {
       setPageViewError('');
 
       const since = pageViewYearStart.toISOString();
+      const clubId = getActiveClubId();
 
       const allRows = [];
       let rangeStart = 0;
@@ -400,6 +404,7 @@ export default function AdminOverview() {
         const { data, error } = await supabase
           .from('page_views')
           .select('path, full_path, angler, session_id, created_at, metadata')
+          .eq('club_id', clubId)
           .gte('created_at', since)
           .order('created_at', { ascending: false })
           .range(rangeStart, rangeEnd);

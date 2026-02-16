@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
 import { APP_VERSION, GIT_COMMIT } from '@/utils/buildInfo';
+import { getActiveClubId } from '@/utils/clubId';
 import {
   getOrCreatePageViewSessionId,
   getStoredAnglerName,
@@ -30,8 +31,11 @@ export function usePageViewTracker({ enabled = true } = {}) {
 
     const angler = getStoredAnglerName();
     if (isExcludedAngler(angler)) return;
+    const clubId = getActiveClubId();
+    if (!clubId) return;
 
     const payload = {
+      club_id: clubId,
       path,
       full_path: href,
       angler,

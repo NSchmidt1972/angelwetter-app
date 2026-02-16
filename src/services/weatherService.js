@@ -1,10 +1,13 @@
 // src/services/weatherService.js
 import { supabase } from "../supabaseClient";
+import { getActiveClubId } from '@/utils/clubId';
 
 export async function getLatestWeather() {
+  const clubId = getActiveClubId();
   const { data: weatherRow, error } = await supabase
     .from("weather_cache")
     .select("data")
+    .eq('club_id', clubId)
     .eq("id", "latest")
     .single();
 

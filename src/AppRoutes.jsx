@@ -154,7 +154,13 @@ export default function AppRoutes({
           // Eingeloggt
           <>
             {/* Admin-Bereich mit eigenem Layout */}
-            <Route element={<AdminLayout />}>
+            <Route
+              element={
+                <RequireManagement canAccessBoard={canAccessBoard}>
+                  <AdminLayout />
+                </RequireManagement>
+              }
+            >
               <Route path="admin" element={<AdminMembers />} />
               <Route path="admin/members" element={<AdminMembersManage />} />
               <Route path="admin/verein" element={<AdminVereinManage />} />

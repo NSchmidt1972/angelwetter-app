@@ -16,7 +16,7 @@ from typing import Optional
 # ──────────────────────────────────────────────────────────────────────────────
 # Supabase-Zugang
 # ──────────────────────────────────────────────────────────────────────────────
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kirevrwmmthqgceprbhl.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://pfrvxmywfbnmdbvcduvx.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
 if not SUPABASE_KEY:
     raise RuntimeError("Missing Supabase service key. Set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_KEY).")

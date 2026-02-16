@@ -16,6 +16,15 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function readBearerToken(req: Request): string | null {
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  if (!authHeader) return null;
+  const [scheme, token] = authHeader.split(" ");
+  if (!scheme || !token) return null;
+  if (scheme.toLowerCase() !== "bearer") return null;
+  return token.trim() || null;
+}
+
 function artikel(fish) {
   const dict = {
     Aal: "einen",
@@ -49,13 +58,6 @@ serve(async (req) => {
   }
 
   try {
-    console.log("[send-push-notification] headers:", Object.fromEntries(req.headers.entries()));
-    const payload = await req.json().catch((err) => {
-      console.error("[send-push-notification] JSON parse failed:", err);
-      return {};
-    });
-    console.log("[send-push-notification] payload:", payload);
-
     const missingEnv = [
       ["SUPABASE_URL", SUPABASE_URL],
       ["SUPABASE_SERVICE_ROLE_KEY", SERVICE_KEY],
@@ -68,8 +70,33 @@ serve(async (req) => {
       return json(500, {
         error: "Missing ENV",
         missing: missingEnv.map(([k]) => k)
+        });
+    }
+
+    const accessToken = readBearerToken(req);
+    if (!accessToken) {
+      return json(401, {
+        error: "Missing bearer token"
       });
     }
+
+    const {
+      data: { user: callerUser },
+      error: callerError
+    } = await supabase.auth.getUser(accessToken);
+    if (callerError || !callerUser?.id) {
+      console.warn("[send-push-notification] caller auth failed", {
+        code: callerError?.code ?? null
+      });
+      return json(401, {
+        error: "Invalid bearer token"
+      });
+    }
+
+    const payload = await req.json().catch((err) => {
+      console.error("[send-push-notification] JSON parse failed:", err);
+      return {};
+    });
 
     if (EDGE_SECRET) {
       const providedSecret = req.headers.get("x-edge-secret") ?? "";
@@ -81,27 +108,15 @@ serve(async (req) => {
       }
     }
 
-    const record = payload.record ?? payload.new ?? null;
-    if (!record) {
-      console.error("[send-push-notification] missing record/new in payload");
-      return json(400, {
-        error: "Missing record in webhook payload"
-      });
-    }
+    const record = payload.record ?? payload.new ?? payload ?? {};
 
     const angler = String(payload.angler ?? record.angler ?? "").trim();
     const fish = String(payload.fish ?? record.fish ?? "").trim();
     const sizeValue = payload.size ?? record.size ?? null;
     const sizeNum = sizeValue != null ? Number(sizeValue) || null : null;
-    const clubId = payload.club_id ?? record.club_id ?? null;
+    const clubIdRaw = payload.club_id ?? record.club_id ?? null;
+    const clubId = typeof clubIdRaw === "string" ? clubIdRaw.trim() : null;
     let excludeUserId = record.user_id ? String(record.user_id) : null;
-    console.log("[send-push-notification] extracted data:", {
-      angler,
-      fish,
-      sizeNum,
-      clubId,
-      excludeUserId
-    });
 
     if (!angler || !fish || !clubId) {
       console.warn("[send-push-notification] missing angler/fish/club – skipping");
@@ -109,6 +124,56 @@ serve(async (req) => {
         error: "Missing angler, fish or club_id"
       });
     }
+
+    if (!UUID_REGEX.test(clubId)) {
+      return json(400, {
+        error: "Invalid club_id"
+      });
+    }
+
+    const { data: membership, error: membershipErr } = await supabase
+      .from("memberships")
+      .select("user_id")
+      .eq("user_id", callerUser.id)
+      .eq("club_id", clubId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (membershipErr) {
+      console.error("[send-push-notification] membership check failed:", membershipErr);
+      return json(500, {
+        error: "Membership check failed"
+      });
+    }
+
+    let callerAllowed = Boolean(membership?.user_id);
+    if (!callerAllowed) {
+      const { data: superadminRow, error: superadminErr } = await supabase
+        .from("superadmins")
+        .select("user_id")
+        .eq("user_id", callerUser.id)
+        .maybeSingle();
+
+      if (superadminErr) {
+        console.error("[send-push-notification] superadmin check failed:", superadminErr);
+        return json(500, {
+          error: "Superadmin check failed"
+        });
+      }
+
+      callerAllowed = Boolean(superadminRow?.user_id);
+    }
+
+    if (!callerAllowed) {
+      return json(403, {
+        error: "Forbidden"
+      });
+    }
+
+    console.info("[send-push-notification] authorized caller", {
+      callerUserId: callerUser.id,
+      clubId
+    });
 
     if (fish === "Aal" && sizeNum != null && sizeNum >= 200) {
       console.info("[send-push-notification] skip push for Aal size", sizeNum);
@@ -123,6 +188,7 @@ serve(async (req) => {
       const { data: profExact } = await supabase
         .from("profiles")
         .select("id")
+        .eq("club_id", clubId)
         .eq("name", angler)
         .maybeSingle();
       if (profExact?.id) {
@@ -132,6 +198,7 @@ serve(async (req) => {
         const { data: profCi } = await supabase
           .from("profiles")
           .select("id")
+          .eq("club_id", clubId)
           .ilike("name", angler)
           .maybeSingle();
         if (profCi?.id) {
@@ -248,7 +315,7 @@ function cors() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "content-type,x-edge-secret"
+    "Access-Control-Allow-Headers": "content-type,x-edge-secret,authorization"
   };
 }
 

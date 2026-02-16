@@ -1,6 +1,7 @@
 // src/hooks/useWeatherCache.jsx
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 
 const WeatherContext = createContext(null);
 
@@ -18,9 +19,11 @@ function schedule(callback, delay) {
 }
 
 async function fetchLatestWeather() {
+  const clubId = getActiveClubId();
   const { data, error } = await supabase
     .from('weather_cache')
     .select('data, updated_at')
+    .eq('club_id', clubId)
     .eq('id', WEATHER_ID)
     .single();
 

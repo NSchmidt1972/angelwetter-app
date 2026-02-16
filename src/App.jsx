@@ -68,8 +68,9 @@ function scheduleLater(callback, delay = 400) {
 function AppContent() {
   const { user, loading: authLoading, profile, profileLoading } = useAuth();
   const [anglerName, setAnglerName] = useState(() => readProfileCache()?.name ?? null);
-  const [userEmail, setUserEmail] = useState(null);
   const [profileRole, setProfileRole] = useState(() => readProfileCache()?.role ?? null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [superAdminLoading, setSuperAdminLoading] = useState(true);
   const [nameLoading, setNameLoading] = useState(() => {
     const cached = readProfileCache();
     return !(cached && cached.name);
@@ -100,14 +101,11 @@ function AppContent() {
 
     if (user === null) {
       setAnglerName(null);
-      setUserEmail(null);
       setProfileRole(null);
       clearProfileCache();
       setNameLoading(false);
       return;
     }
-
-    setUserEmail(user.email);
 
     // Profil aus globalem Context bevorzugen
     const resolvedName = profile?.name || profile?.angler_name || null;
@@ -205,6 +203,45 @@ function AppContent() {
     };
   }, [user, profile, profileLoading]);
 
+  useEffect(() => {
+    let active = true;
+
+    if (user === undefined) {
+      setSuperAdminLoading(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!user) {
+      setIsSuperAdmin(false);
+      setSuperAdminLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setSuperAdminLoading(true);
+    supabase
+      .rpc('is_superadmin')
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          console.warn('⚠️ Superadmin-Status konnte nicht geladen werden:', error.message || error);
+          setIsSuperAdmin(false);
+          return;
+        }
+        setIsSuperAdmin(Boolean(data));
+      })
+      .finally(() => {
+        if (active) setSuperAdminLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
   // Aktivität pingen
   useEffect(() => {
     if (!user) return;
@@ -262,7 +299,7 @@ function AppContent() {
     }
   }, [profile]);
 
-  if (authLoading || nameLoading || user === undefined || showSplash) {
+  if (authLoading || nameLoading || user === undefined || showSplash || (user && superAdminLoading)) {
     return (
       <>
         <div className="flex flex-col justify-center items-center h-screen bg-white relative">
@@ -286,10 +323,8 @@ function AppContent() {
 
   const isLoggedIn = user && !isPasswordResetFlow;
   const cachedRole = profileRole ? profileRole.toLowerCase() : null;
-  const isDeveloperAdmin = userEmail === 'nicol@schmidt-2006.de';
-  const isAdmin = isDeveloperAdmin || cachedRole === 'admin';
-  const canAccessBoard = isAdmin || cachedRole === 'vorstand';
-  const isSuperAdmin = isDeveloperAdmin; // aktuell nur Developer-Mail als Superadmin
+  const isAdmin = isSuperAdmin || cachedRole === 'admin';
+  const canAccessBoard = isSuperAdmin || isAdmin || cachedRole === 'vorstand';
 
   return (
     <>
