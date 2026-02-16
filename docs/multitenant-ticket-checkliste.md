@@ -2,6 +2,7 @@
 
 Stand: 2026-02-16
 Scope: Frontend, Supabase SQL/RLS, Edge Functions
+Einstieg: `docs/multitenant-index.md`
 
 ## Ziel
 Die App soll mandantenfest sein: keine Datenleaks zwischen Clubs, keine unautorisierten Admin-Zugriffe, keine cross-tenant Side Effects.
@@ -205,6 +206,125 @@ Definition of Done:
 
 ---
 
+## Erweiterung: Mehrere Gewaesser pro Verein
+Wenn ein Verein mehrere Gewaesser hat, reicht `club_id` als einziger Scope nicht mehr aus.
+Dann wird ein zweiter fachlicher Scope benoetigt: `waterbody_id`.
+
+Leitregel:
+1. Club trennt Mandanten gegeneinander.
+2. Gewaesser trennt Daten und Berechtigungen innerhalb eines Clubs.
+3. Policies und Queries muessen beide Scopes beruecksichtigen, wo fachlich relevant.
+
+---
+
+## Ticket 9 (P1): Datenmodell fuer Gewaesser einfuehren
+ID: `MT-009`
+
+Problem:
+- Es gibt noch keine explizite Gewaesser-Entitaet.
+
+Betroffene Bereiche:
+- SQL-Migrationen im `sql/`-Ordner
+- Tabellen mit Fang-/Regel-/Analytics-Bezug
+
+Aufgaben:
+1. Tabelle `waterbodies` anlegen:
+   - `id`, `club_id`, `name`, optional `slug`, `is_active`, Timestamps.
+2. Relevante Tabellen um `waterbody_id` erweitern:
+   - mindestens `fishes`, `crayfish_catches`, `page_views` (optional je Use Case weitere).
+3. Foreign Keys und sinnvolle Indexe auf `(club_id, waterbody_id, timestamp)` ergaenzen.
+4. Default-Gewaesser je Club fuer Bestand definieren.
+
+Definition of Done:
+1. Jeder neue Datensatz mit Gewaesserbezug kann eindeutig einem Gewaesser zugeordnet werden.
+2. Backfill-Strategie fuer Bestandsdaten ist dokumentiert und getestet.
+
+---
+
+## Ticket 10 (P1): RLS fuer Club + Gewaesser-Hierarchie erweitern
+ID: `MT-010`
+
+Problem:
+- Aktuelle RLS prueft primaer Club-Scope, aber nicht feingranular pro Gewaesser.
+
+Betroffene Bereiche:
+- RLS-Policies und Hilfsfunktionen in SQL
+
+Aufgaben:
+1. Membership-Modell fuer Gewaesserzugriff festlegen:
+   - Variante A: Zugriff auf alle Gewaesser eines Clubs.
+   - Variante B: explizite Zuordnung pro Gewaesser.
+2. RLS-Policies so erweitern, dass Datenzugriff nur fuer erlaubte `(club_id, waterbody_id)` Kombinationen moeglich ist.
+3. Admin-Ausnahmen klar definieren (z. B. Vorstand sieht alle Gewaesser im Club).
+
+Definition of Done:
+1. Ein User ohne Gewaesser-Recht kann Daten dieses Gewaessers nicht lesen/schreiben.
+2. Admin-/Vorstandsregeln funktionieren wie fachlich vereinbart.
+
+---
+
+## Ticket 11 (P1): Aktiven Gewaesser-Kontext in der App einfuehren
+ID: `MT-011`
+
+Problem:
+- Es gibt aktuell nur `activeClubId`, aber keinen globalen `activeWaterbodyId`.
+
+Betroffene Bereiche:
+- `src/utils/clubId.js` (Konzeptvorbild)
+- Routing/UI/State-Hooks
+
+Aufgaben:
+1. Zentrale Utility fuer `getActiveWaterbodyId()/setActiveWaterbodyId()` einfuehren.
+2. UI-Switcher fuer Gewaesser bereitstellen (sichtbar und persistent).
+3. Datenabfragen standardmaessig auf aktives Gewaesser filtern.
+4. Fallback-Verhalten klar definieren, wenn kein Gewaesser gewaehlt ist.
+
+Definition of Done:
+1. User kann zwischen Gewaessern wechseln, ohne Club-Kontext zu verlieren.
+2. Jede relevante Ansicht zeigt nur Daten des aktiven Gewaessers oder klar gekennzeichnete Gesamtsicht.
+
+---
+
+## Ticket 12 (P2): Regelwerk und Push auf Gewaesser-Ebene
+ID: `MT-012`
+
+Problem:
+- Regeln und Benachrichtigungen sind bislang nicht systematisch pro Gewaesser geschnitten.
+
+Betroffene Bereiche:
+- Regelwerk-Logik
+- Push-Trigger/Empfaengerfilter
+
+Aufgaben:
+1. Schonzeit, Mindestmass, Entnahme-Limits optional pro Gewaesser modellieren.
+2. Push-Events um `waterbody_id` ergaenzen und nur relevante Empfaenger adressieren.
+3. Externe Fangauswertung/Kartenlayer auf Gewaesserkontext abstimmen.
+
+Definition of Done:
+1. Regelpruefungen sind pro Gewaesser korrekt.
+2. Pushes koennen auf Gewaesser zielgenau eingeschraenkt werden.
+
+---
+
+## Ticket 13 (P2): Testmatrix um Cross-Gewaesser-Faelle erweitern
+ID: `MT-013`
+
+Problem:
+- Bisherige Tests decken primar Cross-Club, nicht Cross-Gewaesser innerhalb eines Clubs ab.
+
+Aufgaben:
+1. Testfaelle fuer mindestens 2 Gewaesser im selben Club definieren.
+2. Faelle fuer differenzierte Rechte pruefen:
+   - User mit Zugriff auf Gewaesser A, nicht B.
+   - Vorstand/Admin mit Zugriff auf beide.
+3. Analytics-, Push- und Admin-Views auf Gewaesserisolation verifizieren.
+
+Definition of Done:
+1. Cross-Gewaesser-Leaks sind testbar ausgeschlossen.
+2. Testpaket ist reproduzierbar und Bestandteil der Release-Abnahme.
+
+---
+
 ## Empfohlene Umsetzungsreihenfolge
 1. `MT-001`
 2. `MT-002`
@@ -214,9 +334,15 @@ Definition of Done:
 6. `MT-005`
 7. `MT-006`
 8. `MT-008`
+9. `MT-009`
+10. `MT-010`
+11. `MT-011`
+12. `MT-012`
+13. `MT-013`
 
 ## Abnahme-Kriterien fuer das Gesamtprojekt
 1. Kein User kann Daten eines fremden Clubs lesen oder schreiben.
 2. Kein User kann Side Effects (Push, Tracking, Admin-Aktionen) fuer fremde Clubs ausloesen.
 3. Rollenrechte sind serverseitig erzwungen (RLS/Function-Auth), nicht nur im Frontend.
 4. Tenant-Isolation ist per Tests belegt.
+5. Bei Mehrgewaesser-Vereinen sind Daten, Rechte und Benachrichtigungen pro Gewaesser isoliert.

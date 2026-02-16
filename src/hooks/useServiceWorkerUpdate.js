@@ -111,6 +111,40 @@ export function useServiceWorkerUpdate() {
   }, [resolveWaitingBuild]);
 
   useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    if (!updateReady || updating) return;
+
+    let cancelled = false;
+
+    const activateWhenHidden = async () => {
+      if (cancelled) return;
+      if (document.visibilityState !== "hidden") return;
+      try {
+        const reg = regRef.current || (await navigator.serviceWorker.getRegistration());
+        if (!reg?.waiting) return;
+        reloadRequestedRef.current = true;
+        reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      } catch (error) {
+        console.warn('[SW] Automatisches Aktivieren fehlgeschlagen:', error);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        activateWhenHidden();
+      }
+    };
+
+    activateWhenHidden();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [updateReady, updating]);
+
+  useEffect(() => {
     if (!updateReady) {
       setWaitingBuild(null);
       setWaitingBuildResolved(true);
@@ -189,22 +223,6 @@ export function useServiceWorkerUpdate() {
       } catch (error) {
         console.warn('[SW] Manuelles Update fehlgeschlagen:', error);
       }
-
-      try {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.allSettled(regs.map(r => r.unregister()));
-      } catch (error) {
-        console.warn('[SW] Registrierungen konnten nicht bereinigt werden:', error);
-      }
-      try {
-        const keys = await caches.keys();
-        await Promise.allSettled(keys.map(k => caches.delete(k)));
-      } catch (error) {
-        console.warn('[SW] Cache-Bereinigung fehlgeschlagen:', error);
-      }
-
-      reloadRequestedRef.current = false;
-      window.location.reload();
     } finally {
       setUpdating(false);
     }

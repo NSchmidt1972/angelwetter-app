@@ -22,8 +22,7 @@ const SUPABASE_ORIGIN = (() => {
   }
 })();
 
-// Neuer SW übernimmt sofort
-self.skipWaiting();
+// Aktivierter SW uebernimmt geclaimte Clients
 clientsClaim();
 cleanupOutdatedCaches();
 
@@ -87,6 +86,10 @@ registerRoute(
 self.addEventListener('message', (event) => {
   const data = event && event.data;
   if (!data || typeof data !== 'object') return;
+  if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
   if (data.type !== 'GET_BUILD_INFO') return;
 
   const payload = (typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__) || null;
