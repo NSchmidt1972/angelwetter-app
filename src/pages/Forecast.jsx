@@ -7,7 +7,7 @@ import { InitialForecastLoader } from '@/features/forecast/components/ForecastLo
 import { getModelTrainingRows } from '@/features/forecast/utils';
 
 export default function Forecast() {
-  const { weatherData, aiPrediction, dailyPredictions, loading } = useForecast();
+  const { weatherData, aiPrediction, dailyPredictions, loading, forecastError, reload } = useForecast();
   const modelTrainingRows = getModelTrainingRows(aiPrediction);
   const [expanded, setExpanded] = useState({});
 
@@ -30,13 +30,22 @@ export default function Forecast() {
             aiPrediction={aiPrediction}
             modelTrainingRows={modelTrainingRows}
             loading={loading}
+            errorMessage={forecastError?.scope === 'ai' ? forecastError.message : null}
+            onRetry={reload}
           />
         ) : loading ? (
           <InitialForecastLoader />
         ) : (
-          <p className="text-center text-gray-500 dark:text-gray-400">
-            Wetterdaten konnten nicht geladen werden.
-          </p>
+          <div className="text-center text-gray-500 dark:text-gray-400 space-y-3">
+            <p>{forecastError?.message || 'Wetterdaten konnten nicht geladen werden.'}</p>
+            <button
+              type="button"
+              onClick={reload}
+              className="inline-flex items-center rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 transition"
+            >
+              Erneut versuchen
+            </button>
+          </div>
         )}
 
         <DailyOutlookCard

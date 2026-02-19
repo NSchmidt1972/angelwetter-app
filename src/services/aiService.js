@@ -8,13 +8,27 @@ async function postJSON(url, body, { signal } = {}) {
     body: JSON.stringify(body),
     signal
   });
-  if (!res.ok) throw new Error(`AI request failed: ${res.status}`);
+  if (!res.ok) {
+    const responseText = await res.text().catch(() => "");
+    const error = new Error(`AI request failed: ${res.status}`);
+    error.status = res.status;
+    error.url = url;
+    error.responseText = responseText ? responseText.slice(0, 250) : "";
+    throw error;
+  }
   return res.json();
 }
 
 async function getJSON(url, { signal } = {}) {
   const res = await fetch(url, { method: "GET", signal });
-  if (!res.ok) throw new Error(`AI request failed: ${res.status}`);
+  if (!res.ok) {
+    const responseText = await res.text().catch(() => "");
+    const error = new Error(`AI request failed: ${res.status}`);
+    error.status = res.status;
+    error.url = url;
+    error.responseText = responseText ? responseText.slice(0, 250) : "";
+    throw error;
+  }
   return res.json();
 }
 

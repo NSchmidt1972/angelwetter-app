@@ -21,6 +21,8 @@ Angelwetter ist eine React/Vite PWA für Fangmeldungen, Auswertungen und Push-Be
 - `SUPABASE_SERVICE_ROLE_KEY` – Service-Role-Key für das AI-Backend (nur Server/Train, nie ins Frontend).
 - `VITE_DEFAULT_CLUB_ID` – optionaler Fallback-Verein, wenn kein Mapping greift.
 - `VITE_AI_BASE_URL` – optionaler AI-Endpunkt (Default: `https://ai.asv-rotauge.de`).
+- `VITE_FORECAST_RETRY_ATTEMPTS` – zusätzliche Retry-Versuche im Forecast-Frontend bei transienten Fehlern (Default: `1`, Range: `0`-`3`).
+- `VITE_FORECAST_RETRY_DELAY_MS` – Wartezeit zwischen Forecast-Retries in Millisekunden (Default: `450`, Range: `0`-`5000`).
 - `VITE_APP_VERSION`, `VITE_BUILD_DATE`, `VITE_GIT_COMMIT` – optional, falls du Build-Metadaten selbst setzen willst.
 
 ## Deployment & Releases

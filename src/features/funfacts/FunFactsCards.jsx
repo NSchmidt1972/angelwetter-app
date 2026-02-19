@@ -855,51 +855,38 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
 
-          // 22) ❄️ Kältester Fang (Frost)
-          <Card key="frostCatch" title="❄️ Kältester Fang: Wer hat bei Frost gefangen? (≤ 0 °C)">
-            {frostCatch.ranking.length > 0 ? (
+          // 22) ❄️ Kältester Fang
+          <Card key="frostCatch" title="❄️ Kältester Fang">
+            {frostCatch ? (
               <>
+                <p className="mb-2">
+                  Niedrigste Temperatur:{' '}
+                  <b className="text-green-700 dark:text-green-300">
+                    {frostCatch.tempC.toFixed(1)}°C
+                  </b>
+                </p>
                 <ul className="space-y-2">
-                  {frostCatch.winners.map((it, idx) => (
-                    <li key={idx} className="flex items-start justify-between gap-3">
+                  {frostCatch.items.map((f, idx) => (
+                    <li key={f.id ?? idx} className="flex items-start justify-between gap-3">
                       <div>
                         <div className="font-medium text-green-700 dark:text-green-300">
-                          {it.angler}
+                          {f.angler}
                         </div>
-                        {it.sample && (
-                          <div className="text-xs text-gray-600 dark:text-gray-300">
-                            Beispiel: {it.sample.fish} • {parseFloat(it.bestSize).toFixed(0)} cm • {formatDateTimeSafe(it.sample.timestamp)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                          {it.count}x
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Frost-Fänge
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          {f.fish}
+                          {parseFloat(f.size) > 0 ? ` • ${parseFloat(f.size).toFixed(0)} cm` : ''} •{' '}
+                          {formatDateTimeSafe(f.timestamp)}
                         </div>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                  Rangliste (Top 5):
-                </div>
-                <ul className="space-y-1">
-                  {frostCatch.ranking.slice(0, 5).map((it, i) => (
-                    <li key={i} className="flex justify-between text-sm">
-                      <span>
-                        {i + 1}. {it.angler}
-                      </span>
-                      <span className="font-semibold">{it.count}x</span>
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                        {frostCatch.tempC.toFixed(1)}°C
+                      </div>
                     </li>
                   ))}
                 </ul>
               </>
             ) : (
-              <p>Keine Frost-Fänge gefunden.</p>
+              <p>Keine Temperaturdaten vorhanden.</p>
             )}
           </Card>,
 

@@ -1259,33 +1259,27 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
   }, [ferkensbruchFishes]);
 
   const frostCatch = useMemo(() => {
-    const frost = ferkensbruchFishes
+    const withTemp = ferkensbruchFishes
       .map((f) => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
-      .filter((x) => x.t != null && x.t <= 0 && !Number.isNaN(x.size) && x.size > 0);
+      .filter((x) => x.t != null);
 
-    if (frost.length === 0) return { max: 0, winners: [], ranking: [] };
+    if (withTemp.length === 0) return null;
 
-    const byAngler = {};
-    for (const x of frost) {
-      const who = (x.f.angler || 'Unbekannt').trim();
-      if (!byAngler[who]) byAngler[who] = { count: 0, bestSize: 0, sample: null };
-      byAngler[who].count += 1;
-      if (x.size > byAngler[who].bestSize) {
-        byAngler[who].bestSize = x.size;
-        byAngler[who].sample = x.f;
-      }
-    }
+    const minT = Math.min(...withTemp.map((x) => x.t));
+    const items = withTemp
+      .filter((x) => Math.abs(x.t - minT) < 1e-9)
+      .sort((a, b) => {
+        const sizeA = Number.isFinite(a.size) ? a.size : -Infinity;
+        const sizeB = Number.isFinite(b.size) ? b.size : -Infinity;
+        if (sizeB !== sizeA) return sizeB - sizeA;
+        const timeA = new Date(a.f.timestamp).getTime();
+        const timeB = new Date(b.f.timestamp).getTime();
+        if (Number.isFinite(timeA) && Number.isFinite(timeB)) return timeA - timeB;
+        return 0;
+      })
+      .map((x) => x.f);
 
-    const entries = Object.entries(byAngler).map(([angler, v]) => ({ angler, ...v }));
-    entries.sort(
-      (a, b) =>
-        b.count - a.count ||
-        b.bestSize - a.bestSize ||
-        a.angler.localeCompare(b.angler),
-    );
-    const max = entries[0].count;
-    const winners = entries.filter((e) => e.count === max);
-    return { max, winners, ranking: entries };
+    return { tempC: minT, items };
   }, [ferkensbruchFishes]);
 
   const extremeWeatherCatch = useMemo(() => {
@@ -1642,8 +1636,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     addList(schneiderKoenig.winners, (item) => item?.angler);
     addList(worstBlankMonth.winners, () => null);
     addList(hottestCatch?.items, (item) => item?.angler);
-    addList(frostCatch.winners, (item) => item?.angler);
-    addList(frostCatch.ranking.slice(0, 5), (item) => item?.angler);
+    addList(frostCatch?.items, (item) => item?.angler);
     addList(extremeWeatherCatch?.ranking?.slice(0, 3), (item) => item?.fish?.angler);
     addList(angelQueen.winners, (item) => item?.angler);
     addList(photoArtist.winners, (item) => item?.angler);

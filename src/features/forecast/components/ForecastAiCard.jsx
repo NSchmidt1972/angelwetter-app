@@ -4,7 +4,7 @@ import VolatilityBadge from '@/features/forecast/components/VolatilityBadge';
 import { LoadingPanel } from '@/features/forecast/components/ForecastLoadingPanels';
 import { formatMetric, formatSignedMetric } from '@/features/forecast/utils';
 
-export default function ForecastAiCard({ aiPrediction, modelTrainingRows, loading }) {
+export default function ForecastAiCard({ aiPrediction, modelTrainingRows, loading, errorMessage, onRetry }) {
   return (
     <Card className="bg-white dark:bg-gray-800 shadow-md rounded-xl p-6 mb-6">
       <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg shadow-inner">
@@ -104,9 +104,20 @@ export default function ForecastAiCard({ aiPrediction, modelTrainingRows, loadin
         ) : loading ? (
           <LoadingPanel label="KI-Prognose wird berechnet..." />
         ) : (
-          <p className="text-sm italic text-gray-500 dark:text-gray-300">
-            KI-Prognose aktuell nicht verfügbar.
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm italic text-gray-500 dark:text-gray-300">
+              {errorMessage || 'KI-Prognose aktuell nicht verfügbar.'}
+            </p>
+            {typeof onRetry === 'function' && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 transition"
+              >
+                Erneut versuchen
+              </button>
+            )}
+          </div>
         )}
       </div>
     </Card>
