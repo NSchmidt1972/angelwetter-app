@@ -16,6 +16,7 @@ import { VERTRAUTE } from '@/constants';
 import { REACTION_OPTIONS } from '@/constants/reactions';
 import { isVisibleToUser } from '@/utils/filters';
 import { useReactions } from '@/hooks/useReactions';
+import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
 
 export default function CatchList({ anglerName }) {
   const [onlyMine, setOnlyMine] = useState(false);
@@ -30,6 +31,8 @@ export default function CatchList({ anglerName }) {
     sentinelRef,
     updateEntry,
     deleteEntry,
+    setExternalVisibility,
+    isVisibilityPending,
   } = useCatches(anglerName, onlyMine);
 
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -66,7 +69,7 @@ export default function CatchList({ anglerName }) {
         const clubId = getActiveClubId();
         const { data, error } = await supabase
           .from('fishes')
-          .select('id, fish, size, angler, timestamp, location_name, blank')
+          .select('id, fish, size, angler, timestamp, location_name, blank, share_public_non_home')
           .eq('club_id', clubId);
         if (error) {
           console.error('Top 10 laden:', error);
@@ -184,6 +187,18 @@ export default function CatchList({ anglerName }) {
     };
   }, [activeReactionFish, closeReactionMenu]);
 
+  const handleExternalVisibilityChange = useCallback(
+    async (entry, enabled) => {
+      try {
+        await setExternalVisibility(entry.id, enabled);
+      } catch (error) {
+        console.error('Sichtbarkeit konnte nicht gespeichert werden:', error);
+        alert('Die Freigabe konnte nicht gespeichert werden.');
+      }
+    },
+    [setExternalVisibility]
+  );
+
   return (
     <div className="p-6 bg-white dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
       <div className="space-y-6 max-w-3xl mx-auto">
@@ -237,6 +252,12 @@ export default function CatchList({ anglerName }) {
             const userReaction = getUserReactionFor(entry.id);
             const pendingReaction = isReactionPending(entry.id);
             const hasReactions = Object.keys(reactionCounts || {}).length > 0;
+            const isOwnEntry = entry.angler === anglerName;
+            const isHomeWater = isFerkensbruchLocation(entry.location_name);
+            const isExternalCatch = !isHomeWater;
+            const isSharedExternal = entry.share_public_non_home === true;
+            const visibilityPending = isVisibilityPending(entry.id);
+            const locationLabel = formatLocationLabel(entry.location_name);
 
             return (
               <li
@@ -296,10 +317,7 @@ export default function CatchList({ anglerName }) {
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {dateStr} – {timeStr}{' '}
-                    {!entry.location_name ||
-                    entry.location_name.toLowerCase().includes('lobberich')
-                      ? ''
-                      : `📍 ${entry.location_name}`}
+                    {isExternalCatch ? `📍 ${locationLabel}` : ''}
                   </p>
 
                   <div className="flex items-center gap-2 ml-auto">
@@ -315,7 +333,7 @@ export default function CatchList({ anglerName }) {
                     )}
                   </div>
 
-                  {entry.angler === anglerName && (
+                  {isOwnEntry && (
                     <div className="relative">
                       <button
                         onClick={() =>
@@ -362,6 +380,21 @@ export default function CatchList({ anglerName }) {
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-semibold">{entry.angler}</span>
                 </div>
+
+                {isOwnEntry && isExternalCatch && (
+                  <label className="mb-2 inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-100">
+                    <input
+                      type="checkbox"
+                      checked={isSharedExternal}
+                      disabled={visibilityPending}
+                      onChange={(event) =>
+                        handleExternalVisibilityChange(entry, event.target.checked)
+                      }
+                      className="accent-amber-600"
+                    />
+                    In der Catchlist für alle anzeigen
+                  </label>
+                )}
 
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-blue-600 font-medium">
@@ -448,7 +481,7 @@ export default function CatchList({ anglerName }) {
                 )}
 
                 <div className="flex items-center gap-3 mt-2 justify-end">
-                  {entry.angler === anglerName && (
+                  {isOwnEntry && (
                     <button
                       onClick={() => shareEntry(entry)}
                       className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition"

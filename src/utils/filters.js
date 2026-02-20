@@ -1,5 +1,6 @@
 // src/utils/filters.js
 import { PUBLIC_FROM } from '../constants';
+import { isFerkensbruchLocation } from '@/utils/location';
 
 export function isVisibleToUser(entry, { isTrusted, onlyMine, anglerName, filterSetting }) {
   const fangDatum = new Date(entry.timestamp);
@@ -11,8 +12,8 @@ export function isVisibleToUser(entry, { isTrusted, onlyMine, anglerName, filter
     if (filterSetting !== 'all' && fangDatum < PUBLIC_FROM) return false;
   }
 
-  const ort = entry.location_name?.toLowerCase().trim() ?? '';
-  const ortIstLobberich = entry.location_name == null || ort.includes('lobberich');
+  const ortIstLobberich = isFerkensbruchLocation(entry.location_name);
+  const externFreigegeben = !ortIstLobberich && entry.share_public_non_home === true;
 
-  return onlyMine ? istEigenerFang : ortIstLobberich;
+  return onlyMine ? istEigenerFang : ortIstLobberich || externFreigegeben;
 }

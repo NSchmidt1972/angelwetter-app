@@ -1,7 +1,13 @@
 // src/hooks/useCatches.js
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PAGE_SIZE, CACHE_KEY, VERTRAUTE, PUBLIC_FROM } from '../constants';
-import { listFishes, countFishes, updateFish as svcUpdate, deleteFish as svcDelete } from '../services/fishes';
+import { PAGE_SIZE, CACHE_KEY, VERTRAUTE } from '../constants';
+import {
+  listFishes,
+  countFishes,
+  updateFish as svcUpdate,
+  deleteFish as svcDelete,
+  updateFishExternalVisibility as svcUpdateExternalVisibility,
+} from '../services/fishes';
 import { processAndUploadImage } from '../services/imageProcessing';
 import { isVisibleToUser } from '../utils/filters';
 import { readCache, writeCache } from '../utils/cache';
@@ -12,9 +18,21 @@ export function useCatches(anglerName, onlyMine) {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(null);
+  const [visibilityPending, setVisibilityPending] = useState({});
 
   const isTrusted = useMemo(() => VERTRAUTE.includes(anglerName), [anglerName]);
   const sentinelRef = useRef(null);
+  const applyVisibilityFilter = useCallback((items, mineFlag = onlyMine) => {
+    const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
+    return (items || []).filter((entry) =>
+      isVisibleToUser(entry, {
+        isTrusted,
+        onlyMine: mineFlag,
+        anglerName,
+        filterSetting,
+      })
+    );
+  }, [onlyMine, isTrusted, anglerName]);
 
   // initial cache warm
   useEffect(() => {
@@ -34,8 +52,7 @@ export function useCatches(anglerName, onlyMine) {
     const { data, error } = await q;
     if (error) { console.error('Fänge laden:', error); setLoading(false); return { items: [] }; }
 
-    const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
-    const filtered = (data || []).filter(f => isVisibleToUser(f, { isTrusted, onlyMine, anglerName, filterSetting }));
+    const filtered = applyVisibilityFilter(data, onlyMine);
 
     setCatches(prev => (p === 0 ? filtered : [...prev, ...filtered]));
     setHasMore((data || []).length === PAGE_SIZE);
@@ -44,7 +61,7 @@ export function useCatches(anglerName, onlyMine) {
     if (p === 0) writeCache(CACHE_KEY, { items: filtered, hasMore: true });
 
     return { items: filtered };
-  }, [onlyMine, anglerName, isTrusted]);
+  }, [onlyMine, anglerName, applyVisibilityFilter]);
 
   // page effect
   useEffect(() => { fetchPage(page); }, [page, fetchPage]);
@@ -91,14 +108,36 @@ export function useCatches(anglerName, onlyMine) {
     const { error } = await svcUpdate(entry.id, payload);
     if (error) throw error;
 
-    setCatches(prev =>
-      prev.map(c =>
+    setCatches(prev => {
+      const updated = prev.map(c =>
         c.id === entry.id
           ? { ...c, ...payload }
           : c
-      )
-    );
-  }, []);
+      );
+      return applyVisibilityFilter(updated, onlyMine);
+    });
+  }, [applyVisibilityFilter, onlyMine]);
+
+  const setExternalVisibility = useCallback(async (entryId, enabled) => {
+    if (!entryId) return;
+
+    setVisibilityPending((prev) => ({ ...prev, [entryId]: true }));
+    try {
+      const { error } = await svcUpdateExternalVisibility(entryId, enabled);
+      if (error) throw error;
+
+      setCatches((prev) => {
+        const updated = prev.map((entry) =>
+          entry.id === entryId
+            ? { ...entry, share_public_non_home: !!enabled }
+            : entry
+        );
+        return applyVisibilityFilter(updated, onlyMine);
+      });
+    } finally {
+      setVisibilityPending((prev) => ({ ...prev, [entryId]: false }));
+    }
+  }, [applyVisibilityFilter, onlyMine]);
 
   const deleteEntry = useCallback(async (id) => {
     const { error } = await svcDelete(id);
@@ -107,5 +146,19 @@ export function useCatches(anglerName, onlyMine) {
     setTotalCount(tc => (typeof tc === 'number' ? Math.max(tc - 1, 0) : tc));
   }, []);
 
-  return { catches, loading, hasMore, totalCount, loadNext, sentinelRef, updateEntry, deleteEntry, reset };
+  const isVisibilityPending = useCallback((entryId) => !!visibilityPending[entryId], [visibilityPending]);
+
+  return {
+    catches,
+    loading,
+    hasMore,
+    totalCount,
+    loadNext,
+    sentinelRef,
+    updateEntry,
+    deleteEntry,
+    setExternalVisibility,
+    isVisibilityPending,
+    reset,
+  };
 }
