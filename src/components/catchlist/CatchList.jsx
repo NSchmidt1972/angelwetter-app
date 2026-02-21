@@ -82,6 +82,7 @@ export default function CatchList({ anglerName }) {
             const sizeNum = parseFloat(entry?.size);
             if (!entry?.fish || Number.isNaN(sizeNum) || sizeNum <= 0) return false;
             if (entry.blank) return false;
+            if (!isFerkensbruchLocation(entry.location_name)) return false;
             return isVisibleToUser(entry, {
               isTrusted,
               onlyMine: false,
@@ -321,7 +322,7 @@ export default function CatchList({ anglerName }) {
                   </p>
 
                   <div className="flex items-center gap-2 ml-auto">
-                    {topInfo && (
+                    {topInfo && isHomeWater && (
                       <button
                         type="button"
                         onClick={() => navigate(`${clubBasePath}/top-fishes?fish=${encodeURIComponent(entry.fish || '')}`)}

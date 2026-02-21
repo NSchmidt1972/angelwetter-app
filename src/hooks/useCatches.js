@@ -22,6 +22,7 @@ export function useCatches(anglerName, onlyMine) {
 
   const isTrusted = useMemo(() => VERTRAUTE.includes(anglerName), [anglerName]);
   const sentinelRef = useRef(null);
+  const queryVersionRef = useRef(0);
   const applyVisibilityFilter = useCallback((items, mineFlag = onlyMine) => {
     const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
     return (items || []).filter((entry) =>
@@ -43,13 +44,24 @@ export function useCatches(anglerName, onlyMine) {
     setPage(0);
   }, []);
 
+  // reset list state whenever list context changes (e.g. onlyMine toggle)
+  useEffect(() => {
+    queryVersionRef.current += 1;
+    setCatches([]);
+    setHasMore(true);
+    setPage(0);
+    setLoading(true);
+  }, [onlyMine, anglerName]);
+
   const fetchPage = useCallback(async (p) => {
+    const versionAtStart = queryVersionRef.current;
     setLoading(true);
     const from = p * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
     const q = await listFishes({ from, to, onlyMine, anglerName });
     const { data, error } = await q;
+    if (versionAtStart !== queryVersionRef.current) return { items: [] };
     if (error) { console.error('Fänge laden:', error); setLoading(false); return { items: [] }; }
 
     const filtered = applyVisibilityFilter(data, onlyMine);
@@ -68,16 +80,24 @@ export function useCatches(anglerName, onlyMine) {
 
   // total count
   useEffect(() => {
+    let active = true;
     (async () => {
       const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
       const fromIso = (!isTrusted || filterSetting !== 'all') ? new Date('2025-06-01').toISOString() : null;
       const { count, error } = await countFishes({ onlyMine, anglerName, fromIso });
+      if (!active) return;
       if (error) { console.error('Gesamtanzahl laden:', error); setTotalCount(null); }
       else setTotalCount(count ?? 0);
     })();
+    return () => {
+      active = false;
+    };
   }, [onlyMine, anglerName, isTrusted]);
 
-  const loadNext = useCallback(() => setPage(p => p + 1), []);
+  const loadNext = useCallback(() => {
+    if (loading || !hasMore) return;
+    setPage((p) => p + 1);
+  }, [loading, hasMore]);
   const reset = useCallback(() => { setPage(0); }, []);
 
   // editing helpers
