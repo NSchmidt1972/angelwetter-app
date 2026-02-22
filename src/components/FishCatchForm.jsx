@@ -199,13 +199,17 @@ export default function FishCatchForm({
   const handleBlankSubmit = async () => {
     setLoadingBlank(true);
     try {
+      setStatusMessage("Schneidersession wird gespeichert...");
       await saveBlankDay(anglerName, hours, fishingType, position);
+      setStatusMessage("Schneidersession gespeichert");
+      await new Promise((resolve) => setTimeout(resolve, 300));
       navigate(`${clubBasePath || '/'}`);
     } catch (err) {
       console.error(err);
       alert(err.message || "Fehler beim Speichern.");
     } finally {
       setLoadingBlank(false);
+      setStatusMessage("");
     }
   };
 
@@ -309,8 +313,14 @@ export default function FishCatchForm({
             </div>
 
             {statusMessage && (
-              <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-400/50 bg-blue-500/10 px-4 py-3 text-sm font-medium text-blue-700 dark:text-blue-200">
-                ⏳ {statusMessage}
+              <div
+                className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${
+                  statusMessage.toLowerCase().includes("gespeichert")
+                    ? "border border-emerald-400/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                    : "border border-blue-400/50 bg-blue-500/10 text-blue-700 dark:text-blue-200"
+                }`}
+              >
+                {statusMessage.toLowerCase().includes("gespeichert") ? "✅" : "⏳"} {statusMessage}
               </div>
             )}
           </div>
