@@ -18,7 +18,9 @@ const UserMenu = forwardRef(function UserMenu(
     onLogout,
     shouldShowUpdateBanner,
     onApplyUpdate,
+    onRestartApp,
     updating,
+    updateStatusText,
   },
   ref
 ) {
@@ -98,23 +100,38 @@ const UserMenu = forwardRef(function UserMenu(
             <VersionInfo />
 
             {shouldShowUpdateBanner ? (
-              <button
-                type="button"
-                onClick={onApplyUpdate}
-                disabled={updating}
-                className="mt-2 w-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 px-3 py-2 rounded disabled:opacity-60"
-                title="Neue Version verfügbar – jetzt anwenden"
-              >
-                {updating ? "⏳ Aktualisiere…" : "⤴️ App aktualisieren"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onApplyUpdate}
+                  disabled={updating}
+                  className="mt-2 w-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 px-3 py-2 rounded disabled:opacity-60"
+                  title="Neue Version verfügbar – jetzt anwenden"
+                >
+                  {updating ? "⏳ Aktualisiere…" : "⤴️ App aktualisieren"}
+                </button>
+                {updating && updateStatusText ? (
+                  <p className="mt-1 text-[11px] text-yellow-700 dark:text-yellow-300">
+                    {updateStatusText}
+                  </p>
+                ) : null}
+              </>
             ) : (
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="mt-2 w-full text-xs text-blue-600 dark:text-blue-400"
-              >
-                🔄 App neu starten
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onRestartApp}
+                  disabled={updating}
+                  className="mt-2 w-full text-xs text-blue-600 dark:text-blue-400 disabled:opacity-60"
+                >
+                  {updating ? "⏳ Starte neu…" : "🔄 App neu starten"}
+                </button>
+                {updating && updateStatusText ? (
+                  <p className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
+                    {updateStatusText}
+                  </p>
+                ) : null}
+              </>
             )}
           </div>
         </div>

@@ -4,6 +4,7 @@ import { waitForControllerChange, requestWorkerBuildInfo } from "@/utils/sw";
 export function useServiceWorkerUpdate() {
   const [updateReady, setUpdateReady] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [updateStatusText, setUpdateStatusText] = useState("");
   const [waitingBuild, setWaitingBuild] = useState(null);
   const [waitingBuildResolved, setWaitingBuildResolved] = useState(false);
   const regRef = useRef(null);
@@ -84,6 +85,43 @@ export function useServiceWorkerUpdate() {
         };
         navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
         offControllerChange = () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+
+        const activateWaitingAtStartup = async (reason) => {
+          if (cancel) return false;
+          if (document.visibilityState !== "visible") return false;
+          if (!reg.waiting) return false;
+
+          try {
+            reloadRequestedRef.current = true;
+            reg.waiting.postMessage({ type: "SKIP_WAITING" });
+            await waitForControllerChange(3000);
+            return true;
+          } catch (error) {
+            reloadRequestedRef.current = false;
+            console.warn(`[SW] Automatisches Aktivieren beim Start fehlgeschlagen (${reason}):`, error);
+            return false;
+          }
+        };
+
+        if (!(await activateWaitingAtStartup("waiting-worker"))) {
+          try {
+            await reg.update();
+
+            if (!cancel) {
+              const hasWaiting = Boolean(reg.waiting);
+              setUpdateReady(hasWaiting);
+              if (hasWaiting) {
+                resolveWaitingBuild(reg.waiting);
+                await activateWaitingAtStartup("startup-update-check");
+              } else {
+                setWaitingBuild(null);
+                setWaitingBuildResolved(true);
+              }
+            }
+          } catch (error) {
+            console.warn('[SW] Initialer Update-Check fehlgeschlagen:', error);
+          }
+        }
 
         visibilityHandler = async () => {
           if (document.visibilityState === "visible") {
@@ -176,42 +214,50 @@ export function useServiceWorkerUpdate() {
     };
   }, [updateReady, resolveWaitingBuild]);
 
+  const activateWaitingWorker = useCallback(async (reg, reason = 'manual') => {
+    if (!reg?.waiting) return false;
+
+    reloadRequestedRef.current = true;
+    try {
+      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+    } catch (error) {
+      reloadRequestedRef.current = false;
+      console.warn(`[SW] SKIP_WAITING Nachricht fehlgeschlagen (${reason}):`, error);
+      return false;
+    }
+
+    try {
+      await waitForControllerChange(3000);
+      setUpdateReady(false);
+      setWaitingBuild(null);
+      setWaitingBuildResolved(true);
+      return true;
+    } catch (error) {
+      reloadRequestedRef.current = false;
+      console.warn(`[SW] Controller-Änderung abgewartet aber fehlgeschlagen (${reason}):`, error);
+      return false;
+    }
+  }, []);
+
   const applyUpdateNow = async () => {
     if (updating) return;
     setUpdating(true);
+    setUpdateStatusText("Prüfe auf Updates…");
     try {
       const reg = regRef.current || (await navigator.serviceWorker.getRegistration());
       if (!reg) {
+        setUpdateStatusText("Starte App neu…");
         window.location.reload();
         return;
       }
-
-      const skip = async () => {
-        if (!reg.waiting) return false;
-        reloadRequestedRef.current = true;
-        try {
-          reg.waiting.postMessage({ type: "SKIP_WAITING" });
-        } catch (error) {
-          console.warn('[SW] SKIP_WAITING Nachricht fehlgeschlagen:', error);
-        }
-        try {
-          await waitForControllerChange(3000);
-          setUpdateReady(false);
-          setWaitingBuild(null);
-          setWaitingBuildResolved(true);
-          return true;
-        } catch (error) {
-          reloadRequestedRef.current = false;
-          console.warn('[SW] Controller-Änderung abgewartet aber fehlgeschlagen:', error);
-          return false;
-        }
-      };
-
-      if (reg.waiting && await skip()) return;
+      setUpdateStatusText("Aktualisierung wird angewendet…");
+      if (await activateWaitingWorker(reg, 'apply-update-existing')) return;
 
       try {
+        setUpdateStatusText("Prüfe auf Updates…");
         await reg.update();
-        if (reg.waiting && await skip()) return;
+        setUpdateStatusText("Aktualisierung wird angewendet…");
+        if (await activateWaitingWorker(reg, 'apply-update-after-check')) return;
         const hasWaiting = Boolean(reg.waiting);
         setUpdateReady(hasWaiting);
         if (hasWaiting) {
@@ -224,9 +270,58 @@ export function useServiceWorkerUpdate() {
         console.warn('[SW] Manuelles Update fehlgeschlagen:', error);
       }
     } finally {
+      setUpdateStatusText("");
       setUpdating(false);
     }
   };
 
-  return { updateReady, updating, applyUpdateNow, regRef, waitingBuild, waitingBuildResolved };
+  const restartApp = async () => {
+    if (updating) return;
+    setUpdating(true);
+    setUpdateStatusText("Prüfe auf Updates…");
+    try {
+      if (!("serviceWorker" in navigator)) {
+        setUpdateStatusText("Starte App neu…");
+        window.location.reload();
+        return;
+      }
+
+      const reg = regRef.current || (await navigator.serviceWorker.getRegistration());
+      if (!reg) {
+        setUpdateStatusText("Starte App neu…");
+        window.location.reload();
+        return;
+      }
+
+      setUpdateStatusText("Aktualisierung wird angewendet…");
+      if (await activateWaitingWorker(reg, 'restart-existing')) return;
+
+      try {
+        setUpdateStatusText("Prüfe auf Updates…");
+        await reg.update();
+      } catch (error) {
+        console.warn('[SW] Update vor Neustart fehlgeschlagen:', error);
+      }
+
+      setUpdateStatusText("Aktualisierung wird angewendet…");
+      if (await activateWaitingWorker(reg, 'restart-after-check')) return;
+
+      setUpdateStatusText("Starte App neu…");
+      window.location.reload();
+    } finally {
+      setUpdateStatusText("");
+      setUpdating(false);
+    }
+  };
+
+  return {
+    updateReady,
+    updating,
+    updateStatusText,
+    applyUpdateNow,
+    restartApp,
+    regRef,
+    waitingBuild,
+    waitingBuildResolved,
+  };
 }

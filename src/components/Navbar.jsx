@@ -26,7 +26,9 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
   const {
     updateReady,
     updating,
+    updateStatusText,
     applyUpdateNow,
+    restartApp,
   } = useServiceWorkerUpdate();
 
   // Lokaler UI-State
@@ -217,7 +219,9 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
           onLogout={handleLogout}
           shouldShowUpdateBanner={shouldShowUpdateBanner}
           onApplyUpdate={applyUpdateNow}
+          onRestartApp={restartApp}
           updating={updating}
+          updateStatusText={updateStatusText}
         />
         </div>
 
