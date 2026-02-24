@@ -126,9 +126,18 @@ export function useServiceWorkerUpdate() {
         visibilityHandler = async () => {
           if (document.visibilityState === "visible") {
             try {
+              if (await activateWaitingAtStartup("visible-existing-waiting")) {
+                return;
+              }
+
               await reg.update();
+
+              const hasWaiting = Boolean(reg.waiting);
+              setUpdateReady(hasWaiting);
+
               if (reg.waiting) {
                 resolveWaitingBuild(reg.waiting);
+                await activateWaitingAtStartup("visible-after-update-check");
               }
             } catch (error) {
               console.warn('[SW] Update beim Sichtbarwerden fehlgeschlagen:', error);
