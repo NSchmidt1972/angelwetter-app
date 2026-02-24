@@ -86,50 +86,26 @@ export function useServiceWorkerUpdate() {
         navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
         offControllerChange = () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
 
-        const activateWaitingAtStartup = async (reason) => {
-          if (cancel) return false;
-          if (document.visibilityState !== "visible") return false;
-          if (!reg.waiting) return false;
+        try {
+          await reg.update();
 
-          try {
-            reloadRequestedRef.current = true;
-            reg.waiting.postMessage({ type: "SKIP_WAITING" });
-            await waitForControllerChange(3000);
-            return true;
-          } catch (error) {
-            reloadRequestedRef.current = false;
-            console.warn(`[SW] Automatisches Aktivieren beim Start fehlgeschlagen (${reason}):`, error);
-            return false;
-          }
-        };
-
-        if (!(await activateWaitingAtStartup("waiting-worker"))) {
-          try {
-            await reg.update();
-
-            if (!cancel) {
-              const hasWaiting = Boolean(reg.waiting);
-              setUpdateReady(hasWaiting);
-              if (hasWaiting) {
-                resolveWaitingBuild(reg.waiting);
-                await activateWaitingAtStartup("startup-update-check");
-              } else {
-                setWaitingBuild(null);
-                setWaitingBuildResolved(true);
-              }
+          if (!cancel) {
+            const hasWaiting = Boolean(reg.waiting);
+            setUpdateReady(hasWaiting);
+            if (hasWaiting) {
+              resolveWaitingBuild(reg.waiting);
+            } else {
+              setWaitingBuild(null);
+              setWaitingBuildResolved(true);
             }
-          } catch (error) {
-            console.warn('[SW] Initialer Update-Check fehlgeschlagen:', error);
           }
+        } catch (error) {
+          console.warn('[SW] Initialer Update-Check fehlgeschlagen:', error);
         }
 
         visibilityHandler = async () => {
           if (document.visibilityState === "visible") {
             try {
-              if (await activateWaitingAtStartup("visible-existing-waiting")) {
-                return;
-              }
-
               await reg.update();
 
               const hasWaiting = Boolean(reg.waiting);
@@ -137,7 +113,6 @@ export function useServiceWorkerUpdate() {
 
               if (reg.waiting) {
                 resolveWaitingBuild(reg.waiting);
-                await activateWaitingAtStartup("visible-after-update-check");
               }
             } catch (error) {
               console.warn('[SW] Update beim Sichtbarwerden fehlgeschlagen:', error);
@@ -156,40 +131,6 @@ export function useServiceWorkerUpdate() {
       if (visibilityHandler) document.removeEventListener("visibilitychange", visibilityHandler);
     };
   }, [resolveWaitingBuild]);
-
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    if (!updateReady || updating) return;
-
-    let cancelled = false;
-
-    const activateWhenHidden = async () => {
-      if (cancelled) return;
-      if (document.visibilityState !== "hidden") return;
-      try {
-        const reg = regRef.current || (await navigator.serviceWorker.getRegistration());
-        if (!reg?.waiting) return;
-        reloadRequestedRef.current = true;
-        reg.waiting.postMessage({ type: "SKIP_WAITING" });
-      } catch (error) {
-        console.warn('[SW] Automatisches Aktivieren fehlgeschlagen:', error);
-      }
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        activateWhenHidden();
-      }
-    };
-
-    activateWhenHidden();
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [updateReady, updating]);
 
   useEffect(() => {
     if (!updateReady) {
