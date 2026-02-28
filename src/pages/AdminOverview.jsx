@@ -14,6 +14,7 @@ import OverviewSection from '@/features/adminOverview/components/OverviewSection
 import PushSubscribersSection from '@/features/adminOverview/components/PushSubscribersSection';
 import RecentBlanksSection from '@/features/adminOverview/components/RecentBlanksSection';
 import RegisteredUsersSection from '@/features/adminOverview/components/RegisteredUsersSection';
+import SensorLogsSection from '@/features/adminOverview/components/SensorLogsSection';
 import TakenCatchesSection from '@/features/adminOverview/components/TakenCatchesSection';
 import {
   PAGE_VIEW_LIMIT,
@@ -41,6 +42,14 @@ export default function AdminOverview() {
   const [takenCatches, setTakenCatches] = useState([]);
   const [pushByAngler, setPushByAngler] = useState([]);
   const [pushDeviceSummary, setPushDeviceSummary] = useState([]);
+  const [telemetryLoading, setTelemetryLoading] = useState(true);
+  const [telemetryError, setTelemetryError] = useState('');
+  const [battLatest, setBattLatest] = useState(null);
+  const [battCount, setBattCount] = useState(null);
+  const [gpsLatest, setGpsLatest] = useState(null);
+  const [gpsCount, setGpsCount] = useState(null);
+  const [temperatureLatest, setTemperatureLatest] = useState(null);
+  const [temperatureCount, setTemperatureCount] = useState(null);
   const [pageViewYearStart] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), 0, 1);
@@ -444,6 +453,92 @@ export default function AdminOverview() {
   }, [pageViewYearStart]);
 
   useEffect(() => {
+    let active = true;
+
+    async function loadTelemetryLogs() {
+      setTelemetryLoading(true);
+      setTelemetryError('');
+
+      try {
+        const [
+          battLatestResult,
+          battCountResult,
+          gpsLatestResult,
+          gpsCountResult,
+          temperatureLatestResult,
+          temperatureCountResult,
+        ] = await Promise.all([
+          supabase
+            .from('batt_log')
+            .select('voltage_v, percent, created_at')
+            .order('created_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('batt_log')
+            .select('id', { count: 'exact', head: true }),
+          supabase
+            .from('gps_log')
+            .select('device_id, created_at, fix_time_utc, lat, lon')
+            .order('created_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('gps_log')
+            .select('id', { count: 'exact', head: true }),
+          supabase
+            .from('temperature_log')
+            .select('device_id, measured_at, temperature_c')
+            .order('measured_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('temperature_log')
+            .select('id', { count: 'exact', head: true }),
+        ]);
+
+        if (!active) return;
+
+        setBattLatest(Array.isArray(battLatestResult?.data) ? battLatestResult.data[0] || null : null);
+        setBattCount(Number.isInteger(battCountResult?.count) ? battCountResult.count : null);
+        setGpsLatest(Array.isArray(gpsLatestResult?.data) ? gpsLatestResult.data[0] || null : null);
+        setGpsCount(Number.isInteger(gpsCountResult?.count) ? gpsCountResult.count : null);
+        setTemperatureLatest(
+          Array.isArray(temperatureLatestResult?.data) ? temperatureLatestResult.data[0] || null : null
+        );
+        setTemperatureCount(Number.isInteger(temperatureCountResult?.count) ? temperatureCountResult.count : null);
+
+        const errors = [
+          battLatestResult?.error,
+          battCountResult?.error,
+          gpsLatestResult?.error,
+          gpsCountResult?.error,
+          temperatureLatestResult?.error,
+          temperatureCountResult?.error,
+        ].filter(Boolean);
+
+        if (errors.length > 0) {
+          const message = errors
+            .map((err) => err?.message)
+            .filter(Boolean)
+            .join(' | ');
+          setTelemetryError(message || 'Sensor-Logs konnten nicht vollständig geladen werden.');
+          console.error('Sensor-Logs: Laden fehlgeschlagen', errors);
+        }
+      } catch (error) {
+        if (!active) return;
+        const message = error?.message || 'Sensor-Logs konnten nicht geladen werden.';
+        setTelemetryError(message);
+        console.error('Sensor-Logs: Unerwarteter Fehler', error);
+      } finally {
+        if (active) setTelemetryLoading(false);
+      }
+    }
+
+    loadTelemetryLogs();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     setPageViewLastLimit(20);
   }, [filteredPageViewRows.length]);
 
@@ -534,6 +629,18 @@ export default function AdminOverview() {
         listItemClass={listItemClass}
         fallbackTextClass={fallbackTextClass}
         metaTextClass={metaTextClass}
+      />
+
+      <SensorLogsSection
+        telemetryLoading={telemetryLoading}
+        telemetryError={telemetryError}
+        battLatest={battLatest}
+        battCount={battCount}
+        gpsLatest={gpsLatest}
+        gpsCount={gpsCount}
+        temperatureLatest={temperatureLatest}
+        temperatureCount={temperatureCount}
+        formatDateTimeLabel={formatDateTimeLabel}
       />
 
       <OneSignalDebugSection />
