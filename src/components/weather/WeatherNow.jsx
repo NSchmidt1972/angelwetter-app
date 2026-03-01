@@ -88,7 +88,14 @@ async function runBatched(tasks, limit = MAX_CONCURRENCY) {
   return out;
 }
 
-export default function WeatherNow({ data, onRefresh, loading = false }) {
+export default function WeatherNow({
+  data,
+  onRefresh,
+  loading = false,
+  waterTemperature = null,
+  waterTemperatureLoading = false,
+  showWaterTemperature = false,
+}) {
 
   // Daily (inkl. AI)
   const [dailyBase, setDailyBase] = useState([]);
@@ -313,6 +320,9 @@ export default function WeatherNow({ data, onRefresh, loading = false }) {
         now={now}
         daily={data.data.daily}
         savedAt={data.savedAt}
+        waterTemperature={waterTemperature}
+        waterTemperatureLoading={waterTemperatureLoading}
+        showWaterTemperature={showWaterTemperature}
       />
       <HourlyScroller
         hours={hoursToRender}

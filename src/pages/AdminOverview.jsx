@@ -470,7 +470,7 @@ export default function AdminOverview() {
         ] = await Promise.all([
           supabase
             .from('batt_log')
-            .select('voltage_v, percent, created_at')
+            .select('voltage_v, percent, created_at, measured_at, device_id, topic, valid')
             .order('created_at', { ascending: false })
             .limit(1),
           supabase
@@ -478,7 +478,7 @@ export default function AdminOverview() {
             .select('id', { count: 'exact', head: true }),
           supabase
             .from('gps_log')
-            .select('device_id, created_at, fix_time_utc, lat, lon')
+            .select('device_id, topic, created_at, fix_time_utc, lat, lon, fix, sats, sats_used, sats_view')
             .order('created_at', { ascending: false })
             .limit(1),
           supabase
@@ -486,7 +486,7 @@ export default function AdminOverview() {
             .select('id', { count: 'exact', head: true }),
           supabase
             .from('temperature_log')
-            .select('device_id, measured_at, temperature_c')
+            .select('device_id, topic, created_at, measured_at, temperature_c')
             .order('measured_at', { ascending: false })
             .limit(1),
           supabase
@@ -553,6 +553,18 @@ export default function AdminOverview() {
   return (
     <Card className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
       <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Admin2‑Übersicht</h2>
+
+      <SensorLogsSection
+        telemetryLoading={telemetryLoading}
+        telemetryError={telemetryError}
+        battLatest={battLatest}
+        battCount={battCount}
+        gpsLatest={gpsLatest}
+        gpsCount={gpsCount}
+        temperatureLatest={temperatureLatest}
+        temperatureCount={temperatureCount}
+        formatDateTimeLabel={formatDateTimeLabel}
+      />
 
       <OverviewSection title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
       <OverviewSection title="🎣 Gesamtanzahl Fänge" value={catchCount === null ? 'Lade...' : catchCount} />
@@ -629,18 +641,6 @@ export default function AdminOverview() {
         listItemClass={listItemClass}
         fallbackTextClass={fallbackTextClass}
         metaTextClass={metaTextClass}
-      />
-
-      <SensorLogsSection
-        telemetryLoading={telemetryLoading}
-        telemetryError={telemetryError}
-        battLatest={battLatest}
-        battCount={battCount}
-        gpsLatest={gpsLatest}
-        gpsCount={gpsCount}
-        temperatureLatest={temperatureLatest}
-        temperatureCount={temperatureCount}
-        formatDateTimeLabel={formatDateTimeLabel}
       />
 
       <OneSignalDebugSection />

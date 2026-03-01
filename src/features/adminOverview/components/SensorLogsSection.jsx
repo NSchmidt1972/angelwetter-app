@@ -11,6 +11,32 @@ function formatNumber(value, digits = 2) {
   return num.toFixed(digits);
 }
 
+function formatBoolean(value) {
+  if (value === true) return 'Ja';
+  if (value === false) return 'Nein';
+  return '—';
+}
+
+function normalizeSatelliteCount(value) {
+  const num = Number(value);
+  if (!Number.isInteger(num)) return null;
+  return Math.max(0, num);
+}
+
+function formatSatellites(gpsLatest) {
+  const satsText = typeof gpsLatest?.sats === 'string' ? gpsLatest.sats.trim() : '';
+  const satsUsed = normalizeSatelliteCount(gpsLatest?.sats_used);
+  const satsView = normalizeSatelliteCount(gpsLatest?.sats_view);
+  const hasUsed = satsUsed !== null;
+  const hasView = satsView !== null;
+
+  if (hasUsed && hasView) return `${satsUsed} genutzt / ${satsView} sichtbar`;
+  if (hasUsed) return `${satsUsed} genutzt`;
+  if (hasView) return `${satsView} sichtbar`;
+  if (satsText) return satsText;
+  return '—';
+}
+
 export default function SensorLogsSection({
   telemetryLoading,
   telemetryError,
@@ -46,14 +72,18 @@ export default function SensorLogsSection({
               <div>Einträge: {formatCount(battCount)}</div>
               <div>
                 Zuletzt:{' '}
-                {battLatest?.created_at ? formatDateTimeLabel(battLatest.created_at) : 'Keine Daten'}
+                {battLatest?.measured_at || battLatest?.created_at
+                  ? formatDateTimeLabel(battLatest.measured_at || battLatest.created_at)
+                  : 'Keine Daten'}
               </div>
+              <div>Gerät: {battLatest?.device_id?.trim() || '—'}</div>
               <div>
                 Wert:{' '}
                 {battLatest
                   ? `${formatNumber(battLatest.percent, 0)}% · ${formatNumber(battLatest.voltage_v, 2)} V`
                   : 'Keine Daten'}
               </div>
+              <div>Valid: {formatBoolean(battLatest?.valid)}</div>
             </div>
           </div>
 
@@ -70,9 +100,10 @@ export default function SensorLogsSection({
               <div>
                 Gerät: {gpsLatest?.device_id?.trim() || '—'}
               </div>
-              <div>
-                Pos: {gpsLatest ? `${formatNumber(gpsLatest.lat, 5)}, ${formatNumber(gpsLatest.lon, 5)}` : 'Keine Daten'}
-              </div>
+              <div>Fix: {formatBoolean(gpsLatest?.fix)}</div>
+              <div>Lat: {formatNumber(gpsLatest?.lat, 5)}</div>
+              <div>Lon: {formatNumber(gpsLatest?.lon, 5)}</div>
+              <div>Satelliten: {formatSatellites(gpsLatest)}</div>
             </div>
           </div>
 
