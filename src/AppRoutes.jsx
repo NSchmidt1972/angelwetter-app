@@ -53,6 +53,7 @@ const FunFacts      = safeLazy(() => import('@/pages/FunFacts'), 'FunFacts');
 // Neue Komponenten
 const CatchList     = lazy(() => import('@/components/catchlist/CatchList'));
 const FishCatchForm = lazy(() => import('@/components/FishCatchForm'));
+const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
 
 function ClubNotFound() {
   return <div className="p-6 text-center text-red-600">Club not found</div>;
@@ -141,6 +142,9 @@ export default function AppRoutes({
 
   return (
     <Routes>
+      {UX_TEST_MODE_ENABLED && (
+        <Route path="/__ux/fish-form" element={<FishCatchForm anglerName="UX Test" />} />
+      )}
       <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
 
       {/* Öffentliche Routen */}

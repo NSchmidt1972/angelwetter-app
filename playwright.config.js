@@ -8,7 +8,12 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [
+    ['list'],
+    ['html', { open: 'never' }],
+    ['json', { outputFile: 'test-results/playwright-report.json' }],
+    ['./scripts/playwrightReportEnricher.mjs'],
+  ],
   use: {
     baseURL,
     trace: 'retain-on-failure',
@@ -16,7 +21,7 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4173',
+    command: 'VITE_UX_TEST_MODE=1 npm run build && npm run preview -- --host 127.0.0.1 --port 4173',
     port: 4173,
     timeout: 180000,
     reuseExistingServer: !process.env.CI,
