@@ -93,6 +93,7 @@ export default function WeatherNow({
   onRefresh,
   loading = false,
   waterTemperature = null,
+  waterTemperatureHistory = [],
   waterTemperatureLoading = false,
   showWaterTemperature = false,
 }) {
@@ -321,6 +322,7 @@ export default function WeatherNow({
         daily={data.data.daily}
         savedAt={data.savedAt}
         waterTemperature={waterTemperature}
+        waterTemperatureHistory={waterTemperatureHistory}
         waterTemperatureLoading={waterTemperatureLoading}
         showWaterTemperature={showWaterTemperature}
       />

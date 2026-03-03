@@ -10,6 +10,7 @@ export default function Home() {
   const { weather, loading, error, refresh } = useWeatherCache();
   const { profile } = useUserProfile();
   const [waterTemperature, setWaterTemperature] = useState(null);
+  const [waterTemperatureHistory, setWaterTemperatureHistory] = useState([]);
   const [waterTemperatureLoading, setWaterTemperatureLoading] = useState(true);
   const weatherData = weather;
   const errorMessage = error ? '⚠️ Wetterdaten konnten nicht geladen werden.' : null;
@@ -22,25 +23,30 @@ export default function Home() {
     async function loadWaterTemperature() {
       if (!isAdmin) {
         setWaterTemperature(null);
+        setWaterTemperatureHistory([]);
         setWaterTemperatureLoading(false);
         return;
       }
 
       setWaterTemperatureLoading(true);
       try {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
         const { data, error: tempError } = await supabase
           .from('temperature_log')
           .select('temperature_c, measured_at')
-          .order('measured_at', { ascending: false })
-          .limit(1);
+          .gte('measured_at', sevenDaysAgo)
+          .order('measured_at', { ascending: true });
 
         if (!active) return;
 
         if (tempError) throw tempError;
-        setWaterTemperature(Array.isArray(data) ? data[0] || null : null);
+        const history = Array.isArray(data) ? data : [];
+        setWaterTemperatureHistory(history);
+        setWaterTemperature(history.length ? history[history.length - 1] : null);
       } catch (tempError) {
         if (!active) return;
         setWaterTemperature(null);
+        setWaterTemperatureHistory([]);
         console.warn('Wassertemperatur konnte nicht geladen werden:', tempError?.message || tempError);
       } finally {
         if (active) setWaterTemperatureLoading(false);
@@ -62,6 +68,7 @@ export default function Home() {
           loading={loading}
           onRefresh={() => refresh()}
           waterTemperature={waterTemperature}
+          waterTemperatureHistory={waterTemperatureHistory}
           waterTemperatureLoading={waterTemperatureLoading}
           showWaterTemperature={isAdmin}
         />
