@@ -43,7 +43,7 @@ const BASE_ROLE_OPTIONS = [
   { value: 'tester', label: 'Tester' },
   { value: 'vorstand', label: 'Vorstand' },
 ];
-const ADMIN_OPTION = { value: 'admin', label: 'Admin (nur Nicol Schmidt)' };
+const ADMIN_OPTION = { value: 'admin', label: 'Admin' };
 
 export default function AdminMembersManage() {
   const detailSectionRef = useRef(null);

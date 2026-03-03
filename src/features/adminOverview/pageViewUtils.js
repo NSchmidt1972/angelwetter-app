@@ -21,7 +21,7 @@ export function groupPageViews(rows) {
   const counts = new Map();
 
   rows.forEach((row) => {
-    const key = row.path || '—';
+    const key = normalizePath(row?.path || '/');
     const entry = counts.get(key) || {
       path: key,
       total: 0,
@@ -65,7 +65,7 @@ export function filterPageViewRows(rows) {
 export function buildPageViewAnglersByPath(filteredRows) {
   const map = new Map();
   filteredRows.forEach((row) => {
-    const key = row?.path || '—';
+    const key = normalizePath(row?.path || '/');
     const name = typeof row?.angler === 'string' ? row.angler.trim() : '';
     if (!name) return;
     if (!map.has(key)) map.set(key, new Set());
@@ -103,7 +103,7 @@ export function buildPageViewMonthlyStats(filteredRows, pageViewYearStart) {
   return months.filter((entry) => entry.total > 0);
 }
 
-export function buildPageViewTopAnglers(filteredRows, latestAppActivityByName) {
+export function buildPageViewTopAnglers(filteredRows) {
   const stats = new Map();
 
   filteredRows.forEach((row) => {
@@ -120,16 +120,7 @@ export function buildPageViewTopAnglers(filteredRows, latestAppActivityByName) {
     stats.set(rawName, entry);
   });
 
-  const merged = [...stats.values()].map((entry) => {
-    const key = normalizeName(entry.name);
-    const latestAppTs = parseTimestamp(latestAppActivityByName?.[key]);
-    if (latestAppTs && (!entry.lastSeen || latestAppTs > entry.lastSeen)) {
-      return { ...entry, lastSeen: latestAppTs };
-    }
-    return entry;
-  });
-
-  return merged
+  return [...stats.values()]
     .sort((a, b) => {
       if (b.total !== a.total) return b.total - a.total;
       const timeDiff = (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0);
@@ -141,47 +132,33 @@ export function buildPageViewTopAnglers(filteredRows, latestAppActivityByName) {
 
 export function buildPageViewLastEvents({
   filteredRows,
-  pageViewTopAnglers,
   labelForPath,
   currentBuildLabel,
   pageViewLastLimit,
 }) {
-  const latestPageByAngler = new Map();
-  filteredRows.forEach((row) => {
-    const rawName = typeof row?.angler === 'string' ? row.angler.trim() : '';
-    if (!rawName) return;
-    const key = normalizeName(rawName);
-    if (!key) return;
-    const rowTs = parseTimestamp(row?.created_at);
-    if (!rowTs) return;
-    const prev = latestPageByAngler.get(key);
-    const prevTs = parseTimestamp(prev?.created_at);
-    if (!prevTs || rowTs > prevTs) {
-      latestPageByAngler.set(key, row);
-    }
-  });
-
-  const events = pageViewTopAnglers.map((entry, idx) => {
-    const key = normalizeName(entry.name);
-    const pageRow = latestPageByAngler.get(key);
-    const metadataObj = pageRow?.metadata && typeof pageRow.metadata === 'object'
-      ? pageRow.metadata
+  const events = filteredRows.map((row, idx) => {
+    const normalizedPath = normalizePath(row?.path || '/');
+    const metadataObj = row?.metadata && typeof row.metadata === 'object'
+      ? row.metadata
       : null;
     const build = metadataObj?.build || metadataObj?.version || null;
-    const createdAt = parseTimestamp(entry.lastSeen);
+    const createdAt = parseTimestamp(row?.created_at);
+    if (!createdAt) return null;
+    const rawName = typeof row?.angler === 'string' ? row.angler.trim() : '';
+    const key = normalizeName(rawName);
     return {
-      kind: 'top_activity',
-      key: `top-${key || idx}-${idx}`,
-      angler: entry.name,
-      label: pageRow?.path ? labelForPath(pageRow.path) : 'Seite unbekannt',
-      path: pageRow?.path || null,
-      created_at: createdAt ? createdAt.toISOString() : null,
+      kind: 'page_view',
+      key: `pv-${row?.session_id || 'sess'}-${createdAt.toISOString()}-${normalizedPath}-${key || idx}`,
+      angler: rawName || 'Unbekannt',
+      label: labelForPath(normalizedPath),
+      path: normalizedPath,
+      created_at: createdAt.toISOString(),
       matchesCurrentBuild: (() => {
         const trimmed = build ? String(build).trim() : '';
         return Boolean(trimmed) && Boolean(currentBuildLabel) && trimmed === currentBuildLabel;
       })(),
     };
-  });
+  }).filter(Boolean);
 
   return events
     .sort(

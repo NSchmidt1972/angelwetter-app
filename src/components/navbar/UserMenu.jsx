@@ -79,7 +79,7 @@ const UserMenu = forwardRef(function UserMenu(
                 onClick={onNavigateAdmin}
                 className="w-full rounded px-3 py-2 text-left text-sm font-semibold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-900/30"
               >
-                🔧 Admin2
+                🔧 Adminbereich
               </button>
             )}
           </div>

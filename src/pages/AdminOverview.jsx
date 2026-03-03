@@ -57,7 +57,6 @@ export default function AdminOverview() {
   const [pageViewRows, setPageViewRows] = useState([]);
   const [pageViewLoading, setPageViewLoading] = useState(false);
   const [pageViewError, setPageViewError] = useState('');
-  const [latestAppActivityByName, setLatestAppActivityByName] = useState({});
   const [pageViewLastLimit, setPageViewLastLimit] = useState(20);
   const [pageViewUniqueOpenPath, setPageViewUniqueOpenPath] = useState(null);
   const pageViewYearLabel = pageViewYearStart.getFullYear();
@@ -140,21 +139,23 @@ export default function AdminOverview() {
     [],
   );
   const pageViewTopAnglers = useMemo(
-    () => buildPageViewTopAnglers(filteredPageViewRows, latestAppActivityByName),
-    [filteredPageViewRows, latestAppActivityByName]
+    () => buildPageViewTopAnglers(filteredPageViewRows),
+    [filteredPageViewRows]
   );
   const pageViewLastEvents = useMemo(
     () =>
       buildPageViewLastEvents({
         filteredRows: filteredPageViewRows,
-        pageViewTopAnglers,
         labelForPath,
         currentBuildLabel,
         pageViewLastLimit,
       }),
-    [pageViewTopAnglers, filteredPageViewRows, labelForPath, currentBuildLabel, pageViewLastLimit]
+    [filteredPageViewRows, labelForPath, currentBuildLabel, pageViewLastLimit]
   );
-  const pageViewLastEventsSourceCount = pageViewTopAnglers.length;
+  const pageViewLastEventsSourceCount = useMemo(
+    () => filteredPageViewRows.filter((row) => Boolean(parseTimestamp(row?.created_at))).length,
+    [filteredPageViewRows]
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -162,7 +163,6 @@ export default function AdminOverview() {
         const clubId = getActiveClubId();
         const sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         const sinceIso = sinceDate.toISOString();
-        const pageViewYearStartIso = pageViewYearStart.toISOString();
         const { data: weatherData } = await supabase
           .from('weather_cache')
           .select('updated_at')
@@ -194,23 +194,6 @@ export default function AdminOverview() {
 
         // Aktivität nicht nur aus user_activity, sondern auch aus echten Sessions (inkl. Schneider).
         const activeByName = new Map();
-        const latestByName = new Map();
-
-        const upsertLatest = (rawName, rawTimestamp) => {
-          const name = String(rawName || '').trim();
-          if (!name) return;
-          const parsed = parseTimestamp(rawTimestamp);
-          if (!parsed) return;
-          const key = normalizeName(name);
-          if (!key) return;
-          const prev = latestByName.get(key);
-          if (!prev || parsed > prev.lastActive) {
-            latestByName.set(key, {
-              name,
-              lastActive: parsed,
-            });
-          }
-        };
 
         const upsertActive = (rawName, rawTimestamp) => {
           const name = String(rawName || '').trim();
@@ -232,29 +215,10 @@ export default function AdminOverview() {
           const profileName = entry?.user_id ? profileById.get(entry.user_id) : null;
           const resolvedName = profileName || entry?.angler_name || null;
           const parsedLastActive = parseTimestamp(entry?.last_active);
-          upsertLatest(resolvedName, entry?.last_active);
           if (parsedLastActive && parsedLastActive > sinceDate) {
             upsertActive(resolvedName, entry?.last_active);
           }
         });
-
-        const { data: sessionsForTopAnglers } = await supabase
-          .from('fishes')
-          .select('angler, timestamp')
-          .eq('club_id', clubId)
-          .gte('timestamp', pageViewYearStartIso)
-          .order('timestamp', { ascending: false })
-          .limit(5000);
-
-        (sessionsForTopAnglers || []).forEach((entry) => {
-          upsertLatest(entry?.angler, entry?.timestamp);
-        });
-
-        setLatestAppActivityByName(
-          Object.fromEntries(
-            [...latestByName.entries()].map(([key, entry]) => [key, entry.lastActive.toISOString()])
-          )
-        );
 
         const { data: recentSessions } = await supabase
           .from('fishes')
@@ -267,6 +231,41 @@ export default function AdminOverview() {
         (recentSessions || []).forEach((entry) => {
           upsertActive(entry?.angler, entry?.timestamp);
         });
+
+        // App-Aktivität aus Page-Views der letzten 7 Tage ergänzen,
+        // damit "Aktive Angler" und "Aktivste Angler" konsistent bleiben.
+        const recentPageViews = [];
+        let pageViewRangeStart = 0;
+        let pageViewError = null;
+
+        while (recentPageViews.length < PAGE_VIEW_LIMIT) {
+          const pageViewRangeEnd = pageViewRangeStart + PAGE_VIEW_PAGE_SIZE - 1;
+          const { data, error } = await supabase
+            .from('page_views')
+            .select('angler, created_at')
+            .eq('club_id', clubId)
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .range(pageViewRangeStart, pageViewRangeEnd);
+
+          if (error) {
+            pageViewError = error;
+            break;
+          }
+
+          if (!Array.isArray(data) || data.length === 0) break;
+          recentPageViews.push(...data);
+          if (data.length < PAGE_VIEW_PAGE_SIZE) break;
+          pageViewRangeStart += PAGE_VIEW_PAGE_SIZE;
+        }
+
+        if (pageViewError) {
+          console.error('Aktive Angler: Page-Views konnten nicht geladen werden', pageViewError);
+        } else {
+          recentPageViews.forEach((entry) => {
+            upsertActive(entry?.angler, entry?.created_at);
+          });
+        }
 
         setActiveUsers(
           [...activeByName.values()]
@@ -552,7 +551,7 @@ export default function AdminOverview() {
 
   return (
     <Card className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
-      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Admin2‑Übersicht</h2>
+      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Adminbereich‑Übersicht</h2>
 
       <SensorLogsSection
         telemetryLoading={telemetryLoading}
