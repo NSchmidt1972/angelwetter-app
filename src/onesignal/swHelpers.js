@@ -1,7 +1,9 @@
 // src/onesignal/swHelpers.js
 
 const SW_SCOPE = '/';
-const SW_PATH = '/sw.js';
+const SW_PATH = import.meta.env?.DEV
+  ? '/OneSignalSDKWorker.js'
+  : '/sw.js';
 
 function hasServiceWorkerSupport() {
   return typeof navigator !== 'undefined' && 'serviceWorker' in navigator;

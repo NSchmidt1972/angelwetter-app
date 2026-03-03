@@ -8,6 +8,7 @@ import {
   waitForServiceWorkerRegistration,
   SERVICE_WORKER_INFO,
 } from '@/onesignal/swHelpers';
+import { upsertPushSubscriptionRecord } from '@/onesignal/pushSubscriptionStore';
 
 function isSupported(OS) {
   if (!OS?.Notifications) return false;
@@ -291,57 +292,38 @@ export default function usePushStatus() {
         }
 
         if (sid) {
+          const reg = await ensureServiceWorkerRegistration();
+          const scope = reg?.scope || SERVICE_WORKER_INFO.scope || null;
+          const device =
+            navigator.userAgentData?.platform || navigator.platform || null;
+          const ua = navigator.userAgent || null;
+          let anglerName = null;
           try {
-            const reg = await ensureServiceWorkerRegistration();
-            const scope = reg?.scope || SERVICE_WORKER_INFO.scope || null;
-            const device =
-              navigator.userAgentData?.platform || navigator.platform || null;
-            const ua = navigator.userAgent || null;
-            let anglerName = null;
-            try {
-              anglerName = localStorage.getItem('anglerName') || null;
-            } catch {
-              anglerName = null;
-            }
-
-            const { data: userRes, error: userErr } = await supabase.auth.getUser();
-            if (userErr) {
-              throw userErr;
-            }
-            const uid = userRes?.user?.id;
-            if (!uid) {
-              throw new Error('Kein eingeloggter Nutzer für Push vorhanden.');
-            }
-
-            const payload = {
-              subscription_id: sid,
-              user_id: uid,
-              scope,
-              device_label: device,
-              user_agent: ua,
-              opted_in: true,
-              revoked_at: null,
-              last_seen_at: new Date().toISOString(),
-              club_id: getActiveClubId(),
-            };
-
-            if (anglerName) {
-              payload.angler_name = anglerName;
-            }
-
-            const { error: upsertError } = await supabase
-              .from('push_subscriptions')
-              .upsert(payload, { onConflict: 'subscription_id' });
-
-            if (upsertError) {
-              throw upsertError;
-            }
-          } catch (rpcErr) {
-            console.warn(
-              '[usePushStatus] push_subscriptions upsert error:',
-              rpcErr?.message || rpcErr
-            );
+            anglerName = localStorage.getItem('anglerName') || null;
+          } catch {
+            anglerName = null;
           }
+
+          const { data: userRes, error: userErr } = await supabase.auth.getUser();
+          if (userErr) {
+            throw userErr;
+          }
+          const uid = userRes?.user?.id;
+          if (!uid) {
+            throw new Error('Kein eingeloggter Nutzer für Push vorhanden.');
+          }
+
+          await upsertPushSubscriptionRecord({
+            subscriptionId: sid,
+            userId: uid,
+            clubId: getActiveClubId(),
+            scope,
+            deviceLabel: device,
+            userAgent: ua,
+            optedIn: true,
+            revokedAt: null,
+            anglerName,
+          });
         }
 
         setState((s) => ({

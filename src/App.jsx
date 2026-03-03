@@ -10,6 +10,16 @@ import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
+const NULL_CLUB_ID = '00000000-0000-0000-0000-000000000000';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidClubId(clubId) {
+  return (
+    typeof clubId === 'string' &&
+    UUID_RE.test(clubId) &&
+    clubId !== NULL_CLUB_ID
+  );
+}
 
 function readProfileCache() {
   if (typeof window === 'undefined') return null;
@@ -248,7 +258,18 @@ function AppContent() {
     let disposed = false;
 
     const updateActivity = async () => {
-      const clubId = getActiveClubId();
+      const profileClubId = profile?.club_id;
+      const activeClubId = getActiveClubId();
+      const clubId = profileClubId || activeClubId;
+
+      if (!isValidClubId(clubId)) {
+        console.warn('⚠️ user_activity übersprungen: ungültige club_id', {
+          profileClubId,
+          activeClubId,
+        });
+        return;
+      }
+
       const payload = {
         user_id: user.id,
         angler_name: user.email,
@@ -263,9 +284,8 @@ function AppContent() {
             angler_name: payload.angler_name,
             last_active: payload.last_active,
           })
-          .eq('user_id', user.id);
-
-        updateQuery = clubId ? updateQuery.eq('club_id', clubId) : updateQuery.is('club_id', null);
+          .eq('user_id', user.id)
+          .eq('club_id', clubId);
 
         const { data: updatedRows, error: updateError } = await updateQuery
           .select('user_id')
@@ -290,7 +310,7 @@ function AppContent() {
       cancelInitial?.();
       clearInterval(interval);
     };
-  }, [user]);
+  }, [user, profile?.club_id]);
 
   // Club aus Profil in den aktiven Kontext übernehmen
   useEffect(() => {

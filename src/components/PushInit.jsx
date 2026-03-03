@@ -8,12 +8,21 @@ import {
   SERVICE_WORKER_INFO,
 } from '@/onesignal/swHelpers';
 import { getActiveClubId } from '@/utils/clubId';
+import {
+  revokePushSubscriptionRecord,
+  upsertPushSubscriptionRecord,
+} from '@/onesignal/pushSubscriptionStore';
+
+const ONESIGNAL_APP_ID =
+  import.meta.env.VITE_ONESIGNAL_APP_ID?.trim() ||
+  'b05a44e8-bea5-4941-8972-5194254aadad';
 
 export default function PushInit() {
   useEffect(() => {
     // nur einmal initialisieren
     if (window.__osInitialized) return;
     window.__osInitialized = true;
+    let initCompleted = false;
 
     /** Liefert die aktuelle Subscription-ID (oder null) */
     async function getSubId(OS) {
@@ -37,47 +46,40 @@ export default function PushInit() {
     async function upsertSubscription(subscriptionId, reason = '') {
       if (!subscriptionId) return;
 
-      const { data: userRes, error: userErr } = await supabase.auth.getUser();
-      if (userErr) {
-        console.warn('[PushInit] getUser error:', userErr);
-      }
-      const uid = userRes?.user?.id;
-      if (!uid) return;
-      const clubId = getActiveClubId();
-
-      const reg = await ensureServiceWorkerRegistration();
-      const scope = reg?.scope || SERVICE_WORKER_INFO.scope || null;
-      const device = navigator.userAgentData?.platform || navigator.platform || null;
-      const ua = navigator.userAgent || null;
-
-      let anglerName = null;
       try {
-        anglerName = localStorage.getItem('anglerName') || null;
-      } catch {
-        anglerName = null;
-      }
+        const { data: userRes, error: userErr } = await supabase.auth.getUser();
+        if (userErr) {
+          console.warn('[PushInit] getUser error:', userErr);
+        }
+        const uid = userRes?.user?.id;
+        if (!uid) return;
+        const clubId = getActiveClubId();
 
-      const payload = {
-        subscription_id: subscriptionId,
-        user_id: uid,
-        scope,
-        device_label: device,
-        user_agent: ua,
-        opted_in: true,
-        revoked_at: null,
-        last_seen_at: new Date().toISOString(),
-        club_id: clubId,
-      };
+        const reg = await ensureServiceWorkerRegistration();
+        const scope = reg?.scope || SERVICE_WORKER_INFO.scope || null;
+        const device = navigator.userAgentData?.platform || navigator.platform || null;
+        const ua = navigator.userAgent || null;
 
-      if (anglerName) {
-        payload.angler_name = anglerName;
-      }
+        let anglerName = null;
+        try {
+          anglerName = localStorage.getItem('anglerName') || null;
+        } catch {
+          anglerName = null;
+        }
 
-      const { error } = await supabase
-        .from('push_subscriptions')
-        .upsert(payload, { onConflict: 'subscription_id' });
-
-      if (error) {
+        const payload = {
+          subscriptionId,
+          userId: uid,
+          clubId,
+          scope,
+          deviceLabel: device,
+          userAgent: ua,
+          optedIn: true,
+          revokedAt: null,
+          anglerName,
+        };
+        await upsertPushSubscriptionRecord(payload);
+      } catch (error) {
         console.warn('[PushInit] upsert push_subscriptions failed:', error, reason);
       }
     }
@@ -91,14 +93,10 @@ export default function PushInit() {
         const registration = await waitForServiceWorkerRegistration();
 
         // OneSignal initialisieren (nicht UI-blockierend)
-        const serviceWorkerPath = SERVICE_WORKER_INFO.path.startsWith('/')
-          ? SERVICE_WORKER_INFO.path.slice(1)
-          : SERVICE_WORKER_INFO.path;
-
         const initOptions = {
-          appId: 'b05a44e8-bea5-4941-8972-5194254aadad',
+          appId: ONESIGNAL_APP_ID,
           allowLocalhostAsSecureOrigin: true, // nur DEV
-          serviceWorkerPath,
+          serviceWorkerPath: SERVICE_WORKER_INFO.path,
           serviceWorkerParam: { scope: SERVICE_WORKER_INFO.scope },
           // kein Auto-Prompt hier – Steuerung über deine UI
         };
@@ -108,6 +106,7 @@ export default function PushInit() {
         }
 
         await OneSignal.init(initOptions);
+        initCompleted = true;
 
         // 0) Falls bereits "granted" aber (noch) nicht subscribed → nachziehen
         try {
@@ -143,17 +142,11 @@ export default function PushInit() {
               // Opt-out → Abo als widerrufen markieren (falls Zeile existiert)
               const { data: u } = await supabase.auth.getUser();
               if (u?.user?.id) {
-                supabase
-                  .from('push_subscriptions')
-                  .update({
-                    opted_in: false,
-                    revoked_at: new Date().toISOString(),
-                    last_seen_at: new Date().toISOString(),
-                  })
-                  .eq('subscription_id', sid)
-                  .eq('user_id', u.user.id)
-                  .eq('club_id', getActiveClubId())
-                  .catch((e) => console.warn('[PushInit] revoke failed:', e));
+                revokePushSubscriptionRecord({
+                  subscriptionId: sid,
+                  userId: u.user.id,
+                  clubId: getActiveClubId(),
+                }).catch((e) => console.warn('[PushInit] revoke failed:', e));
               }
             } else {
               // Opt-in oder ID-Refresh → speichern/claimen
@@ -188,6 +181,7 @@ export default function PushInit() {
         cleanupFns.push(() => authSub?.subscription?.unsubscribe?.());
       } catch (e) {
         console.warn('[PushInit] OneSignal init error:', e);
+        window.__osInitialized = false;
       }
     });
 
@@ -204,6 +198,12 @@ export default function PushInit() {
           console.warn('[PushInit] cleanup failed:', err);
         }
       });
+
+      // React.StrictMode (Dev) mountet Effekte absichtlich doppelt.
+      // Wenn die erste Init vorzeitig gecancelt wurde, darf der zweite Mount erneut initialisieren.
+      if (!initCompleted) {
+        window.__osInitialized = false;
+      }
     };
   }, []);
 

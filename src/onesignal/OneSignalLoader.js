@@ -1,7 +1,9 @@
 // onesignal/OneSignalLoader.js
 
 // === Konfiguration ===
-const ONESIGNAL_APP_ID = 'b05a44e8-bea5-4941-8972-5194254aadad';
+const ONESIGNAL_APP_ID =
+  import.meta.env.VITE_ONESIGNAL_APP_ID?.trim() ||
+  'b05a44e8-bea5-4941-8972-5194254aadad';
 
 // Wenn VitePWA deinen SW als /sw.js ausliefert, bleibt das so:
 const SW_PATH = 'OneSignalSDKWorker.js';
