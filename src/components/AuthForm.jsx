@@ -56,6 +56,53 @@ export default function AuthForm() {
   };
 
   const ensureProfileAndMembership = async ({ userId, clubId, emailForWhitelistCheck, fallbackName }) => {
+    const { data: membershipRow, error: membershipSelectError } = await supabase
+      .from('memberships')
+      .select('user_id, is_active')
+      .eq('user_id', userId)
+      .eq('club_id', clubId)
+      .maybeSingle();
+
+    if (membershipSelectError) {
+      return { ok: false, errorMessage: 'Mitgliedschaft konnte nicht geprüft werden.' };
+    }
+
+    if (membershipRow) {
+      if (membershipRow.is_active === false) {
+        return { ok: false, errorMessage: 'Dein Zugang für diesen Verein ist aktuell deaktiviert.' };
+      }
+
+      const { data: profileRow, error: profileSelectError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .eq('club_id', clubId)
+        .maybeSingle();
+
+      if (profileSelectError) {
+        return { ok: false, errorMessage: 'Profilprüfung fehlgeschlagen.' };
+      }
+
+      if (!profileRow) {
+        const safeFallbackName = (fallbackName || '').trim() || emailForWhitelistCheck;
+        const { error: profileInsertError } = await supabase.from('profiles').insert({
+          id: userId,
+          name: safeFallbackName,
+          club_id: clubId,
+        });
+
+        if (profileInsertError) {
+          console.warn(
+            '⚠️ Profil konnte nach Login nicht nachgezogen werden:',
+            profileInsertError?.message || profileInsertError
+          );
+        }
+      }
+
+      return { ok: true };
+    }
+
+    // Onboarding-Fall: Mitgliedschaft existiert noch nicht -> Whitelist erforderlich.
     const whitelistResult = await checkEmailWhitelisted({
       emailToCheck: emailForWhitelistCheck,
       clubId,
@@ -88,30 +135,15 @@ export default function AuthForm() {
       }
     }
 
-    const { data: membershipRow, error: membershipSelectError } = await supabase
-      .from('memberships')
-      .select('user_id, is_active')
-      .eq('user_id', userId)
-      .eq('club_id', clubId)
-      .maybeSingle();
+    const { error: membershipInsertError } = await supabase.from('memberships').insert({
+      user_id: userId,
+      club_id: clubId,
+      role: 'mitglied',
+      is_active: true,
+    });
 
-    if (membershipSelectError) {
-      return { ok: false, errorMessage: 'Mitgliedschaft konnte nicht geprüft werden.' };
-    }
-
-    if (!membershipRow) {
-      const { error: membershipInsertError } = await supabase.from('memberships').insert({
-        user_id: userId,
-        club_id: clubId,
-        role: 'mitglied',
-        is_active: true,
-      });
-
-      if (membershipInsertError) {
-        return { ok: false, errorMessage: 'Mitgliedschaft konnte nicht gespeichert werden.' };
-      }
-    } else if (membershipRow.is_active === false) {
-      return { ok: false, errorMessage: 'Dein Zugang für diesen Verein ist aktuell deaktiviert.' };
+    if (membershipInsertError) {
+      return { ok: false, errorMessage: 'Mitgliedschaft konnte nicht gespeichert werden.' };
     }
 
     return { ok: true };

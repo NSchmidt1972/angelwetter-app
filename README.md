@@ -14,6 +14,15 @@ Angelwetter ist eine React/Vite PWA für Fangmeldungen, Auswertungen und Push-Be
 4. `npm run lint` für einen schnellen ESLint-Check.
 5. `npm run build` erzeugt das Production-Bundle unter `dist/`.
 
+## Automatischer UX/Funktions-Agent
+- Funktions-Smoke + UX-Regeln (Playwright + Axe): `npm run test:ux:func`
+- Lighthouse-Audits: `npm run test:ux:lighthouse`
+- Komplettlauf: `npm run test:ux`
+- Einmaliger Browser-Install lokal: `npm run test:ux:install`
+
+Der Agent ist im Repo versioniert (`tests/ux-agent`, `playwright.config.js`, `lighthouserc.json`)
+und läuft extern in CI über [`.github/workflows/ux-agent.yml`](./.github/workflows/ux-agent.yml).
+
 ## Wichtige Umgebungsvariablen
 - `VITE_SUPABASE_URL` – Basis-URL deiner Supabase-Instanz (ohne Slash am Ende).
 - `VITE_SUPABASE_ANON_KEY` – öffentlicher Anon-Key für das Frontend.
