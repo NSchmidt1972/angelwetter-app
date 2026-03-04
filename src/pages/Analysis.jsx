@@ -5,7 +5,7 @@ import StatListCard from '@/features/analysis/components/StatListCard';
 import WeatherFishFilter from '@/features/analysis/components/WeatherFishFilter';
 import YearMonthOverview from '@/features/analysis/components/YearMonthOverview';
 import useAnalysisData from '@/features/analysis/hooks/useAnalysisData';
-import { MONTH_NAMES } from '@/features/analysis/utils';
+import { ANALYSIS_YEAR_FILTER_ALL, MONTH_NAMES } from '@/features/analysis/utils';
 
 export default function Analysis({ anglerName }) {
   const {
@@ -73,18 +73,22 @@ export default function Analysis({ anglerName }) {
       />
 
       <div className="flex flex-wrap gap-2 mb-6 justify-center">
-        {sortedYears.map((year) => (
-          <button
-            key={year}
-            onClick={() => setSelectedYear(year)}
-            className={`px-4 py-1 rounded-full border transition ${year === selectedYear
-              ? 'bg-blue-600 text-white font-semibold'
-              : 'bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border-blue-400 hover:bg-blue-100 dark:hover:bg-gray-700'
-            }`}
-          >
-            {year}
-          </button>
-        ))}
+        {[ANALYSIS_YEAR_FILTER_ALL, ...sortedYears].map((year) => {
+          const isAll = year === ANALYSIS_YEAR_FILTER_ALL;
+          return (
+            <button
+              key={isAll ? 'all-years' : year}
+              onClick={() => setSelectedYear(year)}
+              className={`px-4 py-1 rounded-full border transition ${year === selectedYear
+                ? 'bg-blue-600 text-white font-semibold'
+                : 'bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border-blue-400 hover:bg-blue-100 dark:hover:bg-gray-700'
+              }`}
+              aria-pressed={year === selectedYear}
+            >
+              {isAll ? 'Alle' : year}
+            </button>
+          );
+        })}
       </div>
 
       <YearMonthOverview

@@ -1,40 +1,103 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
-import { formatDateOnly, formatDateTime, parseTimestamp, formatTimeOnly } from '@/utils/dateUtils';
+import { formatDateOnly, formatDateTime, parseTimestamp } from '@/utils/dateUtils';
 import { navItemsFor } from '@/config/navItems';
-import { APP_VERSION } from '@/utils/buildInfo';
 import { Card } from '@/components/ui';
 import PageViewsSection from '@/features/adminOverview/components/PageViewsSection';
 import ActiveUsersSection from '@/features/adminOverview/components/ActiveUsersSection';
 import ExternalCatchesSection from '@/features/adminOverview/components/ExternalCatchesSection';
 import LatestCatchSection from '@/features/adminOverview/components/LatestCatchSection';
 import OneSignalDebugSection from '@/features/adminOverview/components/OneSignalDebugSection';
-import OverviewSection from '@/features/adminOverview/components/OverviewSection';
 import PushSubscribersSection from '@/features/adminOverview/components/PushSubscribersSection';
 import RecentBlanksSection from '@/features/adminOverview/components/RecentBlanksSection';
 import RegisteredUsersSection from '@/features/adminOverview/components/RegisteredUsersSection';
 import SensorLogsSection from '@/features/adminOverview/components/SensorLogsSection';
 import TakenCatchesSection from '@/features/adminOverview/components/TakenCatchesSection';
 import {
-  PAGE_VIEW_LIMIT,
+  PAGE_VIEW_MAX_FETCH_PAGES,
   PAGE_VIEW_PAGE_SIZE,
+  PAGE_VIEW_RECENT_LIMIT,
+  PAGE_VIEW_YEAR_FILTER_ALL,
   buildPageViewAnglersByPath,
-  buildPageViewLastEvents,
   buildPageViewMonthlyStats,
   buildPageViewTopAnglers,
   filterPageViewRows,
+  filterPageViewRowsByYear,
+  getPageViewAvailableYears,
   getUniqueAnglersForPath,
   groupPageViews,
   normalizeName,
   normalizePath,
 } from '@/features/adminOverview/pageViewUtils';
 
+const PAGE_VIEW_EXCLUDED_ANGLER = 'nicol schmidt';
+
+function isMissingPageViewRpcError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return error?.code === 'PGRST202'
+    || message.includes('could not find the function public.admin_page_view_years')
+    || message.includes('could not find the function public.admin_page_view_monthly_counts');
+}
+
+function buildMonthlyStatsFromDbCounts(dbRows, yearFilter) {
+  if (!Array.isArray(dbRows)) return null;
+  const rows = dbRows;
+
+  const totalsByKey = new Map(
+    rows.map((row) => {
+      const year = Number(row?.year);
+      const month = Number(row?.month);
+      const total = Number(row?.total) || 0;
+      const key = `${year}-${String(month).padStart(2, '0')}`;
+      return [key, total];
+    }),
+  );
+
+  const selectedYear = yearFilter === PAGE_VIEW_YEAR_FILTER_ALL ? null : Number(yearFilter);
+
+  if (Number.isInteger(selectedYear)) {
+    const months = [];
+    for (let month = 1; month <= 12; month += 1) {
+      const key = `${selectedYear}-${String(month).padStart(2, '0')}`;
+      months.push({
+        key,
+        label: new Date(selectedYear, month - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
+        total: totalsByKey.get(key) || 0,
+      });
+    }
+    return months;
+  }
+
+  if (rows.length === 0) return [];
+
+  const keysAsc = [...totalsByKey.keys()].sort((a, b) => a.localeCompare(b));
+  if (keysAsc.length === 0) return [];
+
+  const [startYear, startMonth] = keysAsc[0].split('-').map(Number);
+  const [endYear, endMonth] = keysAsc[keysAsc.length - 1].split('-').map(Number);
+  const cursor = new Date(endYear, endMonth - 1, 1);
+  const start = new Date(startYear, startMonth - 1, 1);
+  const timeline = [];
+
+  while (cursor >= start) {
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth() + 1;
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    timeline.push({
+      key,
+      label: new Date(year, month - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
+      total: totalsByKey.get(key) || 0,
+    });
+    cursor.setMonth(cursor.getMonth() - 1);
+  }
+
+  return timeline;
+}
+
 export default function AdminOverview() {
-  const [weatherUpdatedAt, setWeatherUpdatedAt] = useState(null);
   const [activeUsers, setActiveUsers] = useState([]);
   const [latestCatch, setLatestCatch] = useState(null);
-  const [catchCount, setCatchCount] = useState(null);
   const [nameShort, setNameShort] = useState(null);
   const [recentBlanks, setRecentBlanks] = useState([]);
   const [allProfiles, setAllProfiles] = useState([]);
@@ -50,16 +113,15 @@ export default function AdminOverview() {
   const [gpsCount, setGpsCount] = useState(null);
   const [temperatureLatest, setTemperatureLatest] = useState(null);
   const [temperatureCount, setTemperatureCount] = useState(null);
-  const [pageViewYearStart] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), 0, 1);
-  });
   const [pageViewRows, setPageViewRows] = useState([]);
+  const [pageViewYearFilter, setPageViewYearFilter] = useState(PAGE_VIEW_YEAR_FILTER_ALL);
   const [pageViewLoading, setPageViewLoading] = useState(false);
   const [pageViewError, setPageViewError] = useState('');
-  const [pageViewLastLimit, setPageViewLastLimit] = useState(20);
+  const [pageViewStatsLoading, setPageViewStatsLoading] = useState(false);
+  const [pageViewStatsError, setPageViewStatsError] = useState('');
+  const [pageViewDbYears, setPageViewDbYears] = useState(null);
+  const [pageViewDbMonthlyCounts, setPageViewDbMonthlyCounts] = useState(null);
   const [pageViewUniqueOpenPath, setPageViewUniqueOpenPath] = useState(null);
-  const pageViewYearLabel = pageViewYearStart.getFullYear();
 
   const navLabelMap = useMemo(() => {
     const map = new Map();
@@ -104,58 +166,69 @@ export default function AdminOverview() {
     return formatDateOnly(parsed);
   };
 
-  const formatTimeLabel = (value) => {
-    const parsed = parseTimestamp(value);
-    if (!parsed) return 'unbekannt';
-    return formatTimeOnly(parsed);
-  };
-
   const filteredPageViewRows = useMemo(() => filterPageViewRows(pageViewRows), [pageViewRows]);
+  const pageViewAvailableYearsFallback = useMemo(
+    () => getPageViewAvailableYears(filteredPageViewRows),
+    [filteredPageViewRows]
+  );
+  const pageViewAvailableYears = pageViewDbYears || pageViewAvailableYearsFallback;
+  const pageViewRowsInScope = useMemo(
+    () => filterPageViewRowsByYear(filteredPageViewRows, pageViewYearFilter),
+    [filteredPageViewRows, pageViewYearFilter]
+  );
+  const pageViewYearOptions = useMemo(
+    () => [
+      { value: PAGE_VIEW_YEAR_FILTER_ALL, label: 'Alle' },
+      ...pageViewAvailableYears.map((year) => ({ value: String(year), label: String(year) })),
+    ],
+    [pageViewAvailableYears]
+  );
+  const pageViewRangeLabel = pageViewYearFilter === PAGE_VIEW_YEAR_FILTER_ALL
+    ? 'Alle Jahre'
+    : `Gesamtjahr ${pageViewYearFilter}`;
 
   const pageViewAggregates = useMemo(
-    () => groupPageViews(filteredPageViewRows).map((entry) => ({
+    () => groupPageViews(pageViewRowsInScope).map((entry) => ({
       ...entry,
       label: labelForPath(entry.path),
     })),
-    [filteredPageViewRows, labelForPath],
+    [pageViewRowsInScope, labelForPath],
   );
   const pageViewAnglersByPath = useMemo(
-    () => buildPageViewAnglersByPath(filteredPageViewRows),
-    [filteredPageViewRows]
+    () => buildPageViewAnglersByPath(pageViewRowsInScope),
+    [pageViewRowsInScope]
   );
   const uniqueAnglersForPath = useCallback((path) => {
     return getUniqueAnglersForPath(pageViewAnglersByPath, path);
   }, [pageViewAnglersByPath]);
-  const pageViewTotal = filteredPageViewRows.length;
+  const pageViewMonthlyStatsFallback = useMemo(
+    () => buildPageViewMonthlyStats(pageViewRowsInScope, pageViewYearFilter),
+    [pageViewRowsInScope, pageViewYearFilter]
+  );
+  const pageViewMonthlyStatsFromDb = useMemo(
+    () => buildMonthlyStatsFromDbCounts(pageViewDbMonthlyCounts, pageViewYearFilter),
+    [pageViewDbMonthlyCounts, pageViewYearFilter]
+  );
+  const pageViewDbStatsActive = Array.isArray(pageViewMonthlyStatsFromDb);
+  const pageViewMonthlyStats = pageViewDbStatsActive
+    ? pageViewMonthlyStatsFromDb
+    : pageViewMonthlyStatsFallback;
+  const pageViewMonthlyStatsVisible = useMemo(
+    () => pageViewMonthlyStats.filter((row) => (Number(row?.total) || 0) > 0),
+    [pageViewMonthlyStats]
+  );
+  const pageViewTotal = pageViewDbStatsActive
+    ? pageViewMonthlyStats.reduce((sum, row) => sum + (Number(row?.total) || 0), 0)
+    : pageViewRowsInScope.length;
   const pageViewAverage = pageViewAggregates.length > 0
     ? (pageViewTotal / pageViewAggregates.length).toFixed(1)
     : '0.0';
-  const pageViewMonthlyStats = useMemo(
-    () => buildPageViewMonthlyStats(filteredPageViewRows, pageViewYearStart),
-    [filteredPageViewRows, pageViewYearStart]
-  );
-  const currentBuildLabel = useMemo(
-    () => (APP_VERSION ? String(APP_VERSION).trim() : null),
-    [],
-  );
   const pageViewTopAnglers = useMemo(
-    () => buildPageViewTopAnglers(filteredPageViewRows),
-    [filteredPageViewRows]
+    () => buildPageViewTopAnglers(pageViewRowsInScope),
+    [pageViewRowsInScope]
   );
-  const pageViewLastEvents = useMemo(
-    () =>
-      buildPageViewLastEvents({
-        filteredRows: filteredPageViewRows,
-        labelForPath,
-        currentBuildLabel,
-        pageViewLastLimit,
-      }),
-    [filteredPageViewRows, labelForPath, currentBuildLabel, pageViewLastLimit]
-  );
-  const pageViewLastEventsSourceCount = useMemo(
-    () => filteredPageViewRows.filter((row) => Boolean(parseTimestamp(row?.created_at))).length,
-    [filteredPageViewRows]
-  );
+  const pageViewSectionLoading = pageViewLoading || pageViewStatsLoading;
+  const pageViewSectionError = pageViewError || pageViewStatsError;
 
   useEffect(() => {
     async function loadData() {
@@ -163,17 +236,6 @@ export default function AdminOverview() {
         const clubId = getActiveClubId();
         const sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         const sinceIso = sinceDate.toISOString();
-        const { data: weatherData } = await supabase
-          .from('weather_cache')
-          .select('updated_at')
-          .eq('club_id', clubId)
-          .eq('id', 'latest')
-          .single();
-
-        if (weatherData?.updated_at) {
-          const label = formatTimeLabel(weatherData.updated_at);
-          if (label !== 'unbekannt') setWeatherUpdatedAt(label);
-        }
 
         const { data: users } = await supabase
           .from('user_activity')
@@ -238,14 +300,15 @@ export default function AdminOverview() {
         let pageViewRangeStart = 0;
         let pageViewError = null;
 
-        while (recentPageViews.length < PAGE_VIEW_LIMIT) {
+        while (recentPageViews.length < PAGE_VIEW_RECENT_LIMIT) {
           const pageViewRangeEnd = pageViewRangeStart + PAGE_VIEW_PAGE_SIZE - 1;
           const { data, error } = await supabase
             .from('page_views')
-            .select('angler, created_at')
+            .select('id, angler, created_at')
             .eq('club_id', clubId)
             .gte('created_at', sinceIso)
             .order('created_at', { ascending: false })
+            .order('id', { ascending: false })
             .range(pageViewRangeStart, pageViewRangeEnd);
 
           if (error) {
@@ -302,14 +365,6 @@ export default function AdminOverview() {
 
         setLatestCatch(fishes?.[0] || null);
         if (fishes?.[0]?.angler) setNameShort(fishes[0].angler);
-
-        const { count } = await supabase
-          .from('fishes')
-          .select('*', { count: 'exact', head: true })
-          .eq('club_id', clubId)
-          .not('fish', 'is', null)
-          .neq('fish', '');
-        setCatchCount(count);
 
         const { data: blanks } = await supabase
           .from('fishes')
@@ -391,7 +446,7 @@ export default function AdminOverview() {
       }
     }
     loadData();
-  }, [pageViewYearStart]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -400,21 +455,23 @@ export default function AdminOverview() {
       setPageViewLoading(true);
       setPageViewError('');
 
-      const since = pageViewYearStart.toISOString();
       const clubId = getActiveClubId();
+      const snapshotIso = new Date().toISOString();
 
       const allRows = [];
       let rangeStart = 0;
+      let pagesLoaded = 0;
       let encounteredError = null;
 
-      while (allRows.length < PAGE_VIEW_LIMIT) {
+      while (pagesLoaded < PAGE_VIEW_MAX_FETCH_PAGES) {
         const rangeEnd = rangeStart + PAGE_VIEW_PAGE_SIZE - 1;
         const { data, error } = await supabase
           .from('page_views')
-          .select('path, full_path, angler, session_id, created_at, metadata')
+          .select('id, path, full_path, angler, session_id, created_at, metadata')
           .eq('club_id', clubId)
-          .gte('created_at', since)
+          .lte('created_at', snapshotIso)
           .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
           .range(rangeStart, rangeEnd);
 
         if (!active) return;
@@ -432,6 +489,7 @@ export default function AdminOverview() {
         }
 
         rangeStart += PAGE_VIEW_PAGE_SIZE;
+        pagesLoaded += 1;
       }
 
       if (encounteredError) {
@@ -439,7 +497,10 @@ export default function AdminOverview() {
         setPageViewError(encounteredError.message || 'Page-Views konnten nicht geladen werden.');
         setPageViewRows([]);
       } else {
-        setPageViewRows(allRows.slice(0, PAGE_VIEW_LIMIT));
+        setPageViewRows(allRows);
+        if (pagesLoaded >= PAGE_VIEW_MAX_FETCH_PAGES) {
+          setPageViewError('Page-Views wurden nur teilweise geladen (Maximalgrenze erreicht).');
+        }
       }
 
       setPageViewLoading(false);
@@ -449,7 +510,93 @@ export default function AdminOverview() {
     return () => {
       active = false;
     };
-  }, [pageViewYearStart]);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPageViewStats() {
+      setPageViewStatsLoading(true);
+      setPageViewStatsError('');
+
+      const clubId = getActiveClubId();
+      if (!clubId) {
+        setPageViewDbYears(null);
+        setPageViewDbMonthlyCounts(null);
+        setPageViewStatsLoading(false);
+        return;
+      }
+
+      const selectedYear = pageViewYearFilter === PAGE_VIEW_YEAR_FILTER_ALL
+        ? null
+        : Number(pageViewYearFilter);
+
+      try {
+        const [yearsResult, monthlyResult] = await Promise.all([
+          supabase.rpc('admin_page_view_years', {
+            p_club_id: clubId,
+            p_excluded_angler: PAGE_VIEW_EXCLUDED_ANGLER,
+          }),
+          supabase.rpc('admin_page_view_monthly_counts', {
+            p_club_id: clubId,
+            p_year: Number.isInteger(selectedYear) ? selectedYear : null,
+            p_excluded_angler: PAGE_VIEW_EXCLUDED_ANGLER,
+          }),
+        ]);
+
+        if (!active) return;
+
+        if (isMissingPageViewRpcError(yearsResult.error) || isMissingPageViewRpcError(monthlyResult.error)) {
+          setPageViewDbYears(null);
+          setPageViewDbMonthlyCounts(null);
+          return;
+        }
+
+        if (yearsResult.error || monthlyResult.error) {
+          setPageViewStatsError(
+            yearsResult.error?.message
+              || monthlyResult.error?.message
+              || 'Page-View-Statistik konnte nicht vollständig geladen werden.'
+          );
+          setPageViewDbYears(null);
+          setPageViewDbMonthlyCounts(null);
+          return;
+        }
+
+        const years = (yearsResult.data || [])
+          .map((row) => Number(row?.year))
+          .filter((year) => Number.isInteger(year))
+          .sort((a, b) => b - a);
+
+        setPageViewDbYears(years);
+        setPageViewDbMonthlyCounts(Array.isArray(monthlyResult.data) ? monthlyResult.data : []);
+      } catch (error) {
+        if (!active) return;
+        setPageViewStatsError(error?.message || 'Page-View-Statistik konnte nicht geladen werden.');
+        setPageViewDbYears(null);
+        setPageViewDbMonthlyCounts(null);
+      } finally {
+        if (active) setPageViewStatsLoading(false);
+      }
+    }
+
+    loadPageViewStats();
+    return () => {
+      active = false;
+    };
+  }, [pageViewYearFilter]);
+
+  useEffect(() => {
+    if (pageViewYearFilter === PAGE_VIEW_YEAR_FILTER_ALL) return;
+    const selectedYear = Number(pageViewYearFilter);
+    if (!Number.isInteger(selectedYear)) {
+      setPageViewYearFilter(PAGE_VIEW_YEAR_FILTER_ALL);
+      return;
+    }
+    if (!pageViewAvailableYears.includes(selectedYear)) {
+      setPageViewYearFilter(PAGE_VIEW_YEAR_FILTER_ALL);
+    }
+  }, [pageViewAvailableYears, pageViewYearFilter]);
 
   useEffect(() => {
     let active = true;
@@ -538,10 +685,6 @@ export default function AdminOverview() {
   }, []);
 
   useEffect(() => {
-    setPageViewLastLimit(20);
-  }, [filteredPageViewRows.length]);
-
-  useEffect(() => {
     setPageViewUniqueOpenPath(null);
   }, [pageViewAggregates]);
 
@@ -564,9 +707,6 @@ export default function AdminOverview() {
         temperatureCount={temperatureCount}
         formatDateTimeLabel={formatDateTimeLabel}
       />
-
-      <OverviewSection title="☁️ Letzte Wetteraktualisierung" value={weatherUpdatedAt || 'Lade...'} />
-      <OverviewSection title="🎣 Gesamtanzahl Fänge" value={catchCount === null ? 'Lade...' : catchCount} />
 
       <LatestCatchSection
         latestCatch={latestCatch}
@@ -609,23 +749,22 @@ export default function AdminOverview() {
       />
 
       <PageViewsSection
-        pageViewLoading={pageViewLoading}
+        pageViewLoading={pageViewSectionLoading}
         pageViewTotal={pageViewTotal}
-        pageViewYearLabel={pageViewYearLabel}
+        pageViewRangeLabel={pageViewRangeLabel}
+        pageViewYearFilter={pageViewYearFilter}
+        pageViewYearOptions={pageViewYearOptions}
+        setPageViewYearFilter={setPageViewYearFilter}
         pageViewAggregates={pageViewAggregates}
         pageViewAverage={pageViewAverage}
-        pageViewError={pageViewError}
-        pageViewMonthlyStats={pageViewMonthlyStats}
+        pageViewError={pageViewSectionError}
+        pageViewMonthlyStats={pageViewMonthlyStatsVisible}
         pageViewTopAnglers={pageViewTopAnglers}
         fallbackTextClass={fallbackTextClass}
         formatDateTimeLabel={formatDateTimeLabel}
         pageViewUniqueOpenPath={pageViewUniqueOpenPath}
         uniqueAnglersForPath={uniqueAnglersForPath}
         setPageViewUniqueOpenPath={setPageViewUniqueOpenPath}
-        pageViewLastEvents={pageViewLastEvents}
-        pageViewLastEventsSourceCount={pageViewLastEventsSourceCount}
-        pageViewLastLimit={pageViewLastLimit}
-        setPageViewLastLimit={setPageViewLastLimit}
       />
       <RegisteredUsersSection
         allProfiles={allProfiles}

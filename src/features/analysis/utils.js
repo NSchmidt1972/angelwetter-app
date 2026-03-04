@@ -30,6 +30,8 @@ export const MONTH_NAMES = [
   'Dezember',
 ];
 
+export const ANALYSIS_YEAR_FILTER_ALL = 'all';
+
 export function findMatchingKey(value, stats) {
   if (value == null || !stats) return null;
   return (

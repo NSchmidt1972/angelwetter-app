@@ -7,6 +7,7 @@ import PushInit from '@/components/PushInit';
 import AppRoutes from '@/AppRoutes';
 import { WeatherProvider } from '@/hooks/useWeatherCache';
 import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
+import { usePageViewTracker } from '@/hooks/usePageViewTracker';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
@@ -88,6 +89,12 @@ function AppContent() {
   const [imageLoaded, setImageLoaded] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [minSplashDone, setMinSplashDone] = useState(false);
+
+  usePageViewTracker({
+    enabled: Boolean(user),
+    clubId: profile?.club_id || getActiveClubId(),
+    anglerName: profile?.name || profile?.angler_name || anglerName || null,
+  });
 
   // Splash kurz anzeigen
   useEffect(() => {

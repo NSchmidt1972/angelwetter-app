@@ -2,11 +2,8 @@
 import Navbar from './components/Navbar';
 import { Outlet } from 'react-router-dom';
 import AchievementLayer from '@/achievements/AchievementLayer';
-import { usePageViewTracker } from '@/hooks/usePageViewTracker';
 
 export default function AppLayout({ name, isAdmin, canAccessBoard }) {
-  usePageViewTracker();
-
   return (
     <>
       <Navbar name={name} isAdmin={isAdmin} canAccessBoard={canAccessBoard} />

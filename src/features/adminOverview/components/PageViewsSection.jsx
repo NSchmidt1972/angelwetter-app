@@ -4,7 +4,10 @@ import OverviewSection from '@/features/adminOverview/components/OverviewSection
 export default function PageViewsSection({
   pageViewLoading,
   pageViewTotal,
-  pageViewYearLabel,
+  pageViewRangeLabel,
+  pageViewYearFilter,
+  pageViewYearOptions,
+  setPageViewYearFilter,
   pageViewAggregates,
   pageViewAverage,
   pageViewError,
@@ -15,10 +18,6 @@ export default function PageViewsSection({
   pageViewUniqueOpenPath,
   uniqueAnglersForPath,
   setPageViewUniqueOpenPath,
-  pageViewLastEvents,
-  pageViewLastEventsSourceCount,
-  pageViewLastLimit,
-  setPageViewLastLimit,
 }) {
   return (
     <OverviewSection
@@ -26,8 +25,30 @@ export default function PageViewsSection({
       value={pageViewLoading ? 'Lade…' : `${pageViewTotal} Aufrufe`}
     >
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
-          <span>Zeitraum: Gesamtjahr {pageViewYearLabel}</span>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+          <div className="flex items-center gap-2">
+            <span>Filter:</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {pageViewYearOptions.map((option) => {
+                const isActive = pageViewYearFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setPageViewYearFilter(option.value)}
+                    className={`rounded border px-2.5 py-1 text-xs font-semibold transition ${
+                      isActive
+                        ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500 dark:text-blue-950'
+                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <span>Zeitraum: {pageViewRangeLabel}</span>
           <span>Seiten: {pageViewAggregates.length}</span>
           <span>Ø je Seite: {pageViewAverage}</span>
         </div>
@@ -39,7 +60,7 @@ export default function PageViewsSection({
         ) : (
           <div className="flex flex-col gap-6">
             <div>
-              <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Monatliche Aufrufe ({pageViewYearLabel})</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Monatliche Aufrufe ({pageViewRangeLabel})</h4>
               {pageViewLoading ? (
                 <div className={fallbackTextClass}>Lädt…</div>
               ) : pageViewMonthlyStats.length === 0 ? (
@@ -176,62 +197,6 @@ export default function PageViewsSection({
               )}
             </div>
 
-            <div>
-              <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">Letzte Ereignisse</h4>
-              {pageViewLoading ? (
-                <div className={fallbackTextClass}>Lädt…</div>
-              ) : pageViewLastEvents.length === 0 ? (
-                <div className={fallbackTextClass}>Keine Aufrufe im Zeitraum.</div>
-              ) : (
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Menüpunkt</th>
-                        <th className="px-3 py-2 text-left">Angler</th>
-                        <th className="px-3 py-2 text-left">Zeit</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {pageViewLastEvents.map((row) => (
-                        <tr key={row.key} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                          <td className="px-3 py-2 text-xs sm:text-sm">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="font-medium text-gray-800 dark:text-gray-100">{row.label || '—'}</span>
-                              {row.label !== row.path && row.path && row.path !== '—' && (
-                                <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500">{row.path}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-xs sm:text-sm">
-                            <span
-                              className={`${row.matchesCurrentBuild
-                                ? 'text-green-600 dark:text-green-300 font-semibold'
-                                : 'text-gray-800 dark:text-gray-200'
-                              }`}
-                            >
-                              {row.angler || '—'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-xs sm:text-sm">{formatDateTimeLabel(row.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {pageViewLastEventsSourceCount > pageViewLastLimit && (
-                <div className="mt-3 text-center">
-                  <button
-                    type="button"
-                    onClick={() => setPageViewLastLimit((limit) => Math.min(limit + 20, pageViewLastEventsSourceCount))}
-                    className="inline-flex items-center justify-center rounded border border-blue-500 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-600 transition hover:bg-blue-50 dark:border-blue-400 dark:text-blue-300 dark:hover:bg-blue-400/10"
-                  >
-                    Mehr anzeigen
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         )}
       </div>

@@ -3,16 +3,24 @@ import { supabase } from '@/supabaseClient';
 import { fetchWeather } from '@/api/weather';
 import { getActiveClubId } from '@/utils/clubId';
 import {
+  ANALYSIS_YEAR_FILTER_ALL,
   buildDescIconMap,
   findMatchingKey,
   getMoonDescription,
   windDirection,
 } from '@/features/analysis/utils';
 
+function isFishInYear(fishEntry, year) {
+  const ts = fishEntry?.timestamp ? new Date(fishEntry.timestamp) : null;
+  if (!ts || Number.isNaN(ts.getTime())) return false;
+  return ts.getFullYear() === year;
+}
+
 export default function useAnalysisData({ anglerName }) {
+  const currentYear = new Date().getFullYear();
   const [fishes, setFishes] = useState([]);
   const [weatherNow, setWeatherNow] = useState(null);
-  const [selectedYear, setSelectedYear] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
   const [onlyMine, setOnlyMine] = useState(false);
   const [selectedFish, setSelectedFish] = useState('Alle');
 
@@ -61,15 +69,44 @@ export default function useAnalysisData({ anglerName }) {
     };
   }, [anglerName, onlyMine]);
 
+  const sortedYears = Array.from(
+    new Set(
+      [currentYear, ...fishes]
+        .map((fishEntry) => {
+          if (typeof fishEntry === 'number') return fishEntry;
+          const date = fishEntry?.timestamp ? new Date(fishEntry.timestamp) : null;
+          if (!date || Number.isNaN(date.getTime())) return null;
+          return date.getFullYear();
+        })
+        .filter(Number.isFinite)
+    )
+  ).sort((a, b) => b - a);
+
+  useEffect(() => {
+    if (
+      selectedYear !== ANALYSIS_YEAR_FILTER_ALL
+      && !sortedYears.includes(Number(selectedYear))
+    ) {
+      setSelectedYear(currentYear);
+    }
+  }, [currentYear, sortedYears, selectedYear]);
+
+  const yearScopedFishes = selectedYear === ANALYSIS_YEAR_FILTER_ALL
+    ? fishes
+    : fishes.filter((fishEntry) => isFishInYear(fishEntry, Number(selectedYear)));
+
   const baseValidFishes = fishes.filter(
     (fishEntry) => !fishEntry.blank && fishEntry.fish && fishEntry.fish.trim().toLowerCase() !== 'unbekannt'
   );
-  const totalFishes = baseValidFishes.length;
+  const summaryValidFishes = yearScopedFishes.filter(
+    (fishEntry) => !fishEntry.blank && fishEntry.fish && fishEntry.fish.trim().toLowerCase() !== 'unbekannt'
+  );
+  const totalFishes = summaryValidFishes.length;
 
-  const blankSessions = fishes.filter((fishEntry) => fishEntry.blank === true).length;
+  const blankSessions = yearScopedFishes.filter((fishEntry) => fishEntry.blank === true).length;
 
   const catchSessionKeys = new Set();
-  fishes.forEach((fishEntry) => {
+  yearScopedFishes.forEach((fishEntry) => {
     if (fishEntry.blank) return;
     const ts = new Date(fishEntry.timestamp);
     if (Number.isNaN(ts.getTime())) return;
@@ -96,6 +133,7 @@ export default function useAnalysisData({ anglerName }) {
 
   const yearMonthStats = baseValidFishes.reduce((map, fishEntry) => {
     const date = new Date(fishEntry.timestamp);
+    if (Number.isNaN(date.getTime())) return map;
     const year = date.getFullYear();
     const month = date.getMonth();
     const type = fishEntry.fish.trim();
@@ -106,22 +144,21 @@ export default function useAnalysisData({ anglerName }) {
 
     return map;
   }, {});
-  const sortedYears = Object.keys(yearMonthStats).sort((a, b) => b - a);
-
-  useEffect(() => {
-    if (!selectedYear && sortedYears.length > 0) {
-      setSelectedYear(sortedYears[0]);
-    }
-  }, [sortedYears, selectedYear]);
-
-  const yearTotalStats = selectedYear
-    ? Object.values(yearMonthStats[selectedYear] || {}).reduce((acc, monthStat) => {
+  const yearTotalStats = selectedYear === ANALYSIS_YEAR_FILTER_ALL
+    ? Object.values(yearMonthStats).reduce((acc, months) => {
+        Object.values(months || {}).forEach((monthStat) => {
+          Object.entries(monthStat || {}).forEach(([fish, count]) => {
+            acc[fish] = (acc[fish] || 0) + count;
+          });
+        });
+        return acc;
+      }, {})
+    : Object.values(yearMonthStats[selectedYear] || {}).reduce((acc, monthStat) => {
         Object.entries(monthStat).forEach(([fish, count]) => {
           acc[fish] = (acc[fish] || 0) + count;
         });
         return acc;
-      }, {})
-    : {};
+      }, {});
   const yearTotalCount = Object.values(yearTotalStats).reduce((sum, count) => sum + count, 0);
 
   const statsReducer = (groupFn) => (map, fishEntry) => {

@@ -1,8 +1,10 @@
 import { parseTimestamp } from '@/utils/dateUtils';
 
-export const PAGE_VIEW_LIMIT = 5000;
+export const PAGE_VIEW_RECENT_LIMIT = 5000;
 export const PAGE_VIEW_PAGE_SIZE = 1000;
+export const PAGE_VIEW_MAX_FETCH_PAGES = 1000;
 export const EXCLUDED_PAGE_VIEW_ANGLERS = new Set(['nicol schmidt']);
+export const PAGE_VIEW_YEAR_FILTER_ALL = 'all';
 
 export function normalizePath(value) {
   if (!value) return '/';
@@ -62,6 +64,29 @@ export function filterPageViewRows(rows) {
   });
 }
 
+export function getPageViewAvailableYears(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const years = new Set();
+  rows.forEach((row) => {
+    const createdAt = parseTimestamp(row?.created_at);
+    if (!createdAt) return;
+    years.add(createdAt.getFullYear());
+  });
+  return [...years].sort((a, b) => b - a);
+}
+
+export function filterPageViewRowsByYear(rows, yearFilter) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  if (yearFilter === PAGE_VIEW_YEAR_FILTER_ALL) return rows;
+  const selectedYear = Number(yearFilter);
+  if (!Number.isInteger(selectedYear)) return rows;
+
+  return rows.filter((row) => {
+    const createdAt = parseTimestamp(row?.created_at);
+    return Boolean(createdAt) && createdAt.getFullYear() === selectedYear;
+  });
+}
+
 export function buildPageViewAnglersByPath(filteredRows) {
   const map = new Map();
   filteredRows.forEach((row) => {
@@ -80,13 +105,60 @@ export function getUniqueAnglersForPath(pageViewAnglersByPath, path) {
   return [...set].sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
 }
 
-export function buildPageViewMonthlyStats(filteredRows, pageViewYearStart) {
-  const year = pageViewYearStart.getFullYear();
+export function buildPageViewMonthlyStats(filteredRows, yearFilter) {
+  if (!Array.isArray(filteredRows) || filteredRows.length === 0) return [];
+
+  if (yearFilter === PAGE_VIEW_YEAR_FILTER_ALL) {
+    const monthMap = new Map();
+    let minMonthStart = null;
+    let maxMonthStart = null;
+
+    filteredRows.forEach((row) => {
+      const createdAt = parseTimestamp(row?.created_at);
+      if (!createdAt) return;
+      const year = createdAt.getFullYear();
+      const month = createdAt.getMonth();
+      const monthStart = new Date(year, month, 1);
+      if (!minMonthStart || monthStart < minMonthStart) minMonthStart = monthStart;
+      if (!maxMonthStart || monthStart > maxMonthStart) maxMonthStart = monthStart;
+      const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const bucket = monthMap.get(key) || {
+        key,
+        label: new Date(year, month, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
+        total: 0,
+      };
+      bucket.total += 1;
+      monthMap.set(key, bucket);
+    });
+
+    if (!minMonthStart || !maxMonthStart) return [];
+
+    const timeline = [];
+    const cursor = new Date(maxMonthStart.getFullYear(), maxMonthStart.getMonth(), 1);
+    while (cursor >= minMonthStart) {
+      const year = cursor.getFullYear();
+      const month = cursor.getMonth();
+      const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const existing = monthMap.get(key);
+      timeline.push(existing || {
+        key,
+        label: cursor.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
+        total: 0,
+      });
+      cursor.setMonth(cursor.getMonth() - 1);
+    }
+
+    return timeline;
+  }
+
+  const selectedYear = Number(yearFilter);
+  if (!Number.isInteger(selectedYear)) return [];
+
   const months = [];
   for (let month = 0; month < 12; month += 1) {
-    const bucketDate = new Date(year, month, 1);
+    const bucketDate = new Date(selectedYear, month, 1);
     months.push({
-      key: `${year}-${String(month + 1).padStart(2, '0')}`,
+      key: `${selectedYear}-${String(month + 1).padStart(2, '0')}`,
       label: bucketDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
       total: 0,
     });
@@ -95,12 +167,12 @@ export function buildPageViewMonthlyStats(filteredRows, pageViewYearStart) {
   filteredRows.forEach((row) => {
     const createdAt = parseTimestamp(row?.created_at);
     if (!createdAt) return;
-    if (createdAt.getFullYear() !== year) return;
-    const key = `${year}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+    if (createdAt.getFullYear() !== selectedYear) return;
+    const key = `${selectedYear}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
     const bucket = monthMap.get(key);
     if (bucket) bucket.total += 1;
   });
-  return months.filter((entry) => entry.total > 0);
+  return months;
 }
 
 export function buildPageViewTopAnglers(filteredRows) {
@@ -128,43 +200,4 @@ export function buildPageViewTopAnglers(filteredRows) {
       return a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
     })
     .slice(0, 20);
-}
-
-export function buildPageViewLastEvents({
-  filteredRows,
-  labelForPath,
-  currentBuildLabel,
-  pageViewLastLimit,
-}) {
-  const events = filteredRows.map((row, idx) => {
-    const normalizedPath = normalizePath(row?.path || '/');
-    const metadataObj = row?.metadata && typeof row.metadata === 'object'
-      ? row.metadata
-      : null;
-    const build = metadataObj?.build || metadataObj?.version || null;
-    const createdAt = parseTimestamp(row?.created_at);
-    if (!createdAt) return null;
-    const rawName = typeof row?.angler === 'string' ? row.angler.trim() : '';
-    const key = normalizeName(rawName);
-    return {
-      kind: 'page_view',
-      key: `pv-${row?.session_id || 'sess'}-${createdAt.toISOString()}-${normalizedPath}-${key || idx}`,
-      angler: rawName || 'Unbekannt',
-      label: labelForPath(normalizedPath),
-      path: normalizedPath,
-      created_at: createdAt.toISOString(),
-      matchesCurrentBuild: (() => {
-        const trimmed = build ? String(build).trim() : '';
-        return Boolean(trimmed) && Boolean(currentBuildLabel) && trimmed === currentBuildLabel;
-      })(),
-    };
-  }).filter(Boolean);
-
-  return events
-    .sort(
-      (a, b) =>
-        (parseTimestamp(b?.created_at)?.getTime() || 0) -
-        (parseTimestamp(a?.created_at)?.getTime() || 0)
-    )
-    .slice(0, pageViewLastLimit);
 }
