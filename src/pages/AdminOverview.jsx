@@ -95,6 +95,31 @@ function buildMonthlyStatsFromDbCounts(dbRows, yearFilter) {
   return timeline;
 }
 
+function normalizeText(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
+function parseBuildMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return { build: null, commit: null };
+  }
+  const build = normalizeText(metadata.build || metadata.version || metadata.app_version) || null;
+  const commit = normalizeText(metadata.commit || metadata.git_commit) || null;
+  return { build, commit };
+}
+
+function formatBuildLabel(buildInfo) {
+  if (!buildInfo) return null;
+  const parts = [];
+  if (buildInfo.build) parts.push(buildInfo.build);
+  if (buildInfo.commit) {
+    const shortCommit = buildInfo.commit.slice(0, 7);
+    parts.push(`#${shortCommit}`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
 export default function AdminOverview() {
   const [activeUsers, setActiveUsers] = useState([]);
   const [latestCatch, setLatestCatch] = useState(null);
@@ -153,7 +178,6 @@ export default function AdminOverview() {
     },
     [navLabelMap],
   );
-
   const formatDateTimeLabel = (value) => {
     const parsed = parseTimestamp(value);
     if (!parsed) return 'unbekannt';
@@ -229,6 +253,44 @@ export default function AdminOverview() {
   );
   const pageViewSectionLoading = pageViewLoading || pageViewStatsLoading;
   const pageViewSectionError = pageViewError || pageViewStatsError;
+  const latestBuildByAngler = useMemo(() => {
+    const byAngler = new Map();
+
+    (pageViewRows || []).forEach((entry) => {
+      const key = normalizeName(entry?.angler);
+      if (!key) return;
+
+      const buildInfo = parseBuildMetadata(entry?.metadata);
+      if (!buildInfo.build && !buildInfo.commit) return;
+      const createdAt = parseTimestamp(entry?.created_at);
+      if (!createdAt) return;
+
+      const prev = byAngler.get(key);
+      if (!prev || createdAt > prev.createdAt) {
+        byAngler.set(key, {
+          ...buildInfo,
+          createdAt,
+        });
+      }
+    });
+
+    return byAngler;
+  }, [pageViewRows]);
+  const getBuildInfoForUser = useCallback(
+    (rawName) => {
+      const key = normalizeName(rawName);
+      if (!key) return null;
+      const info = latestBuildByAngler.get(key);
+      if (!info) return null;
+      const label = formatBuildLabel(info);
+      if (!label) return null;
+      return {
+        label,
+        createdAt: info.createdAt?.toISOString?.() || null,
+      };
+    },
+    [latestBuildByAngler],
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -728,6 +790,7 @@ export default function AdminOverview() {
       <ActiveUsersSection
         activeUsers={activeUsers}
         formatDateTimeLabel={formatDateTimeLabel}
+        getBuildInfoForUser={getBuildInfoForUser}
         listItemClass={listItemClass}
         metaTextClass={metaTextClass}
       />
@@ -769,6 +832,7 @@ export default function AdminOverview() {
       <RegisteredUsersSection
         allProfiles={allProfiles}
         formatDateLabel={formatDateLabel}
+        getBuildInfoForUser={getBuildInfoForUser}
         listItemClass={listItemClass}
         metaTextClass={metaTextClass}
       />
