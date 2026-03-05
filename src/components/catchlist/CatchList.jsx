@@ -1,6 +1,6 @@
 // src/components/catchlist/CatchList.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useCatches } from '../../hooks/useCatches';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 
@@ -21,6 +21,7 @@ import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
 export default function CatchList({ anglerName }) {
   const [onlyMine, setOnlyMine] = useState(false);
   const [topBadges, setTopBadges] = useState({});
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const {
     catches,
@@ -45,6 +46,7 @@ export default function CatchList({ anglerName }) {
   const navigate = useNavigate();
   const { clubSlug } = useParams();
   const clubBasePath = clubSlug ? `/${clubSlug}` : '';
+  const viewMode = searchParams.get('view') === 'gallery' ? 'gallery' : 'list';
 
   useInfiniteScroll({ ref: sentinelRef, hasMore, loading, onHit: loadNext });
 
@@ -58,11 +60,40 @@ export default function CatchList({ anglerName }) {
     isPending: isReactionPending,
   } = useReactions(normalizedName);
 
+  const entryKey = useCallback(
+    (entry) => entry.id ?? `${entry.angler || 'anon'}-${entry.timestamp}-${entry.fish}-${entry.size}`,
+    []
+  );
+
+  const catchesWithPhotos = useMemo(
+    () => catches.filter((entry) => typeof entry.photo_url === 'string' && entry.photo_url.trim() !== ''),
+    [catches]
+  );
+
+  const featuredPhotoCatch = useMemo(() => {
+    if (!catchesWithPhotos.length) return null;
+    return catchesWithPhotos.reduce((best, current) => {
+      if (!best) return current;
+      const bestSize = Number.parseFloat(best.size) || 0;
+      const currentSize = Number.parseFloat(current.size) || 0;
+      if (currentSize === bestSize) {
+        return new Date(current.timestamp).getTime() > new Date(best.timestamp).getTime() ? current : best;
+      }
+      return currentSize > bestSize ? current : best;
+    }, null);
+  }, [catchesWithPhotos]);
+
+  const galleryEntries = useMemo(() => {
+    const sortedByTime = catchesWithPhotos
+      .slice()
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    if (!featuredPhotoCatch) return sortedByTime;
+    const featuredKey = entryKey(featuredPhotoCatch);
+    return sortedByTime.filter((entry) => entryKey(entry) !== featuredKey);
+  }, [catchesWithPhotos, featuredPhotoCatch, entryKey]);
+
   useEffect(() => {
     let cancelled = false;
-
-    const entryKey = (entry) =>
-      entry.id ?? `${entry.angler || 'anon'}-${entry.timestamp}-${entry.fish}-${entry.size}`;
 
     async function loadTopTen() {
       try {
@@ -123,7 +154,7 @@ export default function CatchList({ anglerName }) {
     return () => {
       cancelled = true;
     };
-  }, [isTrusted, normalizedName]);
+  }, [isTrusted, normalizedName, entryKey]);
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
@@ -200,35 +231,101 @@ export default function CatchList({ anglerName }) {
     [setExternalVisibility]
   );
 
+  const setView = useCallback(
+    (nextMode) => {
+      const nextParams = new URLSearchParams(searchParams);
+      if (nextMode === 'gallery') nextParams.set('view', 'gallery');
+      else nextParams.delete('view');
+      setSearchParams(nextParams, { replace: true });
+      setOpenMenuId(null);
+      closeReactionMenu();
+    },
+    [closeReactionMenu, searchParams, setSearchParams]
+  );
+
+  const galleryTileClassName = useCallback((index) => {
+    if (index === 0) return 'col-span-2 row-span-2 sm:col-span-2';
+    const mod = index % 7;
+    if (mod === 2) return 'row-span-2 sm:col-span-2';
+    if (mod === 4 || mod === 6) return 'row-span-2';
+    return 'row-span-1';
+  }, []);
+
   return (
     <div className="p-6 bg-white dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
-      <div className="space-y-6 max-w-3xl mx-auto">
+      <div className={`space-y-6 mx-auto ${viewMode === 'gallery' ? 'max-w-6xl' : 'max-w-3xl'}`}>
         <h2 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-400">
           🎣 Fangliste
         </h2>
 
-        <div className="flex justify-between items-center mb-4 text-sm text-gray-600 dark:text-gray-400">
-          <div>
-            🎯 {onlyMine ? 'Meine' : 'Gesamt'}: {totalCount ?? '…'}{' '}
-            {totalCount === 1 ? 'Fang' : 'Fänge'}
+        <div className="mb-4 flex flex-col gap-3 text-sm text-gray-600 dark:text-gray-400 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div
+            className="inline-flex w-fit self-center items-center rounded-full border border-blue-200 bg-blue-50 p-1 dark:border-blue-700 dark:bg-blue-900/30 sm:self-auto"
+            role="tablist"
+            aria-label="Ansicht wählen"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'list'}
+              onClick={() => setView('list')}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                viewMode === 'list'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'text-blue-700 hover:bg-blue-100 dark:text-blue-200 dark:hover:bg-blue-800/50'
+              }`}
+            >
+              Liste
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'gallery'}
+              onClick={() => setView('gallery')}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                viewMode === 'gallery'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'text-blue-700 hover:bg-blue-100 dark:text-blue-200 dark:hover:bg-blue-800/50'
+              }`}
+            >
+              Galerie
+            </button>
           </div>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={onlyMine}
-              onChange={(e) => setOnlyMine(e.target.checked)}
-              className="accent-blue-600"
-            />
-            Nur meine
-          </label>
+
+          <div className="flex items-center justify-between gap-4 sm:ml-auto sm:justify-end">
+            <div>
+              🎯 {onlyMine ? 'Meine' : 'Gesamt'}: {totalCount ?? '…'}{' '}
+              {totalCount === 1 ? 'Fang' : 'Fänge'}
+            </div>
+            <label className="flex items-center gap-2 whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={onlyMine}
+                onChange={(e) => setOnlyMine(e.target.checked)}
+                className="accent-blue-600"
+              />
+              Nur meine
+            </label>
+          </div>
         </div>
 
-        {loading && !catches.length && (
+        {loading && !catches.length && viewMode === 'list' && (
           <ul className="space-y-6">
             {[...Array(4)].map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </ul>
+        )}
+
+        {loading && !catches.length && viewMode === 'gallery' && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 auto-rows-[130px]">
+            {[...Array(9)].map((_, index) => (
+              <div
+                key={index}
+                className={`${galleryTileClassName(index)} animate-pulse rounded-2xl bg-gray-200/80 dark:bg-gray-800`}
+              />
+            ))}
+          </div>
         )}
 
         {!loading && !catches.length && (
@@ -237,15 +334,16 @@ export default function CatchList({ anglerName }) {
           </p>
         )}
 
-        <ul className="space-y-6">
-          {catches.map((entry) => {
+        {viewMode === 'list' && (
+          <ul className="space-y-6">
+            {catches.map((entry) => {
             const d = new Date(entry.timestamp);
             const dateStr = d.toLocaleDateString('de-DE');
             const timeStr = d.toLocaleTimeString('de-DE', {
               hour: '2-digit',
               minute: '2-digit',
             });
-            const key = entry.id ?? `${entry.angler || 'anon'}-${entry.timestamp}-${entry.fish}-${entry.size}`;
+            const key = entryKey(entry);
             const topInfo = topBadges[key];
             const mobileFishName =
               entry.fish?.split(' (')[0]?.trim() || entry.fish || '';
@@ -493,8 +591,88 @@ export default function CatchList({ anglerName }) {
                 </div>
               </li>
             );
-          })}
-        </ul>
+            })}
+          </ul>
+        )}
+
+        {viewMode === 'gallery' && !loading && catches.length > 0 && catchesWithPhotos.length === 0 && (
+          <p className="text-center text-gray-500 dark:text-gray-400 mt-6">
+            Für die aktuellen Filter sind noch keine Fangfotos vorhanden.
+          </p>
+        )}
+
+        {viewMode === 'gallery' && catchesWithPhotos.length > 0 && (
+          <>
+            {featuredPhotoCatch && (
+              <button
+                type="button"
+                onClick={() => setModalPhoto(featuredPhotoCatch.photo_url)}
+                className="group relative w-full overflow-hidden rounded-2xl border border-blue-200 bg-blue-950 shadow-lg dark:border-blue-800"
+              >
+                <img
+                  src={featuredPhotoCatch.photo_url}
+                  alt={`Highlight: ${featuredPhotoCatch.fish}`}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-64 w-full object-cover opacity-90 transition duration-300 group-hover:scale-[1.02]"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+                <span className="absolute left-4 top-4 rounded-full bg-amber-300 px-3 py-1 text-xs font-semibold text-amber-950">
+                  Galerie-Highlight
+                </span>
+                <div className="absolute bottom-0 left-0 right-0 p-4 text-left text-white">
+                  <p className="text-lg font-semibold">
+                    {featuredPhotoCatch.fish} · {featuredPhotoCatch.size} cm
+                  </p>
+                  <p className="text-sm text-white/90">
+                    {featuredPhotoCatch.angler} ·{' '}
+                    {new Date(featuredPhotoCatch.timestamp).toLocaleDateString('de-DE')}
+                  </p>
+                </div>
+              </button>
+            )}
+
+            <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3 auto-rows-[130px] sm:auto-rows-[150px]">
+              {galleryEntries.map((entry, index) => {
+                const key = entryKey(entry);
+                const topInfo = topBadges[key];
+                const dateStr = new Date(entry.timestamp).toLocaleDateString('de-DE');
+                const isHomeWater = isFerkensbruchLocation(entry.location_name);
+
+                return (
+                  <li key={`${key}-gallery`} className={galleryTileClassName(index)}>
+                    <button
+                      type="button"
+                      onClick={() => setModalPhoto(entry.photo_url)}
+                      className="group relative h-full w-full overflow-hidden rounded-2xl border border-gray-200 bg-gray-900 shadow-md transition hover:shadow-xl dark:border-gray-700"
+                    >
+                      <img
+                        src={entry.photo_url}
+                        alt={`Fangfoto: ${entry.fish}`}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-3 text-left text-white">
+                        <p className="truncate text-sm font-semibold">
+                          {entry.fish} · {entry.size} cm
+                        </p>
+                        <p className="truncate text-xs text-white/90">
+                          {entry.angler} · {dateStr}
+                        </p>
+                      </div>
+                      {topInfo && isHomeWater && (
+                        <span className="absolute right-2 top-2 rounded-full bg-amber-300/90 px-2 py-1 text-[10px] font-semibold text-amber-950">
+                          Top 10 #{topInfo.rank}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
 
         {hasMore && (
           <div
