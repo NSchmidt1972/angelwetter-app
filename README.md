@@ -20,7 +20,7 @@ Angelwetter ist eine React/Vite PWA für Fangmeldungen, Auswertungen und Push-Be
 - Komplettlauf: `npm run test:ux`
 - Einmaliger Browser-Install lokal: `npm run test:ux:install`
 
-Der Agent ist im Repo versioniert (`tests/ux-agent`, `playwright.config.js`, `lighthouserc.json`)
+Der Agent ist im Repo versioniert (`tests/ux-agent/specs`, `tests/ux-agent/config`, `tests/ux-agent/scripts`)
 und läuft extern in CI über [`.github/workflows/ux-agent.yml`](./.github/workflows/ux-agent.yml).
 
 ## Wichtige Umgebungsvariablen

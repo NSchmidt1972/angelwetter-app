@@ -43,7 +43,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: playwright-report
+          path: tests/ux-agent/artifacts/playwright/html
           if-no-files-found: ignore
 
       - name: Upload Lighthouse report
@@ -51,5 +51,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-report
-          path: .lighthouseci
+          path: tests/ux-agent/artifacts/lighthouse
           if-no-files-found: ignore

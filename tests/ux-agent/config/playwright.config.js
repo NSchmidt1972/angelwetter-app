@@ -1,19 +1,24 @@
+import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const baseURL = process.env.UX_BASE_URL || 'http://127.0.0.1:4173';
+const artifactsDir = path.resolve(__dirname, '../artifacts');
 
 export default defineConfig({
-  testDir: './tests/ux-agent',
+  testDir: path.resolve(__dirname, '../specs'),
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [
     ['list'],
-    ['html', { open: 'never' }],
-    ['json', { outputFile: 'test-results/playwright-report.json' }],
-    ['./scripts/playwrightReportEnricher.mjs'],
+    ['html', { open: 'never', outputFolder: path.join(artifactsDir, 'playwright', 'html') }],
+    ['json', { outputFile: path.join(artifactsDir, 'playwright', 'report.json') }],
+    [path.resolve(__dirname, '../scripts/playwrightReportEnricher.mjs')],
   ],
+  outputDir: path.join(artifactsDir, 'playwright', 'results'),
   use: {
     baseURL,
     trace: 'retain-on-failure',

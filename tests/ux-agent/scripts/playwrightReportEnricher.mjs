@@ -1,8 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPORT_INDEX_PATH = path.join('playwright-report', 'index.html');
-const JSON_REPORT_PATH = path.join('test-results', 'playwright-report.json');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uxAgentDir = path.resolve(__dirname, '..');
+const REPORT_INDEX_PATH = path.join(uxAgentDir, 'artifacts', 'playwright', 'html', 'index.html');
+const JSON_REPORT_PATH = path.join(uxAgentDir, 'artifacts', 'playwright', 'report.json');
 const BLOCK_START = '<!-- UX_SUMMARY_START -->';
 const BLOCK_END = '<!-- UX_SUMMARY_END -->';
 

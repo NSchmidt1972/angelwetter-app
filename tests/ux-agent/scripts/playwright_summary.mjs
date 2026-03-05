@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const defaultPath = path.join('test-results', 'playwright-report.json');
+const defaultPath = path.join('tests', 'ux-agent', 'artifacts', 'playwright', 'report.json');
 const reportPath = process.argv[2] || defaultPath;
 
 function msToSeconds(ms) {

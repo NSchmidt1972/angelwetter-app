@@ -9,9 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:ux:install": "npx playwright install chromium",
-    "test:ux:func": "UX_CLUB_SLUG=asv-rotauge playwright test --config=playwright.config.js",
-    "test:ux:summary": "node scripts/playwright_summary.mjs",
-    "test:ux:lighthouse": "./scripts/run_lighthouse_ci.sh",
+    "test:ux:func": "UX_CLUB_SLUG=asv-rotauge playwright test --config=tests/ux-agent/config/playwright.config.js",
+    "test:ux:summary": "node tests/ux-agent/scripts/playwright_summary.mjs",
+    "test:ux:lighthouse": "./tests/ux-agent/scripts/run_lighthouse_ci.sh",
     "test:ux": "npm run test:ux:func && npm run test:ux:lighthouse"
   },
   "dependencies": {
