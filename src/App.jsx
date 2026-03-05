@@ -13,6 +13,7 @@ import '@/index.css';
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
 const NULL_CLUB_ID = '00000000-0000-0000-0000-000000000000';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
 
 function isValidClubId(clubId) {
   return (
@@ -326,7 +327,7 @@ function AppContent() {
     }
   }, [profile]);
 
-  if (authLoading || nameLoading || user === undefined || showSplash || (user && superAdminLoading)) {
+  if (!UX_TEST_MODE_ENABLED && (authLoading || nameLoading || user === undefined || showSplash || (user && superAdminLoading))) {
     return (
       <>
         <div className="flex flex-col justify-center items-center h-screen bg-white relative">

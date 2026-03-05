@@ -1,6 +1,7 @@
 import process from 'node:process';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { navItemsFor } from '../../../src/config/navItems';
 
 const clubSlug = process.env.UX_CLUB_SLUG || 'asv-rotauge';
 const authPath = `/${clubSlug}/auth`;
@@ -19,11 +20,136 @@ const mockedWeather = {
   },
   daily: [{ moon_phase: 0.42 }],
 };
+const visitedUrlsByPage = new WeakMap();
+const menuPathToUxPath = {
+  '/': '/__ux/menu/dashboard',
+  '/new-catch': '/__ux/menu/new-catch',
+  '/crayfish': '/__ux/menu/crayfish',
+  '/catches': '/__ux/menu/catches',
+  '/leaderboard': '/__ux/menu/leaderboard',
+  '/regeln': '/__ux/menu/regeln',
+  '/analysis': '/__ux/menu/analysis',
+  '/top-fishes': '/__ux/menu/top-fishes',
+  '/fun': '/__ux/menu/fun',
+  '/forecast': '/__ux/menu/forecast',
+  '/calendar': '/__ux/menu/calendar',
+  '/map': '/__ux/menu/map',
+  '/downloads': '/__ux/menu/downloads',
+  '/vorstand': '/__ux/menu/vorstand',
+};
 
 function formatViolations(violations) {
   return violations
     .map((item) => `${item.id} (${item.impact || 'unknown'}): ${item.nodes.length} node(s)`)
     .join('\n');
+}
+
+function flattenNavPaths(items) {
+  return items.flatMap((item) => {
+    if (Array.isArray(item.children) && item.children.length > 0) {
+      return flattenNavPaths(item.children);
+    }
+    return item.path ? [item.path] : [];
+  });
+}
+
+function resolveMenuCoverage() {
+  const menuPaths = [
+    ...new Set(flattenNavPaths(navItemsFor({ isAdmin: true, canAccessBoard: true }))),
+  ];
+  const missingMappings = menuPaths.filter((path) => !menuPathToUxPath[path]);
+  const uxRoutes = [...new Set(menuPaths.map((path) => menuPathToUxPath[path]).filter(Boolean))];
+  return { menuPaths, missingMappings, uxRoutes };
+}
+
+async function mockExternalApisForMenuSweep(page) {
+  await page.route('**/api.openweathermap.org/data/3.0/onecall**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(mockedWeather),
+    });
+  });
+
+  await page.route('**/nominatim.openstreetmap.org/reverse**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        address: { city_district: 'Lobberich' },
+        display_name: 'Lobberich, Nettetal',
+      }),
+    });
+  });
+
+  await page.route('**/functions/v1/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  await page.route('**/rest/v1/**', async (route) => {
+    const request = route.request();
+    const method = request.method();
+    const accept = String(request.headers().accept || '').toLowerCase();
+    const wantsObject = accept.includes('vnd.pgrst.object+json');
+
+    if (method === 'DELETE') {
+      await route.fulfill({ status: 204, body: '' });
+      return;
+    }
+
+    await route.fulfill({
+      status: method === 'POST' ? 201 : 200,
+      contentType: 'application/json',
+      body: wantsObject ? '{}' : '[]',
+    });
+  });
+}
+
+async function verifyVisibleButtonsAreActionable(page) {
+  const failures = [];
+  let visibleCount = 0;
+  let testedCount = 0;
+  const buttons = page.getByRole('button');
+  const totalCount = await buttons.count();
+
+  for (let index = 0; index < totalCount; index += 1) {
+    const button = buttons.nth(index);
+    let label = `button-${index + 1}`;
+
+    try {
+      if (!(await button.isVisible())) continue;
+      visibleCount += 1;
+
+      label = (
+        (await button.getAttribute('aria-label')) ||
+        (await button.textContent()) ||
+        label
+      ).replace(/\s+/g, ' ').trim();
+
+      const disabled =
+        (await button.isDisabled()) ||
+        (await button.getAttribute('aria-disabled')) === 'true';
+
+      if (disabled) continue;
+
+      await button.scrollIntoViewIfNeeded();
+      await button.click({ trial: true, timeout: 3000 });
+      testedCount += 1;
+    } catch (error) {
+      const shortMessage = String(error?.message || error).split('\n')[0];
+      failures.push(`${label}: ${shortMessage}`);
+    }
+  }
+
+  return {
+    visibleCount,
+    testedCount,
+    failures,
+  };
 }
 
 async function mockClubLookup(page) {
@@ -40,6 +166,39 @@ async function mockClubLookup(page) {
     await route.continue();
   });
 }
+
+test.beforeEach(async ({ page }) => {
+  const visitedUrls = [];
+  visitedUrlsByPage.set(page, visitedUrls);
+
+  page.on('framenavigated', (frame) => {
+    if (frame !== page.mainFrame()) return;
+    const url = frame.url();
+    if (!url || url === 'about:blank') return;
+    visitedUrls.push(url);
+  });
+});
+
+test.afterEach(async ({ page }, testInfo) => {
+  const visitedUrls = visitedUrlsByPage.get(page) || [];
+
+  try {
+    const currentUrl = page.url();
+    if (currentUrl && currentUrl !== 'about:blank') {
+      visitedUrls.push(currentUrl);
+    }
+  } catch (_) {
+    // Ignore URL lookup errors if the page is already closed.
+  }
+
+  const uniqueVisitedUrls = [...new Set(visitedUrls)];
+  await testInfo.attach('visited-routes.txt', {
+    body: Buffer.from(
+      uniqueVisitedUrls.length ? uniqueVisitedUrls.join('\n') : 'Keine Navigation erfasst.'
+    ),
+    contentType: 'text/plain',
+  });
+});
 
 test('auth flow smoke: login/register toggle works without runtime crash', async ({ page }) => {
   await mockClubLookup(page);
@@ -186,6 +345,52 @@ test('public password-recovery route renders core controls', async ({ page }) =>
   await expect(page.getByRole('heading', { name: /passwort vergessen/i })).toBeVisible();
   await expect(page.getByPlaceholder(/deine e-mail-adresse/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /link zum zurücksetzen senden/i })).toBeVisible();
+});
+
+test('menu sweep: alle Menüpunkte und Buttons sind erreichbar', async ({ page, context }) => {
+  test.setTimeout(120000);
+
+  const { missingMappings, uxRoutes } = resolveMenuCoverage();
+  expect(missingMappings, `Missing UX route mapping for menu paths:\n${missingMappings.join('\n')}`).toEqual([]);
+
+  const uncaughtErrors = [];
+  page.on('pageerror', (error) => {
+    uncaughtErrors.push(error?.message || String(error));
+  });
+
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 51.3135, longitude: 6.256 });
+  await mockExternalApisForMenuSweep(page);
+  await mockClubLookup(page);
+
+  const routeSummaries = [];
+  for (const route of uxRoutes) {
+    await page.goto(route, { waitUntil: 'domcontentloaded' });
+    await page
+      .waitForFunction(() => !document.body?.innerText?.includes('⏳ Lädt...'), null, {
+        timeout: 7000,
+      })
+      .catch(() => {});
+    await expect(page.getByText(/seite nicht gefunden/i)).toHaveCount(0);
+    await expect(page.getByText(/club not found/i)).toHaveCount(0);
+
+    const buttonResult = await verifyVisibleButtonsAreActionable(page);
+    routeSummaries.push({
+      route,
+      ...buttonResult,
+    });
+  }
+
+  const buttonFailures = routeSummaries
+    .filter((summary) => summary.failures.length > 0)
+    .map((summary) => `${summary.route}:\n${summary.failures.join('\n')}`);
+
+  expect(buttonFailures, `Nicht klickbare Buttons gefunden:\n${buttonFailures.join('\n\n')}`).toEqual([]);
+  expect(
+    routeSummaries.some((summary) => summary.visibleCount > 0),
+    `Keine sichtbaren Buttons im Menue-Sweep gefunden.\n${JSON.stringify(routeSummaries, null, 2)}`
+  ).toBeTruthy();
+  expect(uncaughtErrors, `Uncaught runtime errors:\n${uncaughtErrors.join('\n')}`).toEqual([]);
 });
 
 test('a11y audit: no serious/critical axe violations on reset-done', async ({ page }) => {

@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const baseURL = process.env.UX_BASE_URL || 'http://127.0.0.1:4173';
 const artifactsDir = path.resolve(__dirname, '../artifacts');
+const screenshotMode = process.env.UX_CAPTURE_SCREENSHOTS === '0' ? 'only-on-failure' : 'on';
 
 export default defineConfig({
   testDir: path.resolve(__dirname, '../specs'),
@@ -22,7 +23,7 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    screenshot: screenshotMode,
     video: 'retain-on-failure',
   },
   webServer: {

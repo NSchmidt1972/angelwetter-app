@@ -19,6 +19,9 @@ Angelwetter ist eine React/Vite PWA für Fangmeldungen, Auswertungen und Push-Be
 - Lighthouse-Audits: `npm run test:ux:lighthouse`
 - Komplettlauf: `npm run test:ux`
 - Einmaliger Browser-Install lokal: `npm run test:ux:install`
+- `test:ux:func` enthält zusätzlich einen Menü-Sweep: alle Menüpunkte aus `navItems` werden angesteuert, sichtbare Buttons auf diesen Seiten werden auf Klickbarkeit geprüft.
+- Playwright erstellt standardmäßig Screenshots pro Test (mit `UX_CAPTURE_SCREENSHOTS=0` nur bei Fehlern).
+- Pro Test wird im HTML-Report eine Attachment-Datei `visited-routes.txt` mit den besuchten URLs angehängt.
 
 Der Agent ist im Repo versioniert (`tests/ux-agent/specs`, `tests/ux-agent/config`, `tests/ux-agent/scripts`)
 und läuft extern in CI über [`.github/workflows/ux-agent.yml`](./.github/workflows/ux-agent.yml).

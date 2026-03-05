@@ -51,6 +51,20 @@ function normalizeStatus(test, results) {
   return 'unknown';
 }
 
+function decodeTextAttachment(attachment) {
+  if (!attachment) return '';
+
+  if (typeof attachment.body === 'string' && attachment.body.length > 0) {
+    return Buffer.from(attachment.body, 'base64').toString('utf8');
+  }
+
+  if (attachment.path && fs.existsSync(attachment.path)) {
+    return fs.readFileSync(attachment.path, 'utf8');
+  }
+
+  return '';
+}
+
 if (!fs.existsSync(reportPath)) {
   console.error(`No Playwright JSON report found at: ${reportPath}`);
   console.error('Run `npm run test:ux:func` first.');
@@ -76,6 +90,18 @@ function walkSuites(suites = [], titlePath = []) {
         const failedAttempt = [...results]
           .reverse()
           .find((result) => result?.status === 'failed' || result?.status === 'timedOut' || result?.error);
+        const visitedUrls = [];
+
+        for (const result of results) {
+          for (const attachment of result.attachments || []) {
+            if (attachment.name !== 'visited-routes.txt') continue;
+            const text = decodeTextAttachment(attachment);
+            for (const line of text.split('\n')) {
+              const url = line.trim();
+              if (url) visitedUrls.push(url);
+            }
+          }
+        }
 
         flatTests.push({
           title: fullTitle,
@@ -86,6 +112,7 @@ function walkSuites(suites = [], titlePath = []) {
           durationMs,
           retries: Math.max(0, results.length - 1),
           error: shortError(failedAttempt?.error),
+          visitedUrls: [...new Set(visitedUrls)],
         });
       }
     }
@@ -99,6 +126,7 @@ walkSuites(report.suites || []);
 const counts = emptyCounts();
 
 const byProject = new Map();
+const visitedRouteCounts = new Map();
 let summedDuration = 0;
 
 for (const t of flatTests) {
@@ -112,6 +140,10 @@ for (const t of flatTests) {
   const bucket = byProject.get(t.projectName);
   bucket.total += 1;
   bucket[key] += 1;
+
+  for (const url of t.visitedUrls || []) {
+    visitedRouteCounts.set(url, (visitedRouteCounts.get(url) || 0) + 1);
+  }
 }
 
 const failedTests = flatTests.filter((t) =>
@@ -163,6 +195,15 @@ if (slowestTests.length > 0) {
   console.log('Top 5 slowest tests:');
   for (const [idx, test] of slowestTests.entries()) {
     console.log(`${idx + 1}. [${test.projectName}] ${test.title} - ${msToSeconds(test.durationMs)}`);
+  }
+}
+
+if (visitedRouteCounts.size > 0) {
+  const sortedRoutes = [...visitedRouteCounts.entries()].sort((a, b) => b[1] - a[1]);
+  console.log('');
+  console.log('Visited routes (unique):');
+  for (const [url, count] of sortedRoutes) {
+    console.log(`- ${url} (in ${count} test result(s))`);
   }
 }
 

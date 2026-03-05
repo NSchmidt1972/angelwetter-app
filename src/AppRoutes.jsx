@@ -143,7 +143,23 @@ export default function AppRoutes({
   return (
     <Routes>
       {UX_TEST_MODE_ENABLED && (
-        <Route path="/__ux/fish-form" element={<FishCatchForm anglerName="UX Test" />} />
+        <>
+          <Route path="/__ux/fish-form" element={<FishCatchForm anglerName="UX Test" />} />
+          <Route path="/__ux/menu/dashboard" element={<Home />} />
+          <Route path="/__ux/menu/new-catch" element={<FishCatchForm anglerName="UX Test" />} />
+          <Route path="/__ux/menu/crayfish" element={<CrayfishForm anglerName="UX Test" />} />
+          <Route path="/__ux/menu/catches" element={<CatchList anglerName="UX Test" />} />
+          <Route path="/__ux/menu/leaderboard" element={<Leaderboard />} />
+          <Route path="/__ux/menu/regeln" element={<Regulations />} />
+          <Route path="/__ux/menu/analysis" element={<Analysis anglerName="UX Test" />} />
+          <Route path="/__ux/menu/top-fishes" element={<TopFishes />} />
+          <Route path="/__ux/menu/fun" element={<FunFacts />} />
+          <Route path="/__ux/menu/forecast" element={<Forecast />} />
+          <Route path="/__ux/menu/calendar" element={<Calendar />} />
+          <Route path="/__ux/menu/map" element={<MapView />} />
+          <Route path="/__ux/menu/downloads" element={<DownloadsPage />} />
+          <Route path="/__ux/menu/vorstand" element={<BoardOverview />} />
+        </>
       )}
       <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
 
