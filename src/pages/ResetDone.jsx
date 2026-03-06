@@ -16,7 +16,8 @@ export default function ResetDone() {
       <Button
         as={Link}
         to="/"
-        className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold"
+        className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold"
+        style={{ minHeight: '44px' }}
       >
         Zurück zur Startseite
       </Button>
