@@ -1,20 +1,20 @@
 // src/App.jsx
 import { BrowserRouter as Router, useLocation } from 'react-router-dom';
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, lazy } from 'react';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
-import PushInit from '@/components/PushInit';
-import AnalyticsInit from '@/components/AnalyticsInit';
 import AppRoutes from '@/AppRoutes';
 import { WeatherProvider } from '@/hooks/useWeatherCache';
 import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
-import { usePageViewTracker } from '@/hooks/usePageViewTracker';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
 const NULL_CLUB_ID = '00000000-0000-0000-0000-000000000000';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
+const PushInit = lazy(() => import('@/components/PushInit'));
+const AnalyticsInit = lazy(() => import('@/components/AnalyticsInit'));
+const PageViewTracker = lazy(() => import('@/components/PageViewTracker'));
 const STATIC_PUBLIC_PATHS = new Set([
   '/auth',
   '/update-password',
@@ -123,12 +123,6 @@ function AppContent() {
   const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
   const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
   const isPublicLightweightRoute = !isLoggedIn && isPublicRoutePath(location.pathname);
-
-  usePageViewTracker({
-    enabled: Boolean(user),
-    clubId: profile?.club_id || getActiveClubId(),
-    anglerName: profile?.name || profile?.angler_name || anglerName || null,
-  });
 
   // Splash kurz anzeigen
   useEffect(() => {
@@ -387,6 +381,16 @@ function AppContent() {
   const cachedRole = profileRole ? profileRole.toLowerCase() : null;
   const isAdmin = isSuperAdmin || cachedRole === 'admin';
   const canAccessBoard = isSuperAdmin || isAdmin || cachedRole === 'vorstand';
+  const shouldTrackPageViews = isLoggedIn;
+  const pageViewTracker = shouldTrackPageViews ? (
+    <Suspense fallback={null}>
+      <PageViewTracker
+        enabled
+        clubId={profile?.club_id || getActiveClubId()}
+        anglerName={profile?.name || profile?.angler_name || anglerName || null}
+      />
+    </Suspense>
+  ) : null;
   const routes = (
     <AppRoutes
       isLoggedIn={isLoggedIn}
@@ -399,6 +403,7 @@ function AppContent() {
 
   return (
     <>
+      {pageViewTracker}
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
         {isPublicLightweightRoute ? routes : <WeatherProvider>{routes}</WeatherProvider>}
       </Suspense>
@@ -416,11 +421,20 @@ function AppShell() {
     !UX_TEST_MODE_ENABLED &&
     isLoggedIn &&
     !isPushExcludedPath(location.pathname);
+  const shouldInitAnalytics = !UX_TEST_MODE_ENABLED && !isPublicRoutePath(location.pathname);
 
   return (
     <>
-      <AnalyticsInit />
-      {shouldInitPush && <PushInit />}
+      {shouldInitAnalytics ? (
+        <Suspense fallback={null}>
+          <AnalyticsInit />
+        </Suspense>
+      ) : null}
+      {shouldInitPush ? (
+        <Suspense fallback={null}>
+          <PushInit />
+        </Suspense>
+      ) : null}
       <AppContent />
     </>
   );
