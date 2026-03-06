@@ -21,6 +21,16 @@ const mockedWeather = {
   daily: [{ moon_phase: 0.42 }],
 };
 const visitedUrlsByPage = new WeakMap();
+const mockUser = {
+  id: '11111111-1111-4111-8111-111111111111',
+  aud: 'authenticated',
+  role: 'authenticated',
+  email: 'ux-test@example.com',
+  app_metadata: { provider: 'email', providers: ['email'] },
+  user_metadata: {},
+  identities: [],
+  created_at: '2026-01-01T00:00:00.000Z',
+};
 const menuPathToUxPath = {
   '/': '/__ux/menu/dashboard',
   '/new-catch': '/__ux/menu/new-catch',
@@ -53,13 +63,98 @@ function flattenNavPaths(items) {
   });
 }
 
+function flattenNavClickTargets(items, parentLabel = null) {
+  return items.flatMap((item) => {
+    if (Array.isArray(item.children) && item.children.length > 0) {
+      return flattenNavClickTargets(item.children, item.label);
+    }
+    if (!item.path || !item.label) return [];
+    return [{ label: item.label, path: item.path, parentLabel }];
+  });
+}
+
 function resolveMenuCoverage() {
+  const navItems = navItemsFor({ isAdmin: true, canAccessBoard: true });
   const menuPaths = [
-    ...new Set(flattenNavPaths(navItemsFor({ isAdmin: true, canAccessBoard: true }))),
+    ...new Set(flattenNavPaths(navItems)),
   ];
+  const menuClickTargets = flattenNavClickTargets(navItems);
   const missingMappings = menuPaths.filter((path) => !menuPathToUxPath[path]);
   const uxRoutes = [...new Set(menuPaths.map((path) => menuPathToUxPath[path]).filter(Boolean))];
-  return { menuPaths, missingMappings, uxRoutes };
+  return { menuPaths, menuClickTargets, missingMappings, uxRoutes };
+}
+
+function expectedNavHrefForMenuPath(path) {
+  if (!path || path === '/') return `/${clubSlug}`;
+  return `/${clubSlug}${path}`;
+}
+
+function expectedAppPathForMenuPath(path) {
+  if (!path || path === '/') return `/${clubSlug}/dashboard`;
+  return `/${clubSlug}${path}`;
+}
+
+function buildMockSession() {
+  const exp = 4102444800; // 2100-01-01T00:00:00.000Z
+  const iat = 1767225600; // 2026-01-01T00:00:00.000Z
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(
+    JSON.stringify({
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: mockUser.email,
+      sub: mockUser.id,
+      exp,
+      iat,
+    })
+  ).toString('base64url');
+
+  return {
+    access_token: `${header}.${payload}.signature`,
+    refresh_token: 'ux-test-refresh-token',
+    token_type: 'bearer',
+    expires_at: exp,
+    expires_in: exp - iat,
+    user: mockUser,
+  };
+}
+
+async function seedMockSession(page) {
+  await page.goto('/reset-done', { waitUntil: 'domcontentloaded' });
+  const session = buildMockSession();
+  await page.evaluate((sessionPayload) => {
+    const storageKey = window.supabase?.auth?.storageKey;
+    if (!storageKey) {
+      throw new Error('Supabase storage key not available on window.supabase.auth.storageKey');
+    }
+    window.localStorage.setItem(storageKey, JSON.stringify(sessionPayload));
+  }, session);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function clickMenuTarget(page, target) {
+  const menuOpenButton = page.getByRole('button', { name: /menü öffnen/i });
+  if (await menuOpenButton.isVisible().catch(() => false)) {
+    await menuOpenButton.click();
+  }
+
+  const headerNav = page.locator('header').getByRole('navigation').first();
+  await expect(headerNav).toBeVisible();
+
+  if (target.parentLabel) {
+    await headerNav
+      .getByRole('button', {
+        name: new RegExp(`^${escapeRegExp(target.parentLabel)}`),
+      })
+      .first()
+      .click();
+  }
+
+  await headerNav.locator(`a[href="${expectedNavHrefForMenuPath(target.path)}"]`).first().click();
 }
 
 async function mockExternalApisForMenuSweep(page) {
@@ -93,11 +188,36 @@ async function mockExternalApisForMenuSweep(page) {
   await page.route('**/rest/v1/**', async (route) => {
     const request = route.request();
     const method = request.method();
+    const url = request.url();
     const accept = String(request.headers().accept || '').toLowerCase();
     const wantsObject = accept.includes('vnd.pgrst.object+json');
 
     if (method === 'DELETE') {
       await route.fulfill({ status: 204, body: '' });
+      return;
+    }
+
+    if (url.includes('/rest/v1/rpc/is_superadmin')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: 'false',
+      });
+      return;
+    }
+
+    if (url.includes('/rest/v1/profiles')) {
+      const profile = {
+        id: mockUser.id,
+        name: 'UX Test',
+        role: 'admin',
+        club_id: mockedClub.id,
+      };
+      await route.fulfill({
+        status: method === 'POST' ? 201 : 200,
+        contentType: 'application/json',
+        body: wantsObject ? JSON.stringify(profile) : JSON.stringify([profile]),
+      });
       return;
     }
 
@@ -348,9 +468,9 @@ test('public password-recovery route renders core controls', async ({ page }) =>
 });
 
 test('menu sweep: alle Menüpunkte und Buttons sind erreichbar', async ({ page, context }) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
 
-  const { missingMappings, uxRoutes } = resolveMenuCoverage();
+  const { missingMappings, menuClickTargets } = resolveMenuCoverage();
   expect(missingMappings, `Missing UX route mapping for menu paths:\n${missingMappings.join('\n')}`).toEqual([]);
 
   const uncaughtErrors = [];
@@ -362,10 +482,18 @@ test('menu sweep: alle Menüpunkte und Buttons sind erreichbar', async ({ page, 
   await context.setGeolocation({ latitude: 51.3135, longitude: 6.256 });
   await mockExternalApisForMenuSweep(page);
   await mockClubLookup(page);
+  await seedMockSession(page);
+  await page.goto(`/${clubSlug}/dashboard`, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('header')).toBeVisible();
 
   const routeSummaries = [];
-  for (const route of uxRoutes) {
-    await page.goto(route, { waitUntil: 'domcontentloaded' });
+  for (const target of menuClickTargets) {
+    await clickMenuTarget(page, target);
+    await expect
+      .poll(() => new URL(page.url()).pathname, {
+        message: `Menu click did not navigate to expected app path for "${target.label}"`,
+      })
+      .toBe(expectedAppPathForMenuPath(target.path));
     await page
       .waitForFunction(() => !document.body?.innerText?.includes('⏳ Lädt...'), null, {
         timeout: 7000,
@@ -376,7 +504,8 @@ test('menu sweep: alle Menüpunkte und Buttons sind erreichbar', async ({ page, 
 
     const buttonResult = await verifyVisibleButtonsAreActionable(page);
     routeSummaries.push({
-      route,
+      route: expectedAppPathForMenuPath(target.path),
+      menuLabel: target.label,
       ...buttonResult,
     });
   }
