@@ -21,16 +21,6 @@ function shouldTrackPath(pathname) {
   return !STATIC_PUBLIC_PATHS.has(pathname) && !isClubAuthPath(pathname);
 }
 
-function scheduleIdle(callback, timeout = 2000) {
-  if (typeof window === 'undefined') return () => {};
-  if (typeof window.requestIdleCallback === 'function') {
-    const id = window.requestIdleCallback(callback, { timeout });
-    return () => window.cancelIdleCallback?.(id);
-  }
-  const id = window.setTimeout(callback, 1000);
-  return () => window.clearTimeout(id);
-}
-
 function ensureTagScriptLoaded() {
   if (typeof window === 'undefined') return Promise.resolve(false);
   if (window.__gtagReady) return Promise.resolve(true);
@@ -72,24 +62,46 @@ function ensureTagScriptLoaded() {
 
 export default function AnalyticsInit() {
   const location = useLocation();
+  const isUxTestMode = import.meta.env.VITE_UX_TEST_MODE === '1';
 
   useEffect(() => {
+    if (isUxTestMode) return;
     if (!shouldTrackPath(location.pathname)) return;
 
     let cancelled = false;
-    const cancelIdle = scheduleIdle(async () => {
+    let started = false;
+
+    const start = async () => {
+      if (started || cancelled) return;
+      started = true;
       const ready = await ensureTagScriptLoaded();
       if (!ready || cancelled || typeof window.gtag !== 'function') return;
       window.gtag('event', 'page_view', {
         page_path: location.pathname + location.search,
       });
+    };
+
+    const interactionEvents = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
+    const onInteraction = () => {
+      void start();
+    };
+
+    interactionEvents.forEach((eventName) => {
+      window.addEventListener(eventName, onInteraction, { once: true, passive: true });
     });
+
+    const timerId = window.setTimeout(() => {
+      void start();
+    }, 6000);
 
     return () => {
       cancelled = true;
-      cancelIdle();
+      window.clearTimeout(timerId);
+      interactionEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, onInteraction);
+      });
     };
-  }, [location.pathname, location.search]);
+  }, [isUxTestMode, location.pathname, location.search]);
 
   return null;
 }

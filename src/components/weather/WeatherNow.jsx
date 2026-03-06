@@ -15,14 +15,29 @@ const INITIAL_HOURS = 12;
 const CHUNK_HOURS = 6;
 const INITIAL_DAYS = 3;
 const CHUNK_DAYS = 2;
+const MAX_PREDICTION_RETRIES = 1;
 
 function idleCall(cb) {
+  let callbackCleanup;
+  const run = () => {
+    const maybeCleanup = cb();
+    if (typeof maybeCleanup === 'function') {
+      callbackCleanup = maybeCleanup;
+    }
+  };
+
   if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-    const id = window.requestIdleCallback(cb, { timeout: 800 });
-    return () => window.cancelIdleCallback?.(id);
+    const id = window.requestIdleCallback(run, { timeout: 800 });
+    return () => {
+      window.cancelIdleCallback?.(id);
+      callbackCleanup?.();
+    };
   }
-  const t = setTimeout(cb, 200);
-  return () => clearTimeout(t);
+  const t = setTimeout(run, 200);
+  return () => {
+    clearTimeout(t);
+    callbackCleanup?.();
+  };
 }
 function makeKey(w) {
   return [
@@ -88,6 +103,10 @@ async function runBatched(tasks, limit = MAX_CONCURRENCY) {
   return out;
 }
 
+function hasOwnPrediction(map, index) {
+  return Object.prototype.hasOwnProperty.call(map, index);
+}
+
 export default function WeatherNow({
   data,
   onRefresh,
@@ -120,6 +139,10 @@ export default function WeatherNow({
   const cache = usePredictionCache();
   const hourlyRef = useRef(null);
   const dailyRef = useRef(null);
+  const dailyAttemptsRef = useRef({});
+  const hourlyAttemptsRef = useRef({});
+  const dailyInFlightRef = useRef(new Set());
+  const hourlyInFlightRef = useRef(new Set());
 
   // ⏱ Auto-Refresh (nur sichtbar & online)
   useEffect(() => {
@@ -143,6 +166,10 @@ export default function WeatherNow({
     setHourlyBase(slice);
     setVisibleCount(Math.min(INITIAL_HOURS, slice.length));
     setHourPreds({});
+    dailyAttemptsRef.current = {};
+    hourlyAttemptsRef.current = {};
+    dailyInFlightRef.current.clear();
+    hourlyInFlightRef.current.clear();
     if (hourlyRef.current) hourlyRef.current.scrollLeft = 0;
     if (dailyRef.current) dailyRef.current.scrollLeft = 0;
   }, [data, cache]);
@@ -153,13 +180,20 @@ export default function WeatherNow({
     const cancelIdle = idleCall(() => {
       const ac = new AbortController();
       const { signal } = ac;
+      const trackedIndices = [];
       (async () => {
         const maxVisible = Math.min(dailyVisibleCount, dailyBase.length);
         const indices = [];
         for (let i = 0; i < maxVisible; i++) {
-          if (dailyPreds[i] == null) indices.push(i);
+          if (hasOwnPrediction(dailyPreds, i)) continue;
+          if (dailyInFlightRef.current.has(i)) continue;
+          const retries = dailyAttemptsRef.current[i] || 0;
+          if (retries >= MAX_PREDICTION_RETRIES) continue;
+          indices.push(i);
         }
         if (!indices.length) return;
+        trackedIndices.push(...indices);
+        indices.forEach((i) => dailyInFlightRef.current.add(i));
 
         const tasks = indices.map((i) => {
           const day = dailyBase[i];
@@ -180,21 +214,38 @@ export default function WeatherNow({
           return async () => {
             const c = cache.get(key);
             if (c) return { i, pred: c };
-            const pred = await fetchPrediction(w, signal);
-            cache.set(key, pred);
-            return { i, pred };
+            try {
+              const pred = await fetchPrediction(w, signal);
+              cache.set(key, pred);
+              return { i, pred: pred ?? null };
+            } catch (err) {
+              console.warn('Daily-Vorhersage fehlgeschlagen:', err?.message || err);
+              return { i, pred: null, failed: true };
+            }
           };
         });
 
         const results = await runBatched(tasks);
         setDailyPreds((prev) => {
           const next = { ...prev };
-          results.forEach((r) => { if (r) next[r.i] = r.pred; });
+          results.forEach((r) => {
+            if (!r) return;
+            if (r.failed) {
+              dailyAttemptsRef.current[r.i] = (dailyAttemptsRef.current[r.i] || 0) + 1;
+              return;
+            }
+            dailyAttemptsRef.current[r.i] = 0;
+            next[r.i] = r.pred;
+          });
           return next;
         });
+        indices.forEach((i) => dailyInFlightRef.current.delete(i));
         cache.persist();
       })();
-      return () => ac.abort();
+      return () => {
+        ac.abort();
+        trackedIndices.forEach((i) => dailyInFlightRef.current.delete(i));
+      };
     });
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
   }, [dailyBase, dailyVisibleCount, dailyPreds, cache]);
@@ -206,14 +257,21 @@ export default function WeatherNow({
     const cancelIdle = idleCall(() => {
       const ac = new AbortController();
       const { signal } = ac;
+      const trackedIndices = [];
 
       (async () => {
         const moonPhase = data?.data?.daily?.[0]?.moon_phase ?? null;
         const indices = [];
         for (let i = 0; i < Math.min(visibleCount, hourlyBase.length); i++) {
-          if (hourPreds[i] == null) indices.push(i);
+          if (hasOwnPrediction(hourPreds, i)) continue;
+          if (hourlyInFlightRef.current.has(i)) continue;
+          const retries = hourlyAttemptsRef.current[i] || 0;
+          if (retries >= MAX_PREDICTION_RETRIES) continue;
+          indices.push(i);
         }
         if (!indices.length) return;
+        trackedIndices.push(...indices);
+        indices.forEach((i) => hourlyInFlightRef.current.add(i));
 
         const tasks = indices.map(i => {
           const h = hourlyBase[i];
@@ -234,22 +292,39 @@ export default function WeatherNow({
           return async () => {
             const c = cache.get(key);
             if (c) return { i, pred: c };
-            const pred = await fetchPrediction(w, signal);
-            cache.set(key, pred);
-            return { i, pred };
+            try {
+              const pred = await fetchPrediction(w, signal);
+              cache.set(key, pred);
+              return { i, pred: pred ?? null };
+            } catch (err) {
+              console.warn('Stunden-Vorhersage fehlgeschlagen:', err?.message || err);
+              return { i, pred: null, failed: true };
+            }
           };
         });
 
         const results = await runBatched(tasks);
         setHourPreds(prev => {
           const next = { ...prev };
-          results.forEach(r => { if (r) next[r.i] = r.pred; });
+          results.forEach((r) => {
+            if (!r) return;
+            if (r.failed) {
+              hourlyAttemptsRef.current[r.i] = (hourlyAttemptsRef.current[r.i] || 0) + 1;
+              return;
+            }
+            hourlyAttemptsRef.current[r.i] = 0;
+            next[r.i] = r.pred;
+          });
           return next;
         });
+        indices.forEach((i) => hourlyInFlightRef.current.delete(i));
         cache.persist();
       })();
 
-      return () => ac.abort();
+      return () => {
+        ac.abort();
+        trackedIndices.forEach((i) => hourlyInFlightRef.current.delete(i));
+      };
     });
 
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };

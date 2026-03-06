@@ -1,7 +1,7 @@
 // src/achievements/AchievementLayer.jsx
-import { useCallback, useState } from "react";
-import AchievementToast from "./AchievementToast";
-import { burst } from "./confetti";
+import { Suspense, lazy, useCallback, useState } from "react";
+
+const AchievementToast = lazy(() => import("./AchievementToast"));
 
 export default function AchievementLayer({ children }) {
   const [queue, setQueue] = useState([]);
@@ -15,7 +15,9 @@ export default function AchievementLayer({ children }) {
       queueId: `${id ?? "achievement"}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     };
     setQueue((q) => [...q, entry]);
-    burst();
+    import("./confetti")
+      .then(({ burst }) => burst())
+      .catch((err) => console.warn("Konfetti konnte nicht geladen werden:", err));
     // autom. Dequeue in Toast-Komponente
   }, []);
 
@@ -26,7 +28,11 @@ export default function AchievementLayer({ children }) {
   return (
     <div className="relative">
       {children(showEffect)}
-      <AchievementToast queue={queue} onConsume={handleConsume} />
+      {queue.length > 0 ? (
+        <Suspense fallback={null}>
+          <AchievementToast queue={queue} onConsume={handleConsume} />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

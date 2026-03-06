@@ -1,7 +1,8 @@
 // src/components/navbar/UserMenu.jsx
-import { forwardRef } from 'react';
-import PushMenuButton from '@/components/navbar/PushMenuButton';
-import VersionInfo from '@/components/VersionInfo';
+import { Suspense, forwardRef, lazy } from 'react';
+
+const PushMenuButton = lazy(() => import('@/components/navbar/PushMenuButton'));
+const UpdateSection = lazy(() => import('@/components/navbar/UpdateSection'));
 
 const UserMenu = forwardRef(function UserMenu(
   {
@@ -16,11 +17,6 @@ const UserMenu = forwardRef(function UserMenu(
     dataFilterValue = 'recent',
     onToggleDataFilter,
     onLogout,
-    shouldShowUpdateBanner,
-    onApplyUpdate,
-    onRestartApp,
-    updating,
-    updateStatusText,
   },
   ref
 ) {
@@ -85,7 +81,9 @@ const UserMenu = forwardRef(function UserMenu(
           </div>
 
           <div className="px-4 py-2">
-            <PushMenuButton />
+            <Suspense fallback={<div className="text-xs text-gray-500 dark:text-gray-400">Push wird geladen…</div>}>
+              <PushMenuButton />
+            </Suspense>
           </div>
 
           <button
@@ -96,44 +94,9 @@ const UserMenu = forwardRef(function UserMenu(
             Abmelden
           </button>
 
-          <div className="border-t border-gray-200 dark:border-gray-700 mt-1 px-4 py-2">
-            <VersionInfo />
-
-            {shouldShowUpdateBanner ? (
-              <>
-                <button
-                  type="button"
-                  onClick={onApplyUpdate}
-                  disabled={updating}
-                  className="mt-2 w-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 px-3 py-2 rounded disabled:opacity-60"
-                  title="Neue Version verfügbar – jetzt anwenden"
-                >
-                  {updating ? "⏳ Aktualisiere…" : "⤴️ App aktualisieren"}
-                </button>
-                {updating && updateStatusText ? (
-                  <p className="mt-1 text-[11px] text-yellow-700 dark:text-yellow-300">
-                    {updateStatusText}
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={onRestartApp}
-                  disabled={updating}
-                  className="mt-2 w-full text-xs text-blue-600 dark:text-blue-400 disabled:opacity-60"
-                >
-                  {updating ? "⏳ Starte neu…" : "🔄 App neu starten"}
-                </button>
-                {updating && updateStatusText ? (
-                  <p className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
-                    {updateStatusText}
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
+          <Suspense fallback={<div className="border-t border-gray-200 dark:border-gray-700 mt-1 px-4 py-2 text-xs text-gray-500 dark:text-gray-400">Update-Info wird geladen…</div>}>
+            <UpdateSection />
+          </Suspense>
         </div>
       )}
     </div>

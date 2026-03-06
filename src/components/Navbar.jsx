@@ -7,8 +7,6 @@ import { supabase } from "@/supabaseClient";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useResponsiveMenu } from "@/hooks/useResponsiveMenu";
 import { useAnchoredPosition } from "@/hooks/useAnchoredPosition";
-import { useServiceWorkerUpdate } from "@/hooks/useServiceWorkerUpdate";
-import { APP_VERSION, BUILD_DATE, GIT_COMMIT } from "@/utils/buildInfo";
 
 import { navItemsFor } from "@/config/navItems";
 import DesktopNav from "@/components/navbar/DesktopNav";
@@ -24,15 +22,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
   // ⛔️ WICHTIG: Hooks IMMER zuerst – ohne Bedingungen/Returns
   const { dark, toggle } = useDarkMode();
   const showHamburger = useResponsiveMenu();
-  const {
-    updateReady,
-    updating,
-    updateStatusText,
-    applyUpdateNow,
-    restartApp,
-    waitingBuild,
-    waitingBuildResolved,
-  } = useServiceWorkerUpdate();
 
   // Lokaler UI-State
   const [open, setOpen] = useState(false);                 // Mobile-Overlay
@@ -101,40 +90,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
   }, [showHamburger, open]);
-
-  const currentBuildInfo = {
-    version: (APP_VERSION || "").trim(),
-    date: (BUILD_DATE || "").trim(),
-    commit: (GIT_COMMIT || "").trim(),
-  };
-
-  const waitingBuildInfo = waitingBuild && typeof waitingBuild === "object"
-    ? {
-        version: String(waitingBuild.version || "").trim(),
-        date: String(waitingBuild.date || "").trim(),
-        commit: String(waitingBuild.commit || "").trim(),
-      }
-    : null;
-
-  const hasDifferentWaitingBuild = (() => {
-    if (!updateReady || !waitingBuildResolved || !waitingBuildInfo) return false;
-
-    if (currentBuildInfo.commit && waitingBuildInfo.commit) {
-      return currentBuildInfo.commit !== waitingBuildInfo.commit;
-    }
-
-    if (currentBuildInfo.version && waitingBuildInfo.version) {
-      return currentBuildInfo.version !== waitingBuildInfo.version;
-    }
-
-    if (currentBuildInfo.date && waitingBuildInfo.date) {
-      return currentBuildInfo.date !== waitingBuildInfo.date;
-    }
-
-    return false;
-  })();
-
-  const shouldShowUpdateBanner = hasDifferentWaitingBuild && !updating;
 
   const prefixWithClub = (path) => {
     if (!clubSlug) return path;
@@ -252,11 +207,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
           dataFilterValue={dataFilter}
           onToggleDataFilter={handleToggleDataFilter}
           onLogout={handleLogout}
-          shouldShowUpdateBanner={shouldShowUpdateBanner}
-          onApplyUpdate={applyUpdateNow}
-          onRestartApp={restartApp}
-          updating={updating}
-          updateStatusText={updateStatusText}
         />
         </div>
 

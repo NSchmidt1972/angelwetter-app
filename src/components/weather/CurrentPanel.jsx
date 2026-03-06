@@ -397,7 +397,14 @@ export default function CurrentPanel({
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6">
-        <img src={iconUrl} alt={desc} className="w-24 h-24 mx-auto sm:mx-0" loading="lazy" decoding="async" />
+        <img
+          src={iconUrl}
+          alt={desc}
+          className="w-24 h-24 mx-auto sm:mx-0"
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
+        />
         <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <p className="text-lg font-semibold">{now.temp.toFixed(0)} °C – {desc}</p>
           {showWaterTemperature && (
