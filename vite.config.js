@@ -49,7 +49,7 @@ export default defineConfig(({ command, mode }) => {
         strategies: 'injectManifest',
         srcDir: 'src',
         filename: 'sw.js',
-        injectRegister: 'auto',
+        injectRegister: null,
         registerType: 'autoUpdate',
         devOptions: { enabled: false },
         includeAssets: ['favicon.svg','logo.png','icon-192.png','icon-512.png'],

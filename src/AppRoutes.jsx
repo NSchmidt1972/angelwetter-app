@@ -1,8 +1,6 @@
 // src/AppRoutes.jsx
 import { Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom';
 import { lazy, useEffect, useState } from 'react';
-import AppLayout from '@/AppLayout';
-import AdminLayout from '@/AdminLayout';
 import { supabase } from '@/supabaseClient';
 import { setActiveClubId } from '@/utils/clubId';
 
@@ -22,6 +20,8 @@ function safeLazy(importer, FallbackName) {
 }
 
 // Public/Static
+const AppLayout      = lazy(() => import('@/AppLayout'));
+const AdminLayout    = lazy(() => import('@/AdminLayout'));
 const UpdatePassword = lazy(() => import('@/pages/UpdatePassword'));
 const ResetDone      = lazy(() => import('@/pages/ResetDone'));
 const AuthVerified   = lazy(() => import('@/pages/AuthVerified'));
@@ -65,8 +65,18 @@ function PageNotFound() {
 
 function NotLoggedRedirect() {
   const { clubSlug } = useParams();
-  const target = clubSlug ? `/${clubSlug}/auth` : '/auth';
+  const target = clubSlug ? `/${clubSlug}/auth` : '/asv-rotauge/auth';
   return <Navigate to={target} replace />;
+}
+
+function ClubAuthEntryRedirect() {
+  const { clubSlug } = useParams();
+  return <Navigate to={`/${clubSlug}/auth`} replace />;
+}
+
+function LoggedInClubAuthRedirect() {
+  const { clubSlug } = useParams();
+  return <Navigate to={`/${clubSlug}/dashboard`} replace />;
 }
 
 function ClubGuard() {
@@ -162,6 +172,7 @@ export default function AppRoutes({
         </>
       )}
       <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
+      <Route path="/auth" element={<Navigate to="/asv-rotauge/auth" replace />} />
 
       {/* Öffentliche Routen */}
       <Route path="/update-password" element={<UpdatePassword />} />
@@ -169,90 +180,90 @@ export default function AppRoutes({
       <Route path="/auth-verified"   element={<AuthVerified />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
-      <Route path="/:clubSlug/*" element={<ClubGuard />}>
-        {isLoggedIn ? (
-          // Eingeloggt
-          <>
-            {/* Admin-Bereich mit eigenem Layout */}
+      {isLoggedIn ? (
+        <Route path="/:clubSlug/*" element={<ClubGuard />}>
+          {/* Admin-Bereich mit eigenem Layout */}
+          <Route
+            element={
+              <RequireManagement canAccessBoard={canAccessBoard}>
+                <AdminLayout />
+              </RequireManagement>
+            }
+          >
+            <Route path="admin" element={<AdminMembers />} />
+            <Route path="admin/members" element={<AdminMembersManage />} />
+            <Route path="admin/verein" element={<AdminVereinManage />} />
+          </Route>
+
+          {/* App-Bereich mit Standard-Navigation */}
+          <Route element={<AppLayout name={anglerName} isAdmin={isAdmin} canAccessBoard={canAccessBoard} />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="auth" element={<LoggedInClubAuthRedirect />} />
+            <Route path="dashboard" element={<Home />} />
+
             <Route
+              path="new-catch"
+              element={
+                <FishCatchForm
+                  anglerName={anglerName}
+                />
+              }
+            />
+            <Route
+              path="crayfish"
+              element={<CrayfishForm anglerName={anglerName} />}
+            />
+            <Route path="catches"      element={<CatchList anglerName={anglerName} />} />
+            <Route path="analysis"     element={<Analysis anglerName={anglerName} />} />
+            <Route path="statistik"    element={<Analysis anglerName={anglerName} />} />
+            <Route path="leaderboard"  element={<Leaderboard />} />
+            <Route path="top-fishes"   element={<TopFishes />} />
+            <Route path="calendar"     element={<Calendar />} />
+            <Route path="map"          element={<MapView />} />
+            <Route path="forecast"     element={<Forecast />} />
+            <Route path="regeln"       element={<Regulations />} />
+            <Route path="downloads"    element={<DownloadsPage />} />
+            <Route path="fun"          element={<FunFacts />} />
+            <Route
+              path="vorstand"
               element={
                 <RequireManagement canAccessBoard={canAccessBoard}>
-                  <AdminLayout />
+                  <BoardOverview />
                 </RequireManagement>
               }
-            >
-              <Route path="admin" element={<AdminMembers />} />
-              <Route path="admin/members" element={<AdminMembersManage />} />
-              <Route path="admin/verein" element={<AdminVereinManage />} />
-            </Route>
+            />
+            <Route
+              path="admin2"
+              element={
+                <RequireManagement canAccessBoard={canAccessBoard}>
+                  <AdminOverview isAdmin={isAdmin} canAccessBoard={canAccessBoard} />
+                </RequireManagement>
+              }
+            />
+            <Route
+              path="superadmin"
+              element={
+                <RequireSuperAdmin isSuperAdmin={isSuperAdmin}>
+                  <SuperAdmin />
+                </RequireSuperAdmin>
+              }
+            />
+            <Route path="settings" element={<SettingsPage />} />
 
-            {/* App-Bereich mit Standard-Navigation */}
-            <Route element={<AppLayout name={anglerName} isAdmin={isAdmin} canAccessBoard={canAccessBoard} />}>
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="dashboard" element={<Home />} />
-
-              <Route
-                path="new-catch"
-                element={
-                  <FishCatchForm
-                    anglerName={anglerName}
-                  />
-                }
-              />
-              <Route
-                path="crayfish"
-                element={<CrayfishForm anglerName={anglerName} />}
-              />
-              <Route path="catches"      element={<CatchList anglerName={anglerName} />} />
-              <Route path="analysis"     element={<Analysis anglerName={anglerName} />} />
-              <Route path="statistik"    element={<Analysis anglerName={anglerName} />} />
-              <Route path="leaderboard"  element={<Leaderboard />} />
-              <Route path="top-fishes"   element={<TopFishes />} />
-              <Route path="calendar"     element={<Calendar />} />
-              <Route path="map"          element={<MapView />} />
-              <Route path="forecast"     element={<Forecast />} />
-              <Route path="regeln"       element={<Regulations />} />
-              <Route path="downloads"    element={<DownloadsPage />} />
-              <Route path="fun"          element={<FunFacts />} />
-              <Route
-                path="vorstand"
-                element={
-                  <RequireManagement canAccessBoard={canAccessBoard}>
-                    <BoardOverview />
-                  </RequireManagement>
-                }
-              />
-              <Route
-                path="admin2"
-                element={
-                  <RequireManagement canAccessBoard={canAccessBoard}>
-                    <AdminOverview isAdmin={isAdmin} canAccessBoard={canAccessBoard} />
-                  </RequireManagement>
-                }
-              />
-              <Route
-                path="superadmin"
-                element={
-                  <RequireSuperAdmin isSuperAdmin={isSuperAdmin}>
-                    <SuperAdmin />
-                  </RequireSuperAdmin>
-                }
-              />
-              <Route path="settings" element={<SettingsPage />} />
-
-              {/* Fallback */}
-              <Route path="*" element={<PageNotFound />} />
-            </Route>
-          </>
-        ) : (
-          // Nicht eingeloggt
-          <>
-            <Route index element={<AuthForm />} />
-            <Route path="auth" element={<AuthForm />} />
-            <Route path="*" element={isRecoveryLink ? <Navigate to="/update-password" replace /> : <NotLoggedRedirect />} />
-          </>
-        )}
-      </Route>
+            {/* Fallback */}
+            <Route path="*" element={<PageNotFound />} />
+          </Route>
+        </Route>
+      ) : (
+        <>
+          <Route path="/:clubSlug" element={<ClubAuthEntryRedirect />} />
+          <Route path="/:clubSlug/auth" element={<AuthForm />} />
+          <Route
+            path="/:clubSlug/*"
+            element={isRecoveryLink ? <Navigate to="/update-password" replace /> : <NotLoggedRedirect />}
+          />
+        </>
+      )}
 
       <Route path="*" element={<ClubNotFound />} />
     </Routes>

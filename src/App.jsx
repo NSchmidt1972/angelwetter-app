@@ -1,9 +1,10 @@
 // src/App.jsx
-import { BrowserRouter as Router } from 'react-router-dom';
+import { BrowserRouter as Router, useLocation } from 'react-router-dom';
 import { useEffect, useState, Suspense } from 'react';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 import PushInit from '@/components/PushInit';
+import AnalyticsInit from '@/components/AnalyticsInit';
 import AppRoutes from '@/AppRoutes';
 import { WeatherProvider } from '@/hooks/useWeatherCache';
 import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
@@ -14,6 +15,33 @@ const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
 const NULL_CLUB_ID = '00000000-0000-0000-0000-000000000000';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
+const STATIC_PUBLIC_PATHS = new Set([
+  '/auth',
+  '/update-password',
+  '/reset-done',
+  '/auth-verified',
+  '/forgot-password',
+]);
+
+function isClubAuthPath(pathname) {
+  if (!pathname || typeof pathname !== 'string') return false;
+  const segments = pathname.split('/').filter(Boolean);
+  return segments.length === 2 && segments[1].toLowerCase() === 'auth';
+}
+
+function isPublicRoutePath(pathname) {
+  if (!pathname || typeof pathname !== 'string') return false;
+  if (STATIC_PUBLIC_PATHS.has(pathname)) return true;
+
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length === 1) return true; // /:clubSlug
+  return isClubAuthPath(pathname);
+}
+
+function isPushExcludedPath(pathname) {
+  if (!pathname || typeof pathname !== 'string') return false;
+  return STATIC_PUBLIC_PATHS.has(pathname) || isClubAuthPath(pathname);
+}
 
 function isValidClubId(clubId) {
   return (
@@ -79,6 +107,7 @@ function scheduleLater(callback, delay = 400) {
 
 function AppContent() {
   const { user, loading: authLoading, profile, profileLoading } = useAuth();
+  const location = useLocation();
   const [anglerName, setAnglerName] = useState(() => readProfileCache()?.name ?? null);
   const [profileRole, setProfileRole] = useState(() => readProfileCache()?.role ?? null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -90,6 +119,10 @@ function AppContent() {
   const [imageLoaded, setImageLoaded] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [minSplashDone, setMinSplashDone] = useState(false);
+  const isRecoveryHash = location.hash.includes('type=recovery');
+  const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
+  const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
+  const isPublicLightweightRoute = !isLoggedIn && isPublicRoutePath(location.pathname);
 
   usePageViewTracker({
     enabled: Boolean(user),
@@ -327,7 +360,12 @@ function AppContent() {
     }
   }, [profile]);
 
-  if (!UX_TEST_MODE_ENABLED && (authLoading || nameLoading || user === undefined || showSplash || (user && superAdminLoading))) {
+  const shouldShowSplash =
+    !UX_TEST_MODE_ENABLED &&
+    !isPublicLightweightRoute &&
+    (authLoading || nameLoading || user === undefined || showSplash || (user && superAdminLoading));
+
+  if (shouldShowSplash) {
     return (
       <>
         <div className="flex flex-col justify-center items-center h-screen bg-white relative">
@@ -346,27 +384,44 @@ function AppContent() {
     );
   }
 
-  const isRecoveryHash = window.location.hash.includes('type=recovery');
-  const isPasswordResetFlow = window.location.pathname === '/update-password' || isRecoveryHash;
-
-  const isLoggedIn = user && !isPasswordResetFlow;
   const cachedRole = profileRole ? profileRole.toLowerCase() : null;
   const isAdmin = isSuperAdmin || cachedRole === 'admin';
   const canAccessBoard = isSuperAdmin || isAdmin || cachedRole === 'vorstand';
+  const routes = (
+    <AppRoutes
+      isLoggedIn={isLoggedIn}
+      isAdmin={isAdmin}
+      canAccessBoard={canAccessBoard}
+      isSuperAdmin={isSuperAdmin}
+      anglerName={anglerName}
+    />
+  );
 
   return (
     <>
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
-        <WeatherProvider>
-          <AppRoutes
-            isLoggedIn={isLoggedIn}
-            isAdmin={isAdmin}
-            canAccessBoard={canAccessBoard}
-            isSuperAdmin={isSuperAdmin}
-            anglerName={anglerName}
-          />
-        </WeatherProvider>
+        {isPublicLightweightRoute ? routes : <WeatherProvider>{routes}</WeatherProvider>}
       </Suspense>
+    </>
+  );
+}
+
+function AppShell() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const isRecoveryHash = location.hash.includes('type=recovery');
+  const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
+  const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
+  const shouldInitPush =
+    !UX_TEST_MODE_ENABLED &&
+    isLoggedIn &&
+    !isPushExcludedPath(location.pathname);
+
+  return (
+    <>
+      <AnalyticsInit />
+      {shouldInitPush && <PushInit />}
+      <AppContent />
     </>
   );
 }
@@ -374,9 +429,7 @@ function AppContent() {
 export default function App() {
   return (
     <Router>
-      {/* UX-Testmodus soll ohne externe Push-Init laufen (stabilere CI-Audits). */}
-      {!UX_TEST_MODE_ENABLED && <PushInit />}
-      <AppContent />
+      <AppShell />
     </Router>
   );
 }

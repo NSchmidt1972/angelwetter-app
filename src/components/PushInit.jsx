@@ -22,7 +22,6 @@ export default function PushInit() {
     // nur einmal initialisieren
     if (window.__osInitialized) return;
     window.__osInitialized = true;
-    let initCompleted = false;
 
     /** Liefert die aktuelle Subscription-ID (oder null) */
     async function getSubId(OS) {
@@ -106,7 +105,6 @@ export default function PushInit() {
         }
 
         await OneSignal.init(initOptions);
-        initCompleted = true;
 
         // 0) Falls bereits "granted" aber (noch) nicht subscribed → nachziehen
         try {
@@ -199,11 +197,9 @@ export default function PushInit() {
         }
       });
 
-      // React.StrictMode (Dev) mountet Effekte absichtlich doppelt.
-      // Wenn die erste Init vorzeitig gecancelt wurde, darf der zweite Mount erneut initialisieren.
-      if (!initCompleted) {
-        window.__osInitialized = false;
-      }
+      // Route-sensitives Mounting: nach Unmount immer neu initialisierbar machen.
+      // StrictMode bleibt dadurch ebenfalls robust.
+      window.__osInitialized = false;
     };
   }, []);
 
