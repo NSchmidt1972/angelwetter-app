@@ -374,8 +374,8 @@ function AppContent() {
 export default function App() {
   return (
     <Router>
-      {/* PushInit global genau 1× mounten */}
-      <PushInit />
+      {/* UX-Testmodus soll ohne externe Push-Init laufen (stabilere CI-Audits). */}
+      {!UX_TEST_MODE_ENABLED && <PushInit />}
       <AppContent />
     </Router>
   );

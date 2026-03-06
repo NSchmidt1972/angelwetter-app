@@ -1,7 +1,7 @@
 {
   "ci": {
     "collect": {
-      "startServerCommand": "npm run build && npm run preview -- --host 127.0.0.1 --port 4173",
+      "startServerCommand": "VITE_UX_TEST_MODE=1 npm run build && npm run preview -- --host 127.0.0.1 --port 4173",
       "startServerReadyPattern": "Local",
       "url": [
         "http://127.0.0.1:4173/reset-done",
