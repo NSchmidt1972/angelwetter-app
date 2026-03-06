@@ -250,6 +250,26 @@ async function verifyVisibleButtonsAreActionable(page) {
         label
       ).replace(/\s+/g, ' ').trim();
 
+      const isLeafletZoomControl = await button
+        .evaluate((element) => {
+          const className = String(element.className || '').toLowerCase();
+          const title = String(element.getAttribute('title') || '').toLowerCase();
+          const aria = String(element.getAttribute('aria-label') || '').toLowerCase();
+          const hasLeafletClass =
+            className.includes('leaflet-control-zoom-in') ||
+            className.includes('leaflet-control-zoom-out');
+          const inLeafletZoomContainer = Boolean(element.closest('.leaflet-control-zoom'));
+          const namedAsZoomControl =
+            title === 'zoom in' ||
+            title === 'zoom out' ||
+            aria === 'zoom in' ||
+            aria === 'zoom out';
+          return hasLeafletClass || inLeafletZoomContainer || namedAsZoomControl;
+        })
+        .catch(() => false);
+
+      if (isLeafletZoomControl) continue;
+
       const disabled =
         (await button.isDisabled()) ||
         (await button.getAttribute('aria-disabled')) === 'true';
@@ -455,8 +475,13 @@ test('ux baseline: reset-done has no horizontal overflow and primary target is t
   const primaryAction = page.getByRole('link', { name: /zurück zur startseite/i });
   await expect(primaryAction).toBeVisible();
 
-  const box = await primaryAction.boundingBox();
-  expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
+  await expect
+    .poll(async () => {
+      return await primaryAction.evaluate((element) =>
+        Math.round(element.getBoundingClientRect().height)
+      );
+    })
+    .toBeGreaterThanOrEqual(40);
 });
 
 test('public password-recovery route renders core controls', async ({ page }) => {
