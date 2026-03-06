@@ -270,7 +270,11 @@ export default function AuthForm() {
         {mode === 'login' ? '🔐 Anmeldung' : '🆕 Registrierung'}
       </h2>
 
+      <label htmlFor="auth-email" className="sr-only">
+        E-Mail
+      </label>
       <input
+        id="auth-email"
         type="email"
         name="email"
         autoComplete="email"
@@ -281,7 +285,11 @@ export default function AuthForm() {
         required
       />
 
+      <label htmlFor="auth-password" className="sr-only">
+        Passwort
+      </label>
       <input
+        id="auth-password"
         type="password"
         name={mode === 'login' ? 'current-password' : 'new-password'}
         autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -321,16 +329,22 @@ export default function AuthForm() {
 
 
       {mode === 'register' && (
-        <input
-          type="text"
-          name="name"
-          autoComplete="name"
-          placeholder="Vor und Nachname"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-800 dark:text-white dark:placeholder-blue-400"
-          required
-        />
+        <>
+          <label htmlFor="auth-name" className="sr-only">
+            Vor und Nachname
+          </label>
+          <input
+            id="auth-name"
+            type="text"
+            name="name"
+            autoComplete="name"
+            placeholder="Vor und Nachname"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-800 dark:text-white dark:placeholder-blue-400"
+            required
+          />
+        </>
       )}
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
