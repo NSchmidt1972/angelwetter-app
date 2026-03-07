@@ -1,5 +1,5 @@
 // src/components/Navbar.jsx
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import { supabase } from "@/supabaseClient";
@@ -19,7 +19,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
   const location = useLocation();
   const { clubSlug } = useParams();
 
-  // ⛔️ WICHTIG: Hooks IMMER zuerst – ohne Bedingungen/Returns
   const { dark, toggle } = useDarkMode();
   const showHamburger = useResponsiveMenu();
 
@@ -34,7 +33,8 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
 
   const profileRef = useRef(null);
   const statsBtnRef = useRef(null);
-  const statsMenuRef = useRef(null); // ⬅️ NEU: gemeinsames Ref auf das geöffnete Statistik-Menü (Desktop & Mobile)
+  const statsMenuRef = useRef(null);
+  const mobileMenuId = 'main-navigation-mobile-menu';
 
   // Dropdown-Position (Desktop)
   const menuPos = useAnchoredPosition(openDropdown, statsBtnRef);
@@ -74,7 +74,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
         setShowMenu(false);
       }
 
-      // 🟢 Outside-Click für Statistik NUR auf Desktop aktiv (Mobile-Overlay offen? dann ignorieren)
       const mobileOverlayOpen = showHamburger && open;
       if (mobileOverlayOpen) return;
 
@@ -91,14 +90,12 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [showHamburger, open]);
 
-  const prefixWithClub = (path) => {
+  const prefixWithClub = useCallback((path) => {
     if (!clubSlug) return path;
     if (!path || path === "/") return `/${clubSlug}`;
     return `/${clubSlug}${path.startsWith("/") ? path : `/${path}`}`;
-  };
+  }, [clubSlug]);
 
-
-  // ✅ EARLY RETURN ERST NACH ALLEN HOOKS
   if (!user) return null;
 
   const handleLogout = async () => {
@@ -111,7 +108,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     navigate(prefixWithClub("/auth"));
   };
 
-  const navItems = navItemsFor({ isAdmin: !!isAdmin, canAccessBoard: !!canAccessBoard, anglerName: name }).map((item) => (
+  const navItems = navItemsFor({ isAdmin: !!isAdmin, canAccessBoard: !!canAccessBoard, anglerName: name }).map((item) =>
     item.children
       ? {
           ...item,
@@ -119,7 +116,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
           children: item.children.map((child) => ({ ...child, path: prefixWithClub(child.path) })),
         }
       : { ...item, path: prefixWithClub(item.path) }
-  ));
+  );
   const currentPath = location.pathname;
 
   const handleToggleDropdown = (next) => {
@@ -151,6 +148,9 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
 
   const displayName = (() => {
     const [first] = (name || "").split(" ");
+    if (typeof localStorage === "undefined") {
+      return first || "Profil";
+    }
     const shortName = localStorage.getItem("shortAnglerName");
     return shortName || first || "Profil";
   })();
@@ -173,7 +173,9 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
                 type="button"
                 onClick={() => setOpen((v) => !v)}
                 className="text-3xl p-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                aria-label="Menü öffnen"
+                aria-label={open ? "Menü schließen" : "Menü öffnen"}
+                aria-expanded={open}
+                aria-controls={mobileMenuId}
               >
                 ☰
               </button>
@@ -198,16 +200,16 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
             ref={profileRef}
             dark={dark}
             onToggleDark={toggle}
-          displayName={displayName}
-          showMenu={showMenu}
-          onToggleMenu={() => setShowMenu((v) => !v)}
-          onNavigateAdmin={handleNavigateAdmin}
-          showAdminLink={showAdminLink}
-          showDataFilter={showDataFilter}
-          dataFilterValue={dataFilter}
-          onToggleDataFilter={handleToggleDataFilter}
-          onLogout={handleLogout}
-        />
+            displayName={displayName}
+            showMenu={showMenu}
+            onToggleMenu={() => setShowMenu((v) => !v)}
+            onNavigateAdmin={handleNavigateAdmin}
+            showAdminLink={showAdminLink}
+            showDataFilter={showDataFilter}
+            dataFilterValue={dataFilter}
+            onToggleDataFilter={handleToggleDataFilter}
+            onLogout={handleLogout}
+          />
         </div>
 
         {showHamburger && (
@@ -215,6 +217,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
             navItems={navItems}
             currentPath={currentPath}
             open={open}
+            menuId={mobileMenuId}
             onClose={handleCloseMobileMenu}
             openDropdown={openDropdown}
             onToggleDropdown={handleToggleDropdown}

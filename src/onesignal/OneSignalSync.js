@@ -1,28 +1,31 @@
-// src/onesignal/OneSignalSync.js
-import { supabase } from '../supabaseClient';
+import {
+  ensureOneSignalInitialized,
+  getPushStatusSnapshot,
+  syncCurrentSubscription,
+} from '@/onesignal/onesignalService';
 
 export const runOneSignalHealthCheck = async () => {
-  const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
-
   try {
-    const enabled = await window.OneSignal.isPushNotificationsEnabled();
-    const userId  = await window.OneSignal.getUserId();
+    const OneSignal = await ensureOneSignalInitialized();
+    const snapshot = await getPushStatusSnapshot(OneSignal);
 
-    if (!enabled || !userId) {
-      console.warn('Push nicht aktiviert oder keine UserID vorhanden.');
-      return;
+    if (!snapshot.supported || snapshot.permissionState !== 'granted' || !snapshot.subId) {
+      console.warn('[OneSignalSync] Push nicht bereit, Sync wird übersprungen.', snapshot);
+      return { ok: false, ...snapshot };
     }
 
-    await supabase.rpc('sync_player', {
-      p_angler_name: anglerName,
-      p_player_id: userId,
+    await syncCurrentSubscription({
+      OneSignal,
+      subscriptionId: snapshot.subId,
+      optedIn: snapshot.optedIn,
+      revokedAt: null,
     });
 
-    console.log('✅ PlayerID erfolgreich in Supabase synchronisiert:', userId);
+    return { ok: true, ...snapshot };
   } catch (err) {
-    console.error('❌ Fehler beim HealthCheck:', err);
+    console.error('[OneSignalSync] Health-Check fehlgeschlagen:', err);
+    return { ok: false, error: err?.message || String(err) };
   }
 };
 
-// 👉 Default-Export hinzufügen, damit der Import ohne geschweifte Klammern funktioniert
 export default runOneSignalHealthCheck;

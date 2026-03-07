@@ -18,6 +18,10 @@ function schedule(callback, delay) {
   return () => window.clearTimeout(timerId);
 }
 
+function isDocumentVisible() {
+  return typeof document === 'undefined' || document.visibilityState === 'visible';
+}
+
 async function fetchLatestWeather() {
   const clubId = getActiveClubId();
   const { data, error } = await supabase
@@ -64,15 +68,29 @@ export function WeatherProvider({ children }) {
     let disposed = false;
 
     const runInitial = () => {
-      if (!disposed) refreshInternal();
+      if (!disposed && isDocumentVisible()) {
+        void refreshInternal();
+      }
     };
 
     const cancelInitial = schedule(runInitial, INITIAL_DELAY_MS);
 
     if (typeof window !== 'undefined') {
       intervalRef.current = window.setInterval(() => {
-        if (!disposed) refreshInternal({ silent: true });
+        if (!disposed && isDocumentVisible()) {
+          void refreshInternal({ silent: true });
+        }
       }, REFRESH_INTERVAL_MS);
+    }
+
+    const handleVisibilityChange = () => {
+      if (!disposed && isDocumentVisible()) {
+        void refreshInternal({ silent: true });
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
     return () => {
@@ -80,6 +98,9 @@ export function WeatherProvider({ children }) {
       cancelInitial?.();
       if (intervalRef.current != null && typeof window !== 'undefined') {
         window.clearInterval(intervalRef.current);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
   }, [refreshInternal]);

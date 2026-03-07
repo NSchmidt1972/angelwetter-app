@@ -36,12 +36,14 @@ const UserMenu = forwardRef(function UserMenu(
         className="px-3 py-2 rounded"
         aria-expanded={showMenu}
         aria-haspopup="menu"
+        aria-controls="navbar-user-menu"
       >
         👤 {displayName}
       </button>
 
       {showMenu && (
         <div
+          id="navbar-user-menu"
           className="absolute right-0 top-12 w-56 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-[1400] text-base"
           role="menu"
         >

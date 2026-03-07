@@ -9,12 +9,11 @@ import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
-const NULL_CLUB_ID = '00000000-0000-0000-0000-000000000000';
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
 const PushInit = lazy(() => import('@/components/PushInit'));
 const AnalyticsInit = lazy(() => import('@/components/AnalyticsInit'));
 const PageViewTracker = lazy(() => import('@/components/PageViewTracker'));
+const SessionActivityPing = lazy(() => import('@/components/SessionActivityPing'));
 const STATIC_PUBLIC_PATHS = new Set([
   '/auth',
   '/update-password',
@@ -41,14 +40,6 @@ function isPublicRoutePath(pathname) {
 function isPushExcludedPath(pathname) {
   if (!pathname || typeof pathname !== 'string') return false;
   return STATIC_PUBLIC_PATHS.has(pathname) || isClubAuthPath(pathname);
-}
-
-function isValidClubId(clubId) {
-  return (
-    typeof clubId === 'string' &&
-    UUID_RE.test(clubId) &&
-    clubId !== NULL_CLUB_ID
-  );
 }
 
 function readProfileCache() {
@@ -287,66 +278,6 @@ function AppContent() {
     };
   }, [user]);
 
-  // Aktivität pingen
-  useEffect(() => {
-    if (!user) return;
-    let disposed = false;
-
-    const updateActivity = async () => {
-      const profileClubId = profile?.club_id;
-      const activeClubId = getActiveClubId();
-      const clubId = profileClubId || activeClubId;
-
-      if (!isValidClubId(clubId)) {
-        console.warn('⚠️ user_activity übersprungen: ungültige club_id', {
-          profileClubId,
-          activeClubId,
-        });
-        return;
-      }
-
-      const payload = {
-        user_id: user.id,
-        angler_name: user.email,
-        last_active: new Date().toISOString(),
-        club_id: clubId,
-      };
-
-      try {
-        let updateQuery = supabase
-          .from('user_activity')
-          .update({
-            angler_name: payload.angler_name,
-            last_active: payload.last_active,
-          })
-          .eq('user_id', user.id)
-          .eq('club_id', clubId);
-
-        const { data: updatedRows, error: updateError } = await updateQuery
-          .select('user_id')
-          .limit(1);
-
-        if (updateError) throw updateError;
-        if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
-          const { error: insertError } = await supabase.from('user_activity').insert(payload);
-          if (insertError) throw insertError;
-        }
-      } catch (err) {
-        console.warn('⚠️ user_activity konnte nicht aktualisiert werden:', err?.message || err);
-      }
-    };
-
-    const cancelInitial = scheduleLater(() => {
-      if (!disposed) updateActivity();
-    }, 500);
-    const interval = setInterval(updateActivity, 3 * 60 * 1000);
-    return () => {
-      disposed = true;
-      cancelInitial?.();
-      clearInterval(interval);
-    };
-  }, [user, profile?.club_id]);
-
   // Club aus Profil in den aktiven Kontext übernehmen
   useEffect(() => {
     if (profile?.club_id) {
@@ -412,19 +343,32 @@ function AppContent() {
 }
 
 function AppShell() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const location = useLocation();
   const isRecoveryHash = location.hash.includes('type=recovery');
   const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
   const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
-  const shouldInitPush =
+  const shouldInitProtectedRuntime =
     !UX_TEST_MODE_ENABLED &&
     isLoggedIn &&
+    !isPublicRoutePath(location.pathname);
+  const shouldInitPush =
+    shouldInitProtectedRuntime &&
     !isPushExcludedPath(location.pathname);
-  const shouldInitAnalytics = !UX_TEST_MODE_ENABLED && !isPublicRoutePath(location.pathname);
+  const shouldInitAnalytics = shouldInitProtectedRuntime;
+  const shouldPingUserActivity = shouldInitProtectedRuntime;
 
   return (
     <>
+      {shouldPingUserActivity ? (
+        <Suspense fallback={null}>
+          <SessionActivityPing
+            userId={user?.id || null}
+            profileClubId={profile?.club_id || null}
+            anglerName={user?.email || null}
+          />
+        </Suspense>
+      ) : null}
       {shouldInitAnalytics ? (
         <Suspense fallback={null}>
           <AnalyticsInit />

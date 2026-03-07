@@ -21,6 +21,8 @@ export default function DesktopNav({
               ref={statsBtnRef}
               onClick={() => onToggleDropdown()}
               className="block px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
+              aria-expanded={openDropdown}
+              aria-haspopup="menu"
             >
               {item.label} <span className="pointer-events-none select-none">▾</span>
             </button>
@@ -30,11 +32,13 @@ export default function DesktopNav({
                 ref={statsMenuRef}
                 className="stats-dropdown fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-[4000] text-base max-h-[60vh] overflow-y-auto overscroll-contain"
                 style={{ left: menuPos.left, top: menuPos.top }}
+                role="menu"
               >
                 {item.children.map((child) => (
                   <Link
                     key={child.path}
                     to={child.path}
+                    role="menuitem"
                     className={`block px-5 py-3 hover:bg-blue-100 dark:hover:bg-gray-700 rounded ${
                       currentPath === child.path
                         ? "font-bold text-blue-700 dark:text-blue-300"

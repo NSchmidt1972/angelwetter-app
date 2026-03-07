@@ -5,6 +5,7 @@ export default function MobileMenu({
   navItems,
   currentPath,
   open,
+  menuId,
   onClose,
   openDropdown,
   onToggleDropdown,
@@ -14,6 +15,7 @@ export default function MobileMenu({
 
   return (
     <div
+      id={menuId}
       className="fixed inset-0 z-[1300] bg-white/95 dark:bg-gray-900/95 pt-20 overflow-hidden"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
@@ -37,6 +39,8 @@ export default function MobileMenu({
                 type="button"
                 onClick={() => onToggleDropdown()}
                 className="w-full px-4 py-3 rounded text-lg font-medium hover:bg-blue-100 dark:hover:bg-gray-700"
+                aria-expanded={openDropdown}
+                aria-haspopup="menu"
               >
                 {item.label} <span className="pointer-events-none select-none">▾</span>
               </button>
@@ -45,11 +49,13 @@ export default function MobileMenu({
                 <div
                   ref={statsMenuRef}
                   className="mt-2 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-lg z-50 text-base max-h-[60vh] overflow-y-auto overscroll-contain"
+                  role="menu"
                 >
                   {item.children.map((child) => (
                     <Link
                       key={child.path}
                       to={child.path}
+                      role="menuitem"
                       className={`block px-5 py-3 text-center hover:bg-blue-100 dark:hover:bg-gray-900 rounded ${
                         currentPath === child.path
                           ? "font-bold text-blue-700 dark:text-blue-300"

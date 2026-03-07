@@ -1,19 +1,30 @@
 import { useEffect } from 'react';
-import { initOneSignal } from '../onesignal/OneSignalLoader';
-import { enqueueOneSignal } from '@/onesignal/deferred';
+import {
+  ensureOneSignalInitialized,
+  getPushStatusSnapshot,
+  getSubscriptionId,
+  requestPushPermission,
+  withOneSignal,
+} from '@/onesignal/onesignalService';
 
 export default function useOneSignal() {
   useEffect(() => {
-    initOneSignal().catch(console.error);
+    ensureOneSignalInitialized().catch((err) => {
+      console.warn('[useOneSignal] Initialisierung fehlgeschlagen:', err);
+    });
   }, []);
 
-  async function withOneSignal(callback) {
-    return enqueueOneSignal(callback);
-  }
-
   return {
-    isPushEnabled: () => withOneSignal((OneSignal) => OneSignal.isPushNotificationsEnabled()),
-    getUserId: () => withOneSignal((OneSignal) => OneSignal.getUserId()),
-    showPrompt: () => withOneSignal((OneSignal) => OneSignal.showSlidedownPrompt()),
+    isPushEnabled: () =>
+      withOneSignal(async (OneSignal) => {
+        const snapshot = await getPushStatusSnapshot(OneSignal);
+        return !!(snapshot.supported && snapshot.granted && snapshot.optedIn && snapshot.subId);
+      }),
+    getUserId: () => withOneSignal((OneSignal) => getSubscriptionId(OneSignal)),
+    showPrompt: () =>
+      withOneSignal(async (OneSignal) => {
+        const permissionState = await requestPushPermission(OneSignal);
+        return permissionState === 'granted';
+      }),
   };
 }

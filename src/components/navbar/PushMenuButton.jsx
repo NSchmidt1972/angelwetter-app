@@ -52,7 +52,7 @@ export default function PushMenuButton() {
     return enabled ? "aktiviert" : "deaktiviert";
   })();
 
-  const disabled = loading || Boolean(error) || (!enabled && (blocked || supportUnavailable));
+  const disabled = loading || (!enabled && (blocked || supportUnavailable));
 
   const containerClass = supportUnavailable
     ? "border-yellow-300 bg-yellow-100 text-yellow-900 shadow-sm dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-100"
@@ -106,6 +106,7 @@ export default function PushMenuButton() {
             type="button"
             onClick={copyId}
             disabled={!subId}
+            aria-label="Subscription-ID kopieren"
             className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
           >
             ID kopieren
