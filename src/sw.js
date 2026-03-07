@@ -2,8 +2,11 @@
 /* eslint-env serviceworker */
 /* global importScripts, __BUILD_INFO__ */
 
-/* 👇 1) OneSignal SDK MUSS als erstes geladen werden */
-importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+/* Legacy-Kompatibilitaet:
+ * Root-/PWA-SW enthielt historisch OneSignal.
+ * Beibehalten, bis Alt-Abos sicher auf den dedizierten /push/onesignal-SW migriert sind.
+ */
+/*importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
 /* 2) Dein Workbox-Code */
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';

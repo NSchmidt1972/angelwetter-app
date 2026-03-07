@@ -179,11 +179,14 @@ function buildInitOptions(registration) {
   const options = {
     appId: ONESIGNAL_APP_ID,
     allowLocalhostAsSecureOrigin: true,
-    serviceWorkerPath: SERVICE_WORKER_INFO.path,
     serviceWorkerParam: { scope: SERVICE_WORKER_INFO.scope },
   };
   if (registration) {
     options.serviceWorkerRegistration = registration;
+  } else {
+    // Fallback: wenn noch keine eigene Registrierung vorhanden ist,
+    // soll OneSignal den dedizierten Pfad selbst registrieren.
+    options.serviceWorkerPath = SERVICE_WORKER_INFO.initPath;
   }
   return options;
 }

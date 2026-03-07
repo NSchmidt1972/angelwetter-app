@@ -1,28 +1,65 @@
 // src/onesignal/swHelpers.js
 
-const SW_SCOPE = '/';
-const SW_PATH = import.meta.env?.DEV
-  ? '/OneSignalSDKWorker.js'
-  : '/sw.js';
+const ONESIGNAL_SW_SCOPE = '/push/onesignal/';
+const ONESIGNAL_SW_REGISTER_PATH = '/push/onesignal/OneSignalSDKWorker.js';
+// Fuer OneSignal.init bewusst ohne fuehrenden Slash, damit kein //push => https://push entsteht.
+const ONESIGNAL_SW_INIT_PATH = 'push/onesignal/OneSignalSDKWorker.js';
+
+// Diese Pfade bleiben waehrend der Migration bestehen, damit Alt-Abos nicht brechen.
+const LEGACY_ONESIGNAL_SW_PATHS = [
+  '/OneSignalSDKWorker.js',
+  '/OneSignalSDKUpdaterWorker.js',
+  '/OneSignalSDK.sw.js',
+];
 
 function hasServiceWorkerSupport() {
   return typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 }
 
-export async function ensureServiceWorkerRegistration() {
+function toAbsoluteUrl(path) {
+  if (typeof window === 'undefined') return path;
+  return new URL(path, window.location.origin).href;
+}
+
+function isOneSignalRegistration(registration) {
+  if (!registration) return false;
+  const expectedScope = toAbsoluteUrl(ONESIGNAL_SW_SCOPE);
+  if (registration.scope === expectedScope) return true;
+
+  const scriptUrl =
+    registration.active?.scriptURL ||
+    registration.waiting?.scriptURL ||
+    registration.installing?.scriptURL ||
+    '';
+
+  return scriptUrl.includes(ONESIGNAL_SW_REGISTER_PATH);
+}
+
+async function getOneSignalRegistration() {
   if (!hasServiceWorkerSupport()) return null;
 
   try {
-    const existing = await navigator.serviceWorker.getRegistration(SW_SCOPE);
-    if (existing) return existing;
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    if (!Array.isArray(registrations)) return null;
+    return registrations.find(isOneSignalRegistration) || null;
   } catch (err) {
-    console.warn('[swHelpers] getRegistration fehlgeschlagen:', err);
+    console.warn('[swHelpers] getRegistrations fehlgeschlagen:', err);
+    return null;
   }
+}
+
+export async function ensureServiceWorkerRegistration() {
+  if (!hasServiceWorkerSupport()) return null;
+
+  const existing = await getOneSignalRegistration();
+  if (existing) return existing;
 
   try {
-    return await navigator.serviceWorker.register(SW_PATH, { scope: SW_SCOPE });
+    return await navigator.serviceWorker.register(ONESIGNAL_SW_REGISTER_PATH, {
+      scope: ONESIGNAL_SW_SCOPE,
+    });
   } catch (registerErr) {
-    console.warn('[swHelpers] SW-Registrierung fehlgeschlagen:', registerErr);
+    console.warn('[swHelpers] OneSignal-SW-Registrierung fehlgeschlagen:', registerErr);
     return null;
   }
 }
@@ -45,7 +82,6 @@ function waitForActivation(registration) {
       };
 
       worker.addEventListener('statechange', handleStateChange);
-      // Sicherheitsnetz: falls "activated" nie erreicht wird, nach kurzer Zeit trotzdem auflösen
       window.setTimeout(() => {
         worker.removeEventListener('statechange', handleStateChange);
         resolve(registration);
@@ -59,31 +95,24 @@ function waitForActivation(registration) {
 export async function waitForServiceWorkerRegistration({ timeoutMs = 4000 } = {}) {
   if (!hasServiceWorkerSupport()) return null;
 
-  const immediate = await ensureServiceWorkerRegistration();
-  if (immediate && (navigator.serviceWorker.controller || immediate.active)) {
-    return waitForActivation(immediate);
+  const registration = await ensureServiceWorkerRegistration();
+  if (!registration) return null;
+
+  const activation = waitForActivation(registration);
+  if (typeof window === 'undefined') {
+    return activation;
   }
 
-  try {
-    const readyPromise = navigator.serviceWorker.ready
-      .then((reg) => waitForActivation(reg))
-      .catch(() => null);
+  const timeout = new Promise((resolve) => {
+    window.setTimeout(() => resolve(registration), timeoutMs);
+  });
 
-    const timeoutPromise = new Promise((resolve) => {
-      window.setTimeout(async () => {
-        resolve(await ensureServiceWorkerRegistration());
-      }, timeoutMs);
-    });
-
-    const registration = await Promise.race([readyPromise, timeoutPromise]);
-    return registration ? waitForActivation(registration) : waitForActivation(await ensureServiceWorkerRegistration());
-  } catch (err) {
-    console.warn('[swHelpers] Warten auf Service Worker fehlgeschlagen:', err);
-    return waitForActivation(immediate) || null;
-  }
+  return Promise.race([activation, timeout]);
 }
 
 export const SERVICE_WORKER_INFO = {
-  scope: SW_SCOPE,
-  path: SW_PATH,
+  scope: ONESIGNAL_SW_SCOPE,
+  registerPath: ONESIGNAL_SW_REGISTER_PATH,
+  initPath: ONESIGNAL_SW_INIT_PATH,
+  legacyPaths: LEGACY_ONESIGNAL_SW_PATHS,
 };
