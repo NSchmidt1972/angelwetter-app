@@ -176,9 +176,22 @@ async function ensureSubscribedWhenPermissionGranted(OneSignal) {
 }
 
 function buildInitOptions(registration) {
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : '';
+  const workerPath =
+    (origin && new URL(SERVICE_WORKER_INFO.registerPath, origin).href) ||
+    SERVICE_WORKER_INFO.registerPath;
+  const updaterPath =
+    (origin && new URL(SERVICE_WORKER_INFO.updaterPath, origin).href) ||
+    SERVICE_WORKER_INFO.updaterPath;
+
   return {
     appId: ONESIGNAL_APP_ID,
     allowLocalhostAsSecureOrigin: true,
+    serviceWorkerPath: workerPath,
+    serviceWorkerUpdaterPath: updaterPath,
     serviceWorkerRegistration: registration,
     serviceWorkerParam: { scope: SERVICE_WORKER_INFO.scope },
   };

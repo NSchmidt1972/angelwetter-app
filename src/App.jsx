@@ -12,6 +12,7 @@ import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
 const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
+const PUSH_DISABLED = import.meta.env.VITE_DISABLE_PUSH === '1';
 const PushInit = lazy(() => import('@/components/PushInit'));
 const AnalyticsInit = lazy(() => import('@/components/AnalyticsInit'));
 const PageViewTracker = lazy(() => import('@/components/PageViewTracker'));
@@ -111,7 +112,7 @@ function AppContent() {
     return !(cached && cached.name);
   });
   const [imageLoaded, setImageLoaded] = useState(true);
-  const [showSplash, setShowSplash] = useState(true);
+  const [initialBootDone, setInitialBootDone] = useState(false);
   const [minSplashDone, setMinSplashDone] = useState(false);
   const isRecoveryHash = location.hash.includes('type=recovery');
   const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
@@ -124,13 +125,19 @@ function AppContent() {
     return cancel;
   }, []);
 
-  // Wenn alles bereit ist (Auth + Name + Mindestdauer), Splash ausblenden
+  // Splash nur beim initialen Boot anzeigen, nicht bei späteren Resume-Syncs.
   useEffect(() => {
-    if (!showSplash) return;
-    if (!authLoading && !nameLoading && user !== undefined && minSplashDone) {
-      setShowSplash(false);
+    if (initialBootDone) return;
+    const bootReady =
+      !authLoading &&
+      !nameLoading &&
+      user !== undefined &&
+      minSplashDone &&
+      (!user || !superAdminLoading);
+    if (bootReady) {
+      setInitialBootDone(true);
     }
-  }, [authLoading, nameLoading, user, minSplashDone, showSplash]);
+  }, [authLoading, nameLoading, user, minSplashDone, superAdminLoading, initialBootDone]);
 
   // Profilname laden
   useEffect(() => {
@@ -274,14 +281,14 @@ function AppContent() {
   const shouldShowSplash =
     !UX_TEST_MODE_ENABLED &&
     !isPublicLightweightRoute &&
-    (authLoading || nameLoading || user === undefined || showSplash || (user && superAdminLoading));
+    !initialBootDone;
 
   if (shouldShowSplash) {
     return (
       <>
         <div className="flex flex-col justify-center items-center h-screen bg-white relative">
           <img
-            src="logo.png"
+            src="/logo.png"
             alt="Lade Angelwetter..."
             className={`w-32 h-32 mb-4 transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
             onLoad={() => setImageLoaded(true)}
@@ -340,6 +347,7 @@ function AppShell() {
     !isPublicRoutePath(location.pathname);
   const shouldInitPush =
     shouldInitProtectedRuntime &&
+    !PUSH_DISABLED &&
     !isPushExcludedPath(location.pathname);
   const shouldInitAnalytics = shouldInitProtectedRuntime;
   const shouldPingUserActivity = shouldInitProtectedRuntime;

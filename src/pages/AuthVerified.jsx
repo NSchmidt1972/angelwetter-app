@@ -1,15 +1,20 @@
 // src/pages/AuthVerified.jsx
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui';
 
 export default function AuthVerified() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    const timer = setTimeout(() => navigate('/'), 3000);
+    const params = new URLSearchParams(location.search || '');
+    const club = (params.get('club') || '').trim();
+    const safeClub = /^[a-z0-9-]+$/i.test(club) ? club : '';
+    const target = safeClub ? `/${safeClub}/auth` : '/';
+    const timer = setTimeout(() => navigate(target, { replace: true }), 3000);
     return () => clearTimeout(timer);
-  }, [navigate]);
+  }, [location.search, navigate]);
 
   return (
     <Card className="max-w-md mx-auto mt-20 bg-white shadow-lg p-6 rounded-xl text-center">

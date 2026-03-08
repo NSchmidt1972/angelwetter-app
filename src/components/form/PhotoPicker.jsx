@@ -1,6 +1,7 @@
 // src/components/form/PhotoPicker.jsx
 import { useRef, useState } from "react";
 import PhotoLightbox from "@/components/catchlist/PhotoLightbox";
+import { markFilePickerIntent } from "@/hooks/useAppResumeSync";
 
 const buttonClasses = "inline-flex items-center justify-center gap-2 rounded-lg border-2 border-blue-400/90 bg-transparent px-4 py-3 text-sm font-semibold text-blue-500 transition hover:bg-blue-500/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-blue-400";
 
@@ -27,7 +28,10 @@ export default function PhotoPicker({ previewUrl, onPick, onRemove }) {
       </label>
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => {
+          markFilePickerIntent();
+          inputRef.current?.click();
+        }}
         className={buttonClasses}
       >
         📷 Foto auswählen / aufnehmen
@@ -60,6 +64,7 @@ export default function PhotoPicker({ previewUrl, onPick, onRemove }) {
               </span>
             </div>
             <button
+              type="button"
               onClick={() => {
                 setShowLightbox(false);
                 onRemove?.();

@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
+import { withTimeout } from '@/utils/async';
+
+const AUTH_REQUEST_TIMEOUT_MS = 12000;
 
 export default function AuthForm() {
   const [mode, setMode] = useState('login'); // "login" oder "register"
@@ -23,29 +26,47 @@ export default function AuthForm() {
     setError('');
   };
 
+  const runWithAuthTimeout = (promise, timeoutLabel) =>
+    withTimeout(promise, AUTH_REQUEST_TIMEOUT_MS, timeoutLabel);
+
   const resolveClubId = async () => {
     const activeSlug = clubSlug || null;
     if (!activeSlug) return getActiveClubId();
 
-    const { data: clubRow, error: clubErr } = await supabase
-      .from('clubs')
-      .select('id')
-      .eq('slug', activeSlug)
-      .maybeSingle();
+    const { data: clubRow, error: clubErr } = await runWithAuthTimeout(
+      supabase
+        .from('clubs')
+        .select('id')
+        .eq('slug', activeSlug)
+        .maybeSingle(),
+      'Club-Aufloesung timeout'
+    );
 
     if (clubErr || !clubRow?.id) return null;
     setActiveClubId(clubRow.id);
     return clubRow.id;
   };
 
-  const checkEmailWhitelisted = async ({ emailToCheck, clubId }) => {
-    const { data: isWhitelisted, error: whitelistError } = await supabase.rpc('is_email_whitelisted', {
-      p_email: emailToCheck,
-      p_club_id: clubId,
-    });
+  const checkEmailWhitelisted = async ({ emailToCheck, clubId, allowCheckFailure = false }) => {
+    const { data: isWhitelisted, error: whitelistError } = await runWithAuthTimeout(
+      supabase.rpc('is_email_whitelisted', {
+        p_email: emailToCheck,
+        p_club_id: clubId,
+      }),
+      'Whitelist-Check timeout'
+    );
 
     if (whitelistError) {
-      return { ok: false, errorMessage: 'Freischaltung konnte nicht geprüft werden.' };
+      const debugMessage = whitelistError?.message || String(whitelistError);
+      console.warn('[AuthForm] Whitelist-Check fehlgeschlagen:', debugMessage);
+      if (allowCheckFailure) {
+        return {
+          ok: true,
+          warningMessage:
+            'Freischaltung konnte nicht vorab geprüft werden. Die finale Prüfung erfolgt beim ersten Login.',
+        };
+      }
+      return { ok: false, errorMessage: `Freischaltung konnte nicht geprüft werden (${debugMessage}).` };
     }
 
     if (!isWhitelisted) {
@@ -56,12 +77,15 @@ export default function AuthForm() {
   };
 
   const ensureProfileAndMembership = async ({ userId, clubId, emailForWhitelistCheck, fallbackName }) => {
-    const { data: membershipRow, error: membershipSelectError } = await supabase
-      .from('memberships')
-      .select('user_id, is_active')
-      .eq('user_id', userId)
-      .eq('club_id', clubId)
-      .maybeSingle();
+    const { data: membershipRow, error: membershipSelectError } = await runWithAuthTimeout(
+      supabase
+        .from('memberships')
+        .select('user_id, is_active')
+        .eq('user_id', userId)
+        .eq('club_id', clubId)
+        .maybeSingle(),
+      'Membership-Check timeout'
+    );
 
     if (membershipSelectError) {
       return { ok: false, errorMessage: 'Mitgliedschaft konnte nicht geprüft werden.' };
@@ -72,12 +96,15 @@ export default function AuthForm() {
         return { ok: false, errorMessage: 'Dein Zugang für diesen Verein ist aktuell deaktiviert.' };
       }
 
-      const { data: profileRow, error: profileSelectError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .eq('club_id', clubId)
-        .maybeSingle();
+      const { data: profileRow, error: profileSelectError } = await runWithAuthTimeout(
+        supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', userId)
+          .eq('club_id', clubId)
+          .maybeSingle(),
+        'Profil-Check timeout'
+      );
 
       if (profileSelectError) {
         return { ok: false, errorMessage: 'Profilprüfung fehlgeschlagen.' };
@@ -85,11 +112,14 @@ export default function AuthForm() {
 
       if (!profileRow) {
         const safeFallbackName = (fallbackName || '').trim() || emailForWhitelistCheck;
-        const { error: profileInsertError } = await supabase.from('profiles').insert({
-          id: userId,
-          name: safeFallbackName,
-          club_id: clubId,
-        });
+        const { error: profileInsertError } = await runWithAuthTimeout(
+          supabase.from('profiles').insert({
+            id: userId,
+            name: safeFallbackName,
+            club_id: clubId,
+          }),
+          'Profil-Anlage timeout'
+        );
 
         if (profileInsertError) {
           console.warn(
@@ -106,17 +136,21 @@ export default function AuthForm() {
     const whitelistResult = await checkEmailWhitelisted({
       emailToCheck: emailForWhitelistCheck,
       clubId,
+      allowCheckFailure: false,
     });
     if (!whitelistResult.ok) {
       return whitelistResult;
     }
 
-    const { data: profileRow, error: profileSelectError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', userId)
-      .eq('club_id', clubId)
-      .maybeSingle();
+    const { data: profileRow, error: profileSelectError } = await runWithAuthTimeout(
+      supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .eq('club_id', clubId)
+        .maybeSingle(),
+      'Profil-Check timeout'
+    );
 
     if (profileSelectError) {
       return { ok: false, errorMessage: 'Profilprüfung fehlgeschlagen.' };
@@ -124,23 +158,29 @@ export default function AuthForm() {
 
     if (!profileRow) {
       const safeFallbackName = (fallbackName || '').trim() || emailForWhitelistCheck;
-      const { error: profileInsertError } = await supabase.from('profiles').insert({
-        id: userId,
-        name: safeFallbackName,
-        club_id: clubId,
-      });
+      const { error: profileInsertError } = await runWithAuthTimeout(
+        supabase.from('profiles').insert({
+          id: userId,
+          name: safeFallbackName,
+          club_id: clubId,
+        }),
+        'Profil-Anlage timeout'
+      );
 
       if (profileInsertError) {
         return { ok: false, errorMessage: 'Profil konnte nicht gespeichert werden.' };
       }
     }
 
-    const { error: membershipInsertError } = await supabase.from('memberships').insert({
-      user_id: userId,
-      club_id: clubId,
-      role: 'mitglied',
-      is_active: true,
-    });
+    const { error: membershipInsertError } = await runWithAuthTimeout(
+      supabase.from('memberships').insert({
+        user_id: userId,
+        club_id: clubId,
+        role: 'mitglied',
+        is_active: true,
+      }),
+      'Membership-Anlage timeout'
+    );
 
     if (membershipInsertError) {
       return { ok: false, errorMessage: 'Mitgliedschaft konnte nicht gespeichert werden.' };
@@ -154,55 +194,59 @@ export default function AuthForm() {
     setLoading(true);
     setError('');
 
-    const cleanEmail = email.trim().toLowerCase();
+    try {
+      const cleanEmail = email.trim().toLowerCase();
 
-    const { data: sessionData, error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password,
-    });
+      const { data: sessionData, error } = await runWithAuthTimeout(
+        supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        }),
+        'Login timeout'
+      );
 
-    if (error) {
-      if (error.message === 'Email not confirmed') {
-        setError('Bitte bestätige deine E-Mail-Adresse (Link wurde per Mail gesendet).');
-      } else if (error.message === 'Invalid login credentials') {
-        setError('Ungültige Anmeldedaten. Bitte überprüfe E-Mail und Passwort. (Vielleicht noch nicht registriert?)');
+      if (error) {
+        if (error.message === 'Email not confirmed') {
+          setError('Bitte bestätige deine E-Mail-Adresse (Link wurde per Mail gesendet).');
+        } else if (error.message === 'Invalid login credentials') {
+          setError('Ungültige Anmeldedaten. Bitte überprüfe E-Mail und Passwort. (Vielleicht noch nicht registriert?)');
+        } else {
+          setError(error.message);
+        }
       } else {
-        setError(error.message);
-      }
-    } else {
-      const userId = sessionData?.user?.id;
-      if (!userId) {
-        setError('Anmeldung fehlgeschlagen: Nutzer-ID fehlt.');
-        await supabase.auth.signOut();
-        setLoading(false);
-        return;
-      }
-      const resolvedClubId = await resolveClubId();
-      if (!resolvedClubId) {
-        setError('Verein unbekannt oder nicht verfügbar.');
-        await supabase.auth.signOut();
-        setLoading(false);
-        return;
-      }
+        const userId = sessionData?.user?.id;
+        if (!userId) {
+          setError('Anmeldung fehlgeschlagen: Nutzer-ID fehlt.');
+          await supabase.auth.signOut();
+          return;
+        }
+        const resolvedClubId = await resolveClubId();
+        if (!resolvedClubId) {
+          setError('Verein unbekannt oder nicht verfügbar.');
+          await supabase.auth.signOut();
+          return;
+        }
 
-      const provisioningResult = await ensureProfileAndMembership({
-        userId,
-        clubId: resolvedClubId,
-        emailForWhitelistCheck: cleanEmail,
-        fallbackName: sessionData?.user?.user_metadata?.name || '',
-      });
+        const provisioningResult = await ensureProfileAndMembership({
+          userId,
+          clubId: resolvedClubId,
+          emailForWhitelistCheck: cleanEmail,
+          fallbackName: sessionData?.user?.user_metadata?.name || '',
+        });
 
-      if (!provisioningResult.ok) {
-        setError(provisioningResult.errorMessage);
-        await supabase.auth.signOut();
-        setLoading(false);
-        return;
+        if (!provisioningResult.ok) {
+          setError(provisioningResult.errorMessage);
+          await supabase.auth.signOut();
+          return;
+        }
+
+        navigate(clubBasePath);
       }
-
-      navigate(clubBasePath);
+    } catch (err) {
+      setError(err?.message || 'Login fehlgeschlagen.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleSignup = async (e) => {
@@ -210,53 +254,77 @@ export default function AuthForm() {
     setLoading(true);
     setError('');
 
-    const cleanEmail = email.trim().toLowerCase();
-    const resolvedClubId = await resolveClubId();
-    if (!resolvedClubId) {
-      setError('Verein unbekannt oder nicht verfügbar.');
-      setLoading(false);
-      return;
-    }
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const resolvedClubId = await resolveClubId();
+      if (!resolvedClubId) {
+        setError('Verein unbekannt oder nicht verfügbar.');
+        return;
+      }
 
-    const whitelistResult = await checkEmailWhitelisted({
-      emailToCheck: cleanEmail,
-      clubId: resolvedClubId,
-    });
+      const whitelistResult = await checkEmailWhitelisted({
+        emailToCheck: cleanEmail,
+        clubId: resolvedClubId,
+        allowCheckFailure: true,
+      });
 
-    if (!whitelistResult.ok) {
-      setError(
-        whitelistResult.errorMessage === 'Du bist für diesen Verein nicht freigeschaltet.'
-          ? 'Diese E-Mail ist für diesen Verein nicht freigeschaltet.'
-          : 'Freischaltung konnte nicht geprüft werden.'
+      if (!whitelistResult.ok) {
+        setError(
+          whitelistResult.errorMessage === 'Du bist für diesen Verein nicht freigeschaltet.'
+            ? 'Diese E-Mail ist für diesen Verein nicht freigeschaltet.'
+            : 'Freischaltung konnte nicht geprüft werden.'
+        );
+        return;
+      }
+      if (whitelistResult.warningMessage) {
+        console.warn('[AuthForm] Signup läuft trotz fehlender Vorprüfung:', whitelistResult.warningMessage);
+      }
+
+      const redirectQuery = clubSlug ? `?club=${encodeURIComponent(clubSlug)}` : '';
+      const emailRedirectTo =
+        typeof window !== 'undefined'
+          ? `${window.location.origin}/auth-verified${redirectQuery}`
+          : 'https://app.asv-rotauge.de/auth-verified';
+
+      const { data: signUpData, error: signUpError } = await runWithAuthTimeout(
+        supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: {
+            data: {
+              name: name.trim(),
+              club_id: resolvedClubId,
+              club_slug: clubSlug || null,
+            },
+            emailRedirectTo,
+          },
+        }),
+        'Signup timeout'
       );
+
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+      if (!signUpData?.user?.id) {
+        console.warn('[AuthForm] Signup lieferte keine user.id', {
+          email: cleanEmail,
+          clubId: resolvedClubId,
+        });
+      }
+
+      setMode('login');
+      resetForm();
+      alert(
+        "✅ Registrierung erfolgreich! Bitte E-Mail bestätigen und danach einloggen. " +
+        "Hinweis: In Supabase erscheint der Eintrag zuerst unter Authentication > Users. " +
+        "Die Tabellen profiles/memberships werden erst beim ersten Login befüllt."
+      );
+    } catch (err) {
+      setError(err?.message || 'Registrierung fehlgeschlagen.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const emailRedirectTo =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}/auth-verified`
-        : 'https://app.asv-rotauge.de/auth-verified';
-
-    const { error: signUpError } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password,
-      options: {
-        data: { name: name.trim() },
-        emailRedirectTo,
-      },
-    });
-
-    if (signUpError) {
-      setError(signUpError.message);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(false);
-    setMode('login');
-    resetForm();
-    alert("✅ Registrierung erfolgreich! Bitte bestätige deine E-Mail und logge dich danach ein.");
   };
 
   return (
