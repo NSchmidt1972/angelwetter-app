@@ -11,11 +11,17 @@ import {
 import { processAndUploadImage } from '../services/imageProcessing';
 import { isVisibleToUser } from '../utils/filters';
 import { readCache, writeCache } from '../utils/cache';
+import { withTimeout } from '@/utils/async';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+
+const CATCHES_TIMEOUT_MS = 12000;
 
 export function useCatches(anglerName, onlyMine) {
+  const resumeTick = useAppResumeTick({ enabled: true });
   const [catches, setCatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(null);
   const [visibilityPending, setVisibilityPending] = useState({});
@@ -23,6 +29,7 @@ export function useCatches(anglerName, onlyMine) {
   const isTrusted = useMemo(() => VERTRAUTE.includes(anglerName), [anglerName]);
   const sentinelRef = useRef(null);
   const queryVersionRef = useRef(0);
+  const activeRequestIdRef = useRef(0);
   const applyVisibilityFilter = useCallback((items, mineFlag = onlyMine) => {
     const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
     return (items || []).filter((entry) =>
@@ -53,30 +60,54 @@ export function useCatches(anglerName, onlyMine) {
     setLoading(true);
   }, [onlyMine, anglerName]);
 
+  useEffect(() => {
+    if (resumeTick === 0) return;
+    queryVersionRef.current += 1;
+    setHasMore(true);
+    setPage(0);
+    setReloadToken((value) => value + 1);
+  }, [resumeTick]);
+
   const fetchPage = useCallback(async (p) => {
     const versionAtStart = queryVersionRef.current;
+    const requestId = ++activeRequestIdRef.current;
     setLoading(true);
     const from = p * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    const q = await listFishes({ from, to, onlyMine, anglerName });
-    const { data, error } = await q;
-    if (versionAtStart !== queryVersionRef.current) return { items: [] };
-    if (error) { console.error('Fänge laden:', error); setLoading(false); return { items: [] }; }
+    try {
+      const q = await listFishes({ from, to, onlyMine, anglerName });
+      const { data, error } = await withTimeout(q, CATCHES_TIMEOUT_MS, 'Fangliste timeout');
+      if (versionAtStart !== queryVersionRef.current) return { items: [] };
+      if (error) {
+        console.error('Fänge laden:', error);
+        return { items: [] };
+      }
 
-    const filtered = applyVisibilityFilter(data, onlyMine);
+      const filtered = applyVisibilityFilter(data, onlyMine);
 
-    setCatches(prev => (p === 0 ? filtered : [...prev, ...filtered]));
-    setHasMore((data || []).length === PAGE_SIZE);
-    setLoading(false);
+      setCatches((prev) => (p === 0 ? filtered : [...prev, ...filtered]));
+      setHasMore((data || []).length === PAGE_SIZE);
 
-    if (p === 0) writeCache(CACHE_KEY, { items: filtered, hasMore: true });
+      if (p === 0) writeCache(CACHE_KEY, { items: filtered, hasMore: true });
 
-    return { items: filtered };
+      return { items: filtered };
+    } catch (error) {
+      if (versionAtStart === queryVersionRef.current) {
+        console.error('Fänge laden (allgemeiner Fehler):', error);
+      }
+      return { items: [] };
+    } finally {
+      if (requestId === activeRequestIdRef.current) {
+        setLoading(false);
+      }
+    }
   }, [onlyMine, anglerName, applyVisibilityFilter]);
 
   // page effect
-  useEffect(() => { fetchPage(page); }, [page, fetchPage]);
+  useEffect(() => {
+    void fetchPage(page);
+  }, [page, fetchPage, reloadToken]);
 
   // total count
   useEffect(() => {
@@ -84,7 +115,8 @@ export function useCatches(anglerName, onlyMine) {
     (async () => {
       const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
       const fromIso = (!isTrusted || filterSetting !== 'all') ? new Date('2025-06-01').toISOString() : null;
-      const { count, error } = await countFishes({ onlyMine, anglerName, fromIso });
+      const query = await countFishes({ onlyMine, anglerName, fromIso });
+      const { count, error } = await withTimeout(query, 10000, 'Count timeout');
       if (!active) return;
       if (error) { console.error('Gesamtanzahl laden:', error); setTotalCount(null); }
       else setTotalCount(count ?? 0);
@@ -98,7 +130,10 @@ export function useCatches(anglerName, onlyMine) {
     if (loading || !hasMore) return;
     setPage((p) => p + 1);
   }, [loading, hasMore]);
-  const reset = useCallback(() => { setPage(0); }, []);
+  const reset = useCallback(() => {
+    setPage(0);
+    setReloadToken((value) => value + 1);
+  }, []);
 
   // editing helpers
   const updateEntry = useCallback(async ({ entry, fish, size, note, photoFile, lat, lon, locationName }) => {

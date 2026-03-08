@@ -176,19 +176,12 @@ async function ensureSubscribedWhenPermissionGranted(OneSignal) {
 }
 
 function buildInitOptions(registration) {
-  const options = {
+  return {
     appId: ONESIGNAL_APP_ID,
     allowLocalhostAsSecureOrigin: true,
+    serviceWorkerRegistration: registration,
     serviceWorkerParam: { scope: SERVICE_WORKER_INFO.scope },
   };
-  if (registration) {
-    options.serviceWorkerRegistration = registration;
-  } else {
-    // Fallback: wenn noch keine eigene Registrierung vorhanden ist,
-    // soll OneSignal den dedizierten Pfad selbst registrieren.
-    options.serviceWorkerPath = SERVICE_WORKER_INFO.initPath;
-  }
-  return options;
 }
 
 export async function ensureOneSignalInitialized() {
@@ -201,8 +194,21 @@ export async function ensureOneSignalInitialized() {
   }
 
   state.initPromise = (async () => {
+    const supportsServiceWorker =
+      typeof navigator !== 'undefined' &&
+      'serviceWorker' in navigator;
+    if (!supportsServiceWorker) {
+      throw new Error('Service Worker wird in diesem Browser nicht unterstützt.');
+    }
+
+    // Wichtig: Registrierung zuerst sichern, erst danach SDK laden/initen.
+    // Sonst versucht das SDK teilweise zu früh "Page -> SW" postMessage.
+    const registration = await waitForServiceWorkerRegistration({ timeoutMs: 10_000 });
+    if (!registration) {
+      throw new Error('OneSignal Service-Worker Registrierung nicht verfügbar.');
+    }
+
     const OneSignal = await getOneSignal({ timeoutMs: 20_000 });
-    const registration = await waitForServiceWorkerRegistration();
     try {
       await OneSignal.init(buildInitOptions(registration));
     } catch (err) {

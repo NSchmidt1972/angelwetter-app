@@ -2,12 +2,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
+import { withTimeout } from '@/utils/async';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 
 const WeatherContext = createContext(null);
 
 const WEATHER_ID = 'latest';
 const INITIAL_DELAY_MS = 400;
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const WEATHER_TIMEOUT_MS = 10000;
 
 function schedule(callback, delay) {
   if (typeof window === 'undefined') {
@@ -24,12 +27,16 @@ function isDocumentVisible() {
 
 async function fetchLatestWeather() {
   const clubId = getActiveClubId();
-  const { data, error } = await supabase
-    .from('weather_cache')
-    .select('data, updated_at')
-    .eq('club_id', clubId)
-    .eq('id', WEATHER_ID)
-    .single();
+  const { data, error } = await withTimeout(
+    supabase
+      .from('weather_cache')
+      .select('data, updated_at')
+      .eq('club_id', clubId)
+      .eq('id', WEATHER_ID)
+      .single(),
+    WEATHER_TIMEOUT_MS,
+    'Wetter-Request timeout'
+  );
 
   if (error) throw error;
   return {
@@ -39,25 +46,38 @@ async function fetchLatestWeather() {
 }
 
 export function WeatherProvider({ children }) {
+  const resumeTick = useAppResumeTick();
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null);
+  const refreshPromiseRef = useRef(null);
 
   const refreshInternal = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    try {
-      const latest = await fetchLatestWeather();
-      setWeather(latest);
-      setError(null);
-      return true;
-    } catch (err) {
-      console.warn('⚠️ Wetter konnte nicht aus Supabase geladen werden:', err?.message ?? err);
-      setError(err);
-      return false;
-    } finally {
-      if (!silent) setLoading(false);
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
     }
+
+    if (!silent) setLoading(true);
+    const refreshPromise = (async () => {
+      try {
+        const latest = await fetchLatestWeather();
+        setWeather(latest);
+        setError(null);
+        return true;
+      } catch (err) {
+        console.warn('⚠️ Wetter konnte nicht aus Supabase geladen werden:', err?.message ?? err);
+        setError(err);
+        return false;
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    })();
+
+    refreshPromiseRef.current = refreshPromise.finally(() => {
+      refreshPromiseRef.current = null;
+    });
+    return refreshPromiseRef.current;
   }, []);
 
   const updateWeather = useCallback((next) => {
@@ -83,27 +103,20 @@ export function WeatherProvider({ children }) {
       }, REFRESH_INTERVAL_MS);
     }
 
-    const handleVisibilityChange = () => {
-      if (!disposed && isDocumentVisible()) {
-        void refreshInternal({ silent: true });
-      }
-    };
-
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-    }
-
     return () => {
       disposed = true;
       cancelInitial?.();
       if (intervalRef.current != null && typeof window !== 'undefined') {
         window.clearInterval(intervalRef.current);
       }
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-      }
     };
   }, [refreshInternal]);
+
+  useEffect(() => {
+    if (resumeTick === 0) return;
+    if (!isDocumentVisible()) return;
+    void refreshInternal({ silent: true });
+  }, [resumeTick, refreshInternal]);
 
   const value = useMemo(
     () => ({

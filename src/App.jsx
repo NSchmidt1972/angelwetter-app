@@ -5,7 +5,9 @@ import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 import AppRoutes from '@/AppRoutes';
 import { WeatherProvider } from '@/hooks/useWeatherCache';
+import { useAppResumeSync, useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
+import { withTimeout } from '@/utils/async';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
@@ -99,6 +101,7 @@ function scheduleLater(callback, delay = 400) {
 function AppContent() {
   const { user, loading: authLoading, profile, profileLoading } = useAuth();
   const location = useLocation();
+  const resumeTick = useAppResumeTick({ enabled: Boolean(user) });
   const [anglerName, setAnglerName] = useState(() => readProfileCache()?.name ?? null);
   const [profileRole, setProfileRole] = useState(() => readProfileCache()?.role ?? null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -155,6 +158,33 @@ function AppContent() {
       const fallbackShort = first || 'Profil';
       writeProfileCache({ userId: user.id, name: fullName, shortName: fallbackShort, role: rawRole || null });
 
+      if (first) {
+        const clubId = getActiveClubId();
+        cancelShortNameCheck = scheduleLater(async () => {
+          try {
+            if (!isActive) return;
+            const { count } = await withTimeout(
+              supabase
+                .from('profiles')
+                .select('id', { count: 'exact', head: true })
+                .ilike('name', `${first} %`)
+                .eq('club_id', clubId),
+              8000,
+              'ShortName-Count timeout'
+            );
+
+            if (!isActive) return;
+            const parts = fullName.split(' ');
+            const last = parts[1] || '';
+            const shortName =
+              (count ?? 0) > 1 && last ? `${first} ${last[0]}.` : fallbackShort;
+            writeProfileCache({ userId: user.id, name: fullName, shortName, role: rawRole || null });
+          } catch (cntErr) {
+            console.warn('⚠️ ShortName-Zählung fehlgeschlagen:', cntErr?.message);
+          }
+        }, 200);
+      }
+
       setNameLoading(false);
       return () => {
         isActive = false;
@@ -171,73 +201,21 @@ function AppContent() {
     } else {
       setAnglerName(cached.name);
       setProfileRole(cached.role ?? null);
+      setNameLoading(false);
     }
 
-    const loadProfile = async () => {
-      try {
-        const clubId = getActiveClubId();
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('name, role')
-          .eq('id', user.id)
-          .eq('club_id', clubId)
-          .single();
-
-        if (!isActive) return;
-
-        if (error) {
-          console.warn('⚠️ Profil konnte nicht geladen werden:', error?.message);
-        }
-
-        if (data?.name) {
-          const fullName = (data.name || '').trim();
-          setAnglerName(fullName);
-          const rawRole = data?.role ? String(data.role).trim() : null;
-          setProfileRole(rawRole || null);
-
-          const [first, last] = fullName.split(' ');
-          const fallbackShort = first || 'Profil';
-          writeProfileCache({ userId: user.id, name: fullName, shortName: fallbackShort, role: rawRole || null });
-
-          if (first) {
-            cancelShortNameCheck = scheduleLater(async () => {
-              try {
-                if (!isActive) return;
-                const { count } = await supabase
-                  .from('profiles')
-                  .select('id', { count: 'exact', head: true })
-                  .ilike('name', `${first} %`)
-                  .eq('club_id', clubId);
-
-                if (!isActive) return;
-                const shortName =
-                  (count ?? 0) > 1 && last ? `${first} ${last[0]}.` : fallbackShort;
-                writeProfileCache({ userId: user.id, name: fullName, shortName, role: rawRole || null });
-              } catch (cntErr) {
-                console.warn('⚠️ ShortName-Zählung fehlgeschlagen:', cntErr?.message);
-              }
-            }, 200);
-          }
-        } else {
-          console.warn('⚠️ Kein Name im Profil gefunden.');
-          setAnglerName(null);
-          setProfileRole(null);
-          clearProfileCache();
-        }
-      } finally {
-        if (isActive) {
-          setNameLoading(false);
-        }
+    if (!profileLoading) {
+      if (!resolvedName && !hasValidCache) {
+        clearProfileCache();
       }
-    };
-
-    loadProfile();
+      setNameLoading(false);
+    }
 
     return () => {
       isActive = false;
       cancelShortNameCheck?.();
     };
-  }, [user, profile, profileLoading]);
+  }, [user, profile, profileLoading, resumeTick]);
 
   useEffect(() => {
     let active = true;
@@ -258,8 +236,11 @@ function AppContent() {
     }
 
     setSuperAdminLoading(true);
-    supabase
-      .rpc('is_superadmin')
+    withTimeout(
+      supabase.rpc('is_superadmin'),
+      10000,
+      'Superadmin-Status timeout'
+    )
       .then(({ data, error }) => {
         if (!active) return;
         if (error) {
@@ -268,6 +249,11 @@ function AppContent() {
           return;
         }
         setIsSuperAdmin(Boolean(data));
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.warn('⚠️ Superadmin-Status-Request fehlgeschlagen:', err?.message || err);
+        setIsSuperAdmin(false);
       })
       .finally(() => {
         if (active) setSuperAdminLoading(false);
@@ -357,6 +343,7 @@ function AppShell() {
     !isPushExcludedPath(location.pathname);
   const shouldInitAnalytics = shouldInitProtectedRuntime;
   const shouldPingUserActivity = shouldInitProtectedRuntime;
+  useAppResumeSync({ enabled: shouldInitProtectedRuntime });
 
   return (
     <>

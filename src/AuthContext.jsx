@@ -1,10 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { getActiveClubId } from './utils/clubId';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { withTimeout } from '@/utils/async';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
+  const resumeTick = useAppResumeTick({ enabled: true });
   const [user, setUser] = useState(undefined); // undefined = Auth wird geladen
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -14,10 +17,22 @@ export const AuthProvider = ({ children }) => {
     let mounted = true;
 
     const loadSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (mounted) {
-        setUser(session?.user ?? null);
-        setLoading(false);
+      try {
+        const {
+          data: { session },
+        } = await withTimeout(supabase.auth.getSession(), 10000, 'Auth-Session timeout');
+        if (mounted) {
+          setUser(session?.user ?? null);
+        }
+      } catch (error) {
+        if (mounted) {
+          console.warn('⚠️ Session konnte nicht geladen werden:', error?.message || error);
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -32,6 +47,33 @@ export const AuthProvider = ({ children }) => {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (resumeTick === 0) return;
+    let active = true;
+
+    const syncSessionOnResume = async () => {
+      try {
+        const {
+          data: { session },
+        } = await withTimeout(
+          supabase.auth.getSession(),
+          8000,
+          'Auth-Session-Resume timeout'
+        );
+        if (!active) return;
+        setUser(session?.user ?? null);
+      } catch (error) {
+        if (!active) return;
+        console.warn('⚠️ Session-Resume fehlgeschlagen:', error?.message || error);
+      }
+    };
+
+    void syncSessionOnResume();
+    return () => {
+      active = false;
+    };
+  }, [resumeTick]);
 
   useEffect(() => {
     let active = true;
@@ -51,12 +93,16 @@ export const AuthProvider = ({ children }) => {
       setProfileLoading(true);
       try {
         const clubId = getActiveClubId();
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .eq('club_id', clubId)
-          .maybeSingle();
+        const { data, error } = await withTimeout(
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .eq('club_id', clubId)
+            .maybeSingle(),
+          10000,
+          'Profile-Request timeout'
+        );
 
         if (!active) return;
         if (error) {
@@ -76,7 +122,7 @@ export const AuthProvider = ({ children }) => {
 
     loadProfile();
     return () => { active = false; };
-  }, [user]);
+  }, [user, resumeTick]);
 
   const value = useMemo(
     () => ({ user, setUser, loading, profile, profileLoading }),

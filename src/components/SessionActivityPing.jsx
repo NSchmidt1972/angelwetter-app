@@ -60,24 +60,47 @@ export default function SessionActivityPing({
       };
 
       try {
-        const { data: updatedRows, error: updateError } = await supabase
+        const { error: upsertError } = await supabase
           .from('user_activity')
-          .update({
-            angler_name: payload.angler_name,
-            last_active: payload.last_active,
-          })
-          .eq('user_id', userId)
-          .eq('club_id', clubId)
-          .select('user_id')
-          .limit(1);
+          .upsert(payload);
 
-        if (updateError) throw updateError;
-        if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
-          const { error: insertError } = await supabase.from('user_activity').insert(payload);
-          if (insertError) throw insertError;
+        if (upsertError) {
+          const message = String(upsertError?.message || '').toLowerCase();
+          const code = String(upsertError?.code || '').toLowerCase();
+          const missingConflictSupport =
+            code === '42p10' ||
+            message.includes('no unique') ||
+            message.includes('there is no unique or exclusion constraint');
+
+          if (!missingConflictSupport) throw upsertError;
+
+          // Fallback für Instanzen ohne passenden Unique-Constraint.
+          const { data: updatedRows, error: updateError } = await supabase
+            .from('user_activity')
+            .update({
+              angler_name: payload.angler_name,
+              last_active: payload.last_active,
+            })
+            .eq('user_id', userId)
+            .eq('club_id', clubId)
+            .select('user_id');
+
+          if (updateError) throw updateError;
+          if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
+            const { error: insertError } = await supabase.from('user_activity').insert(payload);
+            if (insertError) throw insertError;
+          }
         }
       } catch (err) {
-        console.warn('⚠️ user_activity konnte nicht aktualisiert werden:', err?.message || err);
+        console.warn('⚠️ user_activity konnte nicht aktualisiert werden:', {
+          message: err?.message || String(err),
+          code: err?.code || null,
+          status: err?.status || null,
+          details: err?.details || null,
+          hint: err?.hint || null,
+          clubId,
+          userId,
+        });
       }
     };
 

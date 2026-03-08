@@ -2,12 +2,15 @@
 import { useEffect, useState } from 'react';
 import WeatherNow from '@/components/weather/WeatherNow';
 import { useWeatherCache } from '@/hooks/useWeatherCache';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useUserProfile } from '@/AuthContext';
 import { Card } from '@/components/ui';
 import { supabase } from '@/supabaseClient';
+import { withTimeout } from '@/utils/async';
 
 export default function Home() {
   const { weather, loading, error, refresh } = useWeatherCache();
+  const resumeTick = useAppResumeTick({ enabled: true });
   const { profile } = useUserProfile();
   const [waterTemperature, setWaterTemperature] = useState(null);
   const [waterTemperatureHistory, setWaterTemperatureHistory] = useState([]);
@@ -31,11 +34,15 @@ export default function Home() {
       setWaterTemperatureLoading(true);
       try {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        const { data, error: tempError } = await supabase
-          .from('temperature_log')
-          .select('temperature_c, measured_at')
-          .gte('measured_at', sevenDaysAgo)
-          .order('measured_at', { ascending: true });
+        const { data, error: tempError } = await withTimeout(
+          supabase
+            .from('temperature_log')
+            .select('temperature_c, measured_at')
+            .gte('measured_at', sevenDaysAgo)
+            .order('measured_at', { ascending: true }),
+          10000,
+          'Wassertemperatur timeout'
+        );
 
         if (!active) return;
 
@@ -57,7 +64,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [weatherData?.savedAt, isAdmin]);
+  }, [weatherData?.savedAt, isAdmin, resumeTick]);
 
   return (
     <Card className="p-4 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans">

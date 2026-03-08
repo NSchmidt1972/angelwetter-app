@@ -23,7 +23,7 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     scheduleIdle(async () => {
       try {
         const { registerSW } = await import('virtual:pwa-register');
-        registerSW({ immediate: false });
+        registerSW({ immediate: true });
       } catch (err) {
         console.warn('[PWA] Service-Worker Registrierung übersprungen:', err);
       }

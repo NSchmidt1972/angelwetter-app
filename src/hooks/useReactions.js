@@ -6,6 +6,9 @@ import {
   setReactionForFish,
   subscribeReactions,
 } from '../services/reactions';
+import { withTimeout } from '@/utils/async';
+
+const REACTIONS_TIMEOUT_MS = 12000;
 
 function cloneCounts(counts) {
   const clone = {};
@@ -25,15 +28,26 @@ export function useReactions(userName) {
       const ids = Array.from(new Set(fishIds.filter(Boolean)));
       if (!ids.length) return;
 
-      const { data, error } = await fetchReactionsFor(ids);
-      if (error) {
-        console.error('Reaktionen laden:', error);
+      let data;
+      try {
+        const result = await withTimeout(
+          fetchReactionsFor(ids),
+          REACTIONS_TIMEOUT_MS,
+          'Reaktionen timeout'
+        );
+        data = result?.data;
+        if (result?.error) {
+          console.error('Reaktionen laden:', result.error);
+          return;
+        }
+      } catch (error) {
+        console.error('Reaktionen laden (allgemeiner Fehler):', error);
         return;
       }
 
       const counts = {};
       const mine = {};
-      data.forEach((row) => {
+      (data || []).forEach((row) => {
         const fid = row.fish_id;
         if (!counts[fid]) counts[fid] = {};
         counts[fid][row.reaction] = (counts[fid][row.reaction] || 0) + 1;

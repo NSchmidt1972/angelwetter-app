@@ -16,15 +16,6 @@ import { NetworkFirst, StaleWhileRevalidate, CacheFirst } from 'workbox-strategi
 import { ExpirationPlugin } from 'workbox-expiration';
 import { enable } from 'workbox-navigation-preload';
 
-const SUPABASE_ORIGIN = (() => {
-  try {
-    const url = import.meta.env?.VITE_SUPABASE_URL;
-    return url ? new URL(url).origin : null;
-  } catch {
-    return null;
-  }
-})();
-
 // Aktivierter SW uebernimmt geclaimte Clients
 clientsClaim();
 cleanupOutdatedCaches();
@@ -51,22 +42,13 @@ registerRoute(
 
 // JS/CSS schnell + Hintergrund-Update
 registerRoute(
-  ({ request }) => request.destination === 'script',
+  ({ request, url }) => request.destination === 'script' && url.origin === self.location.origin,
   new StaleWhileRevalidate({ cacheName: 'app-scripts' })
 );
 registerRoute(
-  ({ request }) => request.destination === 'style',
+  ({ request, url }) => request.destination === 'style' && url.origin === self.location.origin,
   new StaleWhileRevalidate({ cacheName: 'app-styles' })
 );
-
-// Supabase-API (GET)
-if (SUPABASE_ORIGIN) {
-  registerRoute(
-    ({ url, request }) =>
-      request.method === 'GET' && url.origin === SUPABASE_ORIGIN,
-    new NetworkFirst({ cacheName: 'supabase-data', networkTimeoutSeconds: 5 })
-  );
-}
 
 // OWM-Icons
 registerRoute(

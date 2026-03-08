@@ -4,6 +4,7 @@ import {
   predictForecastBatch,
   predictForecastForWeather,
 } from '@/features/forecast/services/forecastApi';
+import { isAiUnavailableError } from '@/services/aiService';
 import { withModelTimestamps } from '@/features/forecast/services/predictionModelInfo';
 
 function isAbortError(error) {
@@ -47,6 +48,7 @@ function toForecastErrorMessage(_error, scope = 'ai') {
 
 function isRetriableError(error) {
   if (isAbortError(error)) return false;
+  if (isAiUnavailableError(error)) return false;
 
   const status = getErrorStatus(error);
   if (status === 408 || status === 429 || status >= 500) return true;
@@ -186,7 +188,7 @@ export function useForecast() {
           });
         })
         .catch((error) => {
-          if (!isAbortError(error)) {
+          if (!isAbortError(error) && !isAiUnavailableError(error)) {
             console.warn('⚠️ KI-Prognose für jetzt fehlgeschlagen:', error);
           }
           if (requestId === requestIdRef.current) {
@@ -227,7 +229,7 @@ export function useForecast() {
                 );
               })
               .catch((error) => {
-                if (!isAbortError(error)) {
+                if (!isAbortError(error) && !isAiUnavailableError(error)) {
                   console.warn('⚠️ KI-Prognosen für 7-Tage-Ausblick fehlgeschlagen:', error);
                 }
               })

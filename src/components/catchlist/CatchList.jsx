@@ -16,9 +16,12 @@ import { VERTRAUTE } from '@/constants';
 import { REACTION_OPTIONS } from '@/constants/reactions';
 import { isVisibleToUser } from '@/utils/filters';
 import { useReactions } from '@/hooks/useReactions';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
+import { withTimeout } from '@/utils/async';
 
 export default function CatchList({ anglerName }) {
+  const resumeTick = useAppResumeTick({ enabled: true });
   const [onlyMine, setOnlyMine] = useState(false);
   const [topBadges, setTopBadges] = useState({});
   const [searchParams, setSearchParams] = useSearchParams();
@@ -98,10 +101,14 @@ export default function CatchList({ anglerName }) {
     async function loadTopTen() {
       try {
         const clubId = getActiveClubId();
-        const { data, error } = await supabase
-          .from('fishes')
-          .select('id, fish, size, angler, timestamp, location_name, blank, share_public_non_home')
-          .eq('club_id', clubId);
+        const { data, error } = await withTimeout(
+          supabase
+            .from('fishes')
+            .select('id, fish, size, angler, timestamp, location_name, blank, share_public_non_home')
+            .eq('club_id', clubId),
+          16000,
+          'Top10 timeout'
+        );
         if (error) {
           console.error('Top 10 laden:', error);
           return;
@@ -154,7 +161,7 @@ export default function CatchList({ anglerName }) {
     return () => {
       cancelled = true;
     };
-  }, [isTrusted, normalizedName, entryKey]);
+  }, [isTrusted, normalizedName, entryKey, resumeTick]);
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
@@ -194,7 +201,7 @@ export default function CatchList({ anglerName }) {
   useEffect(() => {
     if (!catches.length) return;
     loadReactionsFor(catches.map((entry) => entry.id).filter(Boolean));
-  }, [catches, loadReactionsFor, onlyMine, normalizedName]);
+  }, [catches, loadReactionsFor, onlyMine, normalizedName, resumeTick]);
 
   useEffect(() => {
     if (!activeReactionFish) return;

@@ -3,7 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CurrentPanel from '@/components/weather/CurrentPanel';
 import HourlyScroller from '@/components/weather/HourlyScroller';
 import DailyScroller from '@/components/weather/DailyScroller';
-import { predictForWeather } from '@/services/aiService';
+import {
+  isAiCircuitOpen,
+  isAiUnavailableError,
+  predictForWeather,
+} from '@/services/aiService';
 import SegmentedSpinner from '@/components/weather/SegmentedSpinner';
 
 // --- prediction utils (unverändert gelassen) ---
@@ -107,6 +111,11 @@ function hasOwnPrediction(map, index) {
   return Object.prototype.hasOwnProperty.call(map, index);
 }
 
+function isAbortError(error) {
+  const message = String(error?.message || '');
+  return error?.name === 'AbortError' || /aborted|abort/i.test(message);
+}
+
 export default function WeatherNow({
   data,
   onRefresh,
@@ -143,6 +152,7 @@ export default function WeatherNow({
   const hourlyAttemptsRef = useRef({});
   const dailyInFlightRef = useRef(new Set());
   const hourlyInFlightRef = useRef(new Set());
+  const aiUnavailableLoggedRef = useRef(false);
 
   // ⏱ Auto-Refresh (nur sichtbar & online)
   useEffect(() => {
@@ -177,6 +187,7 @@ export default function WeatherNow({
   // KI-Prognosen: sichtbare Daily-Karten
   useEffect(() => {
     if (!dailyBase.length || dailyVisibleCount <= 0) return;
+    if (isAiCircuitOpen()) return;
     const cancelIdle = idleCall(() => {
       const ac = new AbortController();
       const { signal } = ac;
@@ -219,6 +230,16 @@ export default function WeatherNow({
               cache.set(key, pred);
               return { i, pred: pred ?? null };
             } catch (err) {
+              if (isAbortError(err)) {
+                return { i, pred: null, failed: true };
+              }
+              if (isAiUnavailableError(err)) {
+                if (!aiUnavailableLoggedRef.current) {
+                  console.warn('AI-Prognose derzeit nicht erreichbar (CORS/503).');
+                  aiUnavailableLoggedRef.current = true;
+                }
+                return { i, pred: null, failed: true };
+              }
               console.warn('Daily-Vorhersage fehlgeschlagen:', err?.message || err);
               return { i, pred: null, failed: true };
             }
@@ -253,6 +274,7 @@ export default function WeatherNow({
   // KI-Prognosen: sichtbare Stunden
   useEffect(() => {
     if (!hourlyBase.length || visibleCount <= 0) return;
+    if (isAiCircuitOpen()) return;
 
     const cancelIdle = idleCall(() => {
       const ac = new AbortController();
@@ -297,6 +319,16 @@ export default function WeatherNow({
               cache.set(key, pred);
               return { i, pred: pred ?? null };
             } catch (err) {
+              if (isAbortError(err)) {
+                return { i, pred: null, failed: true };
+              }
+              if (isAiUnavailableError(err)) {
+                if (!aiUnavailableLoggedRef.current) {
+                  console.warn('AI-Prognose derzeit nicht erreichbar (CORS/503).');
+                  aiUnavailableLoggedRef.current = true;
+                }
+                return { i, pred: null, failed: true };
+              }
               console.warn('Stunden-Vorhersage fehlgeschlagen:', err?.message || err);
               return { i, pred: null, failed: true };
             }

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-const GTAG_ID = import.meta.env.VITE_GTAG_ID?.trim() || 'G-HRCMPRWC6D';
+const GTAG_ID = import.meta.env.VITE_GTAG_ID?.trim() || '';
 const STATIC_PUBLIC_PATHS = new Set([
   '/auth',
   '/update-password',
@@ -63,9 +63,11 @@ function ensureTagScriptLoaded() {
 export default function AnalyticsInit() {
   const location = useLocation();
   const isUxTestMode = import.meta.env.VITE_UX_TEST_MODE === '1';
+  const trackingEnabled = Boolean(GTAG_ID);
 
   useEffect(() => {
     if (isUxTestMode) return;
+    if (!trackingEnabled) return;
     if (!shouldTrackPath(location.pathname)) return;
 
     let cancelled = false;
@@ -101,7 +103,7 @@ export default function AnalyticsInit() {
         window.removeEventListener(eventName, onInteraction);
       });
     };
-  }, [isUxTestMode, location.pathname, location.search]);
+  }, [isUxTestMode, trackingEnabled, location.pathname, location.search]);
 
   return null;
 }
