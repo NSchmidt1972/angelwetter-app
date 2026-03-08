@@ -116,10 +116,14 @@ export default function usePushStatus() {
         error: null,
       }));
     } catch (err) {
+      const rawMessage = err?.message || String(err);
+      const message = /blockiert/i.test(rawMessage)
+        ? 'Benachrichtigungen im Browser blockiert. Bitte in den Browser-Einstellungen für diese Seite erlauben und erneut versuchen.'
+        : rawMessage;
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: err?.message || String(err),
+        error: message,
       }));
     }
   };

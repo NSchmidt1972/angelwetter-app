@@ -29,12 +29,10 @@ export default function PushMenuButton() {
   const handleToggle = () => {
     if (loading || supportUnavailable) return;
     if (enabled) {
-      unsubscribe();
+      void unsubscribe();
       return;
     }
-    if (!blocked) {
-      subscribe();
-    }
+    void subscribe();
   };
 
   const statusLabel = (() => {
@@ -47,12 +45,12 @@ export default function PushMenuButton() {
     if (supportUnavailable) return "Nicht unterstützt";
     if (loading) return "Status wird aktualisiert...";
     if (!ready) return "Nicht initialisiert";
-    if (!subId) return "deaktiviert";
     if (blocked) return "Im Browser blockiert";
+    if (!subId) return "deaktiviert";
     return enabled ? "aktiviert" : "deaktiviert";
   })();
 
-  const disabled = loading || (!enabled && (blocked || supportUnavailable));
+  const disabled = loading || supportUnavailable;
 
   const containerClass = supportUnavailable
     ? "border-yellow-300 bg-yellow-100 text-yellow-900 shadow-sm dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-100"
