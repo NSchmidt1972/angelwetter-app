@@ -120,7 +120,100 @@ function formatBuildLabel(buildInfo) {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+const ADMIN_OVERVIEW_FISH_SNAPSHOT_LIMIT = 2000;
+
+function isExternalCatchRow(row) {
+  const lat = row?.lat;
+  const lon = row?.lon;
+  const location = String(row?.location_name || '').toLowerCase();
+
+  if (lat == null || lon == null) return false;
+  if (row?.blank === true) return false;
+  if (!location.trim()) return false;
+  if (location.includes('lobberich') || location.includes('ferkensbruch')) return false;
+  return true;
+}
+
+function buildRecentBlanks(rows, sinceDate) {
+  return (rows || []).filter((row) => {
+    if (row?.blank !== true) return false;
+    const ts = parseTimestamp(row?.timestamp);
+    return !!ts && ts > sinceDate;
+  });
+}
+
+function buildLatestCatch(rows) {
+  return (rows || []).find((row) => row?.blank !== true) || null;
+}
+
+function buildExternalCatches(rows, limit = 20) {
+  const output = [];
+  for (const row of rows || []) {
+    if (!isExternalCatchRow(row)) continue;
+    output.push(row);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+async function fetchRecentPageViewsForActiveUsers(clubId, sinceIso) {
+  const rows = [];
+  let rangeStart = 0;
+  let encounteredError = null;
+
+  while (rows.length < PAGE_VIEW_RECENT_LIMIT) {
+    const rangeEnd = rangeStart + PAGE_VIEW_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('page_views')
+      .select('id, angler, created_at')
+      .eq('club_id', clubId)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(rangeStart, rangeEnd);
+
+    if (error) {
+      encounteredError = error;
+      break;
+    }
+
+    if (!Array.isArray(data) || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < PAGE_VIEW_PAGE_SIZE) break;
+    rangeStart += PAGE_VIEW_PAGE_SIZE;
+  }
+
+  return { rows, error: encounteredError };
+}
+
+function getPageViewRange(pageViewYearFilter, snapshotIso) {
+  if (pageViewYearFilter === PAGE_VIEW_YEAR_FILTER_ALL) {
+    return {
+      fromIso: null,
+      toIso: snapshotIso,
+      upperBoundOp: 'lte',
+    };
+  }
+
+  const selectedYear = Number(pageViewYearFilter);
+  if (!Number.isInteger(selectedYear)) {
+    return {
+      fromIso: null,
+      toIso: snapshotIso,
+      upperBoundOp: 'lte',
+    };
+  }
+
+  return {
+    fromIso: new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0, 0)).toISOString(),
+    toIso: new Date(Date.UTC(selectedYear + 1, 0, 1, 0, 0, 0, 0)).toISOString(),
+    upperBoundOp: 'lt',
+  };
+}
+
 export default function AdminOverview() {
+  const currentYear = new Date().getFullYear();
+  const currentYearFilter = String(currentYear);
   const [activeUsers, setActiveUsers] = useState([]);
   const [latestCatch, setLatestCatch] = useState(null);
   const [nameShort, setNameShort] = useState(null);
@@ -139,7 +232,7 @@ export default function AdminOverview() {
   const [temperatureLatest, setTemperatureLatest] = useState(null);
   const [temperatureCount, setTemperatureCount] = useState(null);
   const [pageViewRows, setPageViewRows] = useState([]);
-  const [pageViewYearFilter, setPageViewYearFilter] = useState(PAGE_VIEW_YEAR_FILTER_ALL);
+  const [pageViewYearFilter, setPageViewYearFilter] = useState(currentYearFilter);
   const [pageViewLoading, setPageViewLoading] = useState(false);
   const [pageViewError, setPageViewError] = useState('');
   const [pageViewStatsLoading, setPageViewStatsLoading] = useState(false);
@@ -195,7 +288,10 @@ export default function AdminOverview() {
     () => getPageViewAvailableYears(filteredPageViewRows),
     [filteredPageViewRows]
   );
-  const pageViewAvailableYears = pageViewDbYears || pageViewAvailableYearsFallback;
+  const pageViewAvailableYears = useMemo(
+    () => Array.from(new Set([currentYear, ...(pageViewDbYears || pageViewAvailableYearsFallback)])).sort((a, b) => b - a),
+    [currentYear, pageViewDbYears, pageViewAvailableYearsFallback]
+  );
   const pageViewRowsInScope = useMemo(
     () => filterPageViewRowsByYear(filteredPageViewRows, pageViewYearFilter),
     [filteredPageViewRows, pageViewYearFilter]
@@ -293,221 +389,258 @@ export default function AdminOverview() {
   );
 
   useEffect(() => {
-    async function loadData() {
+    let active = true;
+    const clubId = getActiveClubId();
+    const sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const sinceIso = sinceDate.toISOString();
+
+    if (!clubId) return () => { active = false; };
+
+    const logSectionError = (section, error) => {
+      console.error(`AdminOverview: ${section} konnten nicht geladen werden`, error);
+    };
+
+    const resolveQueryData = async (queryPromise, section) => {
       try {
-        const clubId = getActiveClubId();
-        const sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const sinceIso = sinceDate.toISOString();
-
-        const { data: users } = await supabase
-          .from('user_activity')
-          .select('user_id, angler_name, last_active')
-          .eq('club_id', clubId);
-
-        const safeUsers = Array.isArray(users) ? users : [];
-        const userIds = safeUsers.map((u) => u?.user_id).filter(Boolean);
-        let profileById = new Map();
-        if (userIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, name')
-            .eq('club_id', clubId)
-            .in('id', userIds);
-          profileById = new Map((profiles || []).map((p) => [p.id, p.name]));
+        const { data, error } = await queryPromise;
+        if (error) {
+          logSectionError(section, error);
+          return null;
         }
+        return data;
+      } catch (error) {
+        logSectionError(section, error);
+        return null;
+      }
+    };
 
-        // Aktivität nicht nur aus user_activity, sondern auch aus echten Sessions (inkl. Schneider).
-        const activeByName = new Map();
+    const allProfilesDataPromise = resolveQueryData(
+      supabase
+        .from('profiles')
+        .select('id, name, created_at, role')
+        .eq('club_id', clubId)
+        .order('created_at', { ascending: false }),
+      'Profile',
+    );
+    const fishSnapshotPromise = resolveQueryData(
+      supabase
+        .from('fishes')
+        .select('angler, fish, size, timestamp, lat, lon, location_name, blank, taken')
+        .eq('club_id', clubId)
+        .order('timestamp', { ascending: false })
+        .limit(ADMIN_OVERVIEW_FISH_SNAPSHOT_LIMIT),
+      'Fänge (Snapshot)',
+    );
 
-        const upsertActive = (rawName, rawTimestamp) => {
-          const name = String(rawName || '').trim();
-          if (!name) return;
-          const parsed = parseTimestamp(rawTimestamp);
-          if (!parsed) return;
-          const key = normalizeName(name);
-          if (!key) return;
-          const prev = activeByName.get(key);
-          if (!prev || parsed > prev.lastActive) {
-            activeByName.set(key, {
-              name,
-              lastActive: parsed,
-            });
-          }
-        };
+    async function loadActiveUsers() {
+      const [users, allProfilesData, fishSnapshot, recentPageViewsResult] = await Promise.all([
+        resolveQueryData(
+          supabase
+            .from('user_activity')
+            .select('user_id, angler_name, last_active')
+            .eq('club_id', clubId),
+          'Aktive Angler (user_activity)',
+        ),
+        allProfilesDataPromise,
+        fishSnapshotPromise,
+        fetchRecentPageViewsForActiveUsers(clubId, sinceIso),
+      ]);
 
-        safeUsers.forEach((entry) => {
-          const profileName = entry?.user_id ? profileById.get(entry.user_id) : null;
-          const resolvedName = profileName || entry?.angler_name || null;
-          const parsedLastActive = parseTimestamp(entry?.last_active);
-          if (parsedLastActive && parsedLastActive > sinceDate) {
-            upsertActive(resolvedName, entry?.last_active);
-          }
-        });
+      if (!active) return;
 
-        const { data: recentSessions } = await supabase
-          .from('fishes')
-          .select('angler, timestamp, blank, fish')
-          .eq('club_id', clubId)
-          .gt('timestamp', sinceIso)
-          .order('timestamp', { ascending: false })
-          .limit(1000);
+      const safeUsers = Array.isArray(users) ? users : [];
+      const profileById = new Map((allProfilesData || []).map((profile) => [profile.id, profile.name]));
+      const activeByName = new Map();
 
-        (recentSessions || []).forEach((entry) => {
-          upsertActive(entry?.angler, entry?.timestamp);
-        });
-
-        // App-Aktivität aus Page-Views der letzten 7 Tage ergänzen,
-        // damit "Aktive Angler" und "Aktivste Angler" konsistent bleiben.
-        const recentPageViews = [];
-        let pageViewRangeStart = 0;
-        let pageViewError = null;
-
-        while (recentPageViews.length < PAGE_VIEW_RECENT_LIMIT) {
-          const pageViewRangeEnd = pageViewRangeStart + PAGE_VIEW_PAGE_SIZE - 1;
-          const { data, error } = await supabase
-            .from('page_views')
-            .select('id, angler, created_at')
-            .eq('club_id', clubId)
-            .gte('created_at', sinceIso)
-            .order('created_at', { ascending: false })
-            .order('id', { ascending: false })
-            .range(pageViewRangeStart, pageViewRangeEnd);
-
-          if (error) {
-            pageViewError = error;
-            break;
-          }
-
-          if (!Array.isArray(data) || data.length === 0) break;
-          recentPageViews.push(...data);
-          if (data.length < PAGE_VIEW_PAGE_SIZE) break;
-          pageViewRangeStart += PAGE_VIEW_PAGE_SIZE;
-        }
-
-        if (pageViewError) {
-          console.error('Aktive Angler: Page-Views konnten nicht geladen werden', pageViewError);
-        } else {
-          recentPageViews.forEach((entry) => {
-            upsertActive(entry?.angler, entry?.created_at);
+      const upsertActive = (rawName, rawTimestamp) => {
+        const name = String(rawName || '').trim();
+        if (!name) return;
+        const parsed = parseTimestamp(rawTimestamp);
+        if (!parsed) return;
+        const key = normalizeName(name);
+        if (!key) return;
+        const prev = activeByName.get(key);
+        if (!prev || parsed > prev.lastActive) {
+          activeByName.set(key, {
+            name,
+            lastActive: parsed,
           });
         }
+      };
 
-        setActiveUsers(
-          [...activeByName.values()]
-            .map((entry) => ({
-              name: entry.name,
-              last_active: entry.lastActive.toISOString(),
-            }))
-            .sort(
-              (a, b) =>
-                (parseTimestamp(b.last_active)?.getTime() || 0) -
-                (parseTimestamp(a.last_active)?.getTime() || 0)
-            )
-        );
+      safeUsers.forEach((entry) => {
+        const profileName = entry?.user_id ? profileById.get(entry.user_id) : null;
+        const resolvedName = profileName || entry?.angler_name || null;
+        const parsedLastActive = parseTimestamp(entry?.last_active);
+        if (parsedLastActive && parsedLastActive > sinceDate) {
+          upsertActive(resolvedName, entry?.last_active);
+        }
+      });
 
-        // ⬇️ Entnommene Fische (taken = true)
-        const { data: taken } = await supabase
+      (fishSnapshot || []).forEach((entry) => {
+        const ts = parseTimestamp(entry?.timestamp);
+        if (!ts || ts <= sinceDate) return;
+        upsertActive(entry?.angler, entry?.timestamp);
+      });
+
+      if (recentPageViewsResult?.error) {
+        logSectionError('Aktive Angler (page_views)', recentPageViewsResult.error);
+      } else {
+        (recentPageViewsResult?.rows || []).forEach((entry) => {
+          upsertActive(entry?.angler, entry?.created_at);
+        });
+      }
+
+      setActiveUsers(
+        [...activeByName.values()]
+          .map((entry) => ({
+            name: entry.name,
+            last_active: entry.lastActive.toISOString(),
+          }))
+          .sort(
+            (a, b) =>
+              (parseTimestamp(b.last_active)?.getTime() || 0) -
+              (parseTimestamp(a.last_active)?.getTime() || 0)
+          )
+      );
+    }
+
+    async function loadTakenCatches() {
+      const fishSnapshot = await fishSnapshotPromise;
+
+      if (!active) return;
+      const rows = Array.isArray(fishSnapshot) ? fishSnapshot : [];
+      const takenFromSnapshot = rows.filter((entry) => entry?.taken === true).slice(0, 100);
+
+      if (rows.length < ADMIN_OVERVIEW_FISH_SNAPSHOT_LIMIT || takenFromSnapshot.length >= 100) {
+        setTakenCatches(takenFromSnapshot);
+        return;
+      }
+
+      const takenFallback = await resolveQueryData(
+        supabase
           .from('fishes')
           .select('angler, fish, timestamp')
           .eq('club_id', clubId)
           .eq('taken', true)
           .order('timestamp', { ascending: false })
-          .limit(100);
-
-        setTakenCatches(taken || []);
-
-
-        const { data: fishes } = await supabase
-          .from('fishes')
-          .select('*')
-          .eq('club_id', clubId)
-          .order('timestamp', { ascending: false })
-          .not('blank', 'is', true)
-          .limit(1);
-
-        setLatestCatch(fishes?.[0] || null);
-        if (fishes?.[0]?.angler) setNameShort(fishes[0].angler);
-
-        const { data: blanks } = await supabase
-          .from('fishes')
-          .select('angler, timestamp')
-          .eq('club_id', clubId)
-          .eq('blank', true)
-          .gt('timestamp', sinceIso)
-          .order('timestamp', { ascending: false });
-        setRecentBlanks(blanks);
-
-        const { data: allProfilesData } = await supabase
-          .from('profiles')
-          .select('id, name, created_at, role')
-          .eq('club_id', clubId)
-          .order('created_at', { ascending: false });
-        setAllProfiles(allProfilesData);
-
-        const { data: pushSubs } = await supabase
-          .from('push_subscriptions')
-          .select('user_id, angler_name, device_label, opted_in, revoked_at')
-          .eq('club_id', clubId);
-
-        if (pushSubs) {
-          const profileNameById = (allProfilesData || []).reduce((acc, profile) => {
-            if (profile?.id) acc[profile.id] = profile.name || null;
-            return acc;
-          }, {});
-
-          const byAngler = pushSubs.reduce((acc, entry) => {
-            const fallbackName = entry?.user_id ? profileNameById[entry.user_id] : null;
-            const label = entry?.angler_name?.trim() || fallbackName || 'Unbekannt';
-            if (!acc[label]) acc[label] = { total: 0, active: 0 };
-            acc[label].total += 1;
-            if (entry?.opted_in && !entry?.revoked_at) acc[label].active += 1;
-            return acc;
-          }, {});
-
-          const byDevice = pushSubs.reduce((acc, entry) => {
-            const label = entry?.device_label?.trim() || 'Unbekanntes Gerät';
-            if (!acc[label]) acc[label] = { total: 0, active: 0 };
-            acc[label].total += 1;
-            if (entry?.opted_in && !entry?.revoked_at) acc[label].active += 1;
-            return acc;
-          }, {});
-
-          const sortedAngler = Object.entries(byAngler)
-            .map(([name, counts]) => ({ name, ...counts }))
-            .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
-
-          const sortedDevices = Object.entries(byDevice)
-            .map(([device, counts]) => ({ device, ...counts }))
-            .sort((a, b) => b.total - a.total || a.device.localeCompare(b.device));
-
-          setPushByAngler(sortedAngler);
-          setPushDeviceSummary(sortedDevices);
-        } else {
-          setPushByAngler([]);
-          setPushDeviceSummary([]);
-        }
-
-        // ⬇️ Angepasste externe Fänge-Query
-        const { data: externals } = await supabase
-          .from('fishes')
-          .select('angler, fish, size, timestamp, lat, lon, location_name')
-          .eq('club_id', clubId)
-          .not('lat', 'is', null)
-          .not('lon', 'is', null)
-          .not('blank', 'is', true)
-          .not('location_name', 'ilike', '%lobberich%')
-          .not('location_name', 'ilike', '%ferkensbruch%')
-          .not('location_name', 'is', null)
-          .order('timestamp', { ascending: false })
-          .limit(20);
-
-        setExternalCatches(externals);
-
-      } catch (error) {
-        console.error('❌ Fehler beim Laden der Admin-Daten:', error.message);
-      }
+          .limit(100),
+        'Entnommene Fische',
+      );
+      if (!active) return;
+      setTakenCatches(Array.isArray(takenFallback) ? takenFallback : takenFromSnapshot);
     }
-    loadData();
+
+    async function loadFishOverview() {
+      const fishSnapshot = await fishSnapshotPromise;
+      if (!active) return;
+
+      const rows = Array.isArray(fishSnapshot) ? fishSnapshot : [];
+      const latest = buildLatestCatch(rows);
+      setLatestCatch(latest);
+      setNameShort(latest?.angler || null);
+
+      setRecentBlanks(buildRecentBlanks(rows, sinceDate));
+
+      let externals = buildExternalCatches(rows, 20);
+      if (rows.length >= ADMIN_OVERVIEW_FISH_SNAPSHOT_LIMIT && externals.length < 20) {
+        const externalFallback = await resolveQueryData(
+          supabase
+            .from('fishes')
+            .select('angler, fish, size, timestamp, lat, lon, location_name')
+            .eq('club_id', clubId)
+            .not('lat', 'is', null)
+            .not('lon', 'is', null)
+            .not('blank', 'is', true)
+            .not('location_name', 'ilike', '%lobberich%')
+            .not('location_name', 'ilike', '%ferkensbruch%')
+            .not('location_name', 'is', null)
+            .order('timestamp', { ascending: false })
+            .limit(20),
+          'Externe Fänge',
+        );
+        if (!active) return;
+        if (Array.isArray(externalFallback)) externals = externalFallback;
+      }
+
+      setExternalCatches(externals);
+    }
+
+    async function loadProfiles() {
+      const profiles = await allProfilesDataPromise;
+      if (!active) return;
+      setAllProfiles(Array.isArray(profiles) ? profiles : []);
+    }
+
+    async function loadPushSubscribers() {
+      const [allProfilesData, pushSubs] = await Promise.all([
+        allProfilesDataPromise,
+        resolveQueryData(
+          supabase
+            .from('push_subscriptions')
+            .select('user_id, angler_name, device_label, opted_in, revoked_at')
+            .eq('club_id', clubId),
+          'Push-Abonnenten',
+        ),
+      ]);
+
+      if (!active) return;
+
+      if (!Array.isArray(pushSubs)) {
+        setPushByAngler([]);
+        setPushDeviceSummary([]);
+        return;
+      }
+
+      const profileNameById = (allProfilesData || []).reduce((acc, profile) => {
+        if (profile?.id) acc[profile.id] = profile.name || null;
+        return acc;
+      }, {});
+
+      const byAngler = pushSubs.reduce((acc, entry) => {
+        const fallbackName = entry?.user_id ? profileNameById[entry.user_id] : null;
+        const label = entry?.angler_name?.trim() || fallbackName || 'Unbekannt';
+        if (!acc[label]) acc[label] = { total: 0, active: 0 };
+        acc[label].total += 1;
+        if (entry?.opted_in && !entry?.revoked_at) acc[label].active += 1;
+        return acc;
+      }, {});
+
+      const byDevice = pushSubs.reduce((acc, entry) => {
+        const label = entry?.device_label?.trim() || 'Unbekanntes Gerät';
+        if (!acc[label]) acc[label] = { total: 0, active: 0 };
+        acc[label].total += 1;
+        if (entry?.opted_in && !entry?.revoked_at) acc[label].active += 1;
+        return acc;
+      }, {});
+
+      const sortedAngler = Object.entries(byAngler)
+        .map(([name, counts]) => ({ name, ...counts }))
+        .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+      const sortedDevices = Object.entries(byDevice)
+        .map(([device, counts]) => ({ device, ...counts }))
+        .sort((a, b) => b.total - a.total || a.device.localeCompare(b.device));
+
+      setPushByAngler(sortedAngler);
+      setPushDeviceSummary(sortedDevices);
+    }
+
+    const runLoad = (section, loader) => {
+      loader().catch((error) => {
+        logSectionError(section, error);
+      });
+    };
+
+    runLoad('Aktive Angler', loadActiveUsers);
+    runLoad('Entnommene Fische', loadTakenCatches);
+    runLoad('Fang-Übersicht', loadFishOverview);
+    runLoad('Profile', loadProfiles);
+    runLoad('Push-Abonnenten', loadPushSubscribers);
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -520,6 +653,8 @@ export default function AdminOverview() {
       const clubId = getActiveClubId();
       const snapshotIso = new Date().toISOString();
 
+      const { fromIso, toIso, upperBoundOp } = getPageViewRange(pageViewYearFilter, snapshotIso);
+
       const allRows = [];
       let rangeStart = 0;
       let pagesLoaded = 0;
@@ -527,14 +662,22 @@ export default function AdminOverview() {
 
       while (pagesLoaded < PAGE_VIEW_MAX_FETCH_PAGES) {
         const rangeEnd = rangeStart + PAGE_VIEW_PAGE_SIZE - 1;
-        const { data, error } = await supabase
+        let query = supabase
           .from('page_views')
-          .select('id, path, full_path, angler, session_id, created_at, metadata')
+          .select('id, path, angler, created_at, metadata')
           .eq('club_id', clubId)
-          .lte('created_at', snapshotIso)
           .order('created_at', { ascending: false })
           .order('id', { ascending: false })
           .range(rangeStart, rangeEnd);
+
+        if (fromIso) query = query.gte('created_at', fromIso);
+        if (toIso) {
+          query = upperBoundOp === 'lt'
+            ? query.lt('created_at', toIso)
+            : query.lte('created_at', toIso);
+        }
+
+        const { data, error } = await query;
 
         if (!active) return;
 
@@ -572,7 +715,7 @@ export default function AdminOverview() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [pageViewYearFilter]);
 
   useEffect(() => {
     let active = true;
@@ -652,13 +795,13 @@ export default function AdminOverview() {
     if (pageViewYearFilter === PAGE_VIEW_YEAR_FILTER_ALL) return;
     const selectedYear = Number(pageViewYearFilter);
     if (!Number.isInteger(selectedYear)) {
-      setPageViewYearFilter(PAGE_VIEW_YEAR_FILTER_ALL);
+      setPageViewYearFilter(currentYearFilter);
       return;
     }
     if (!pageViewAvailableYears.includes(selectedYear)) {
-      setPageViewYearFilter(PAGE_VIEW_YEAR_FILTER_ALL);
+      setPageViewYearFilter(currentYearFilter);
     }
-  }, [pageViewAvailableYears, pageViewYearFilter]);
+  }, [currentYearFilter, pageViewAvailableYears, pageViewYearFilter]);
 
   useEffect(() => {
     let active = true;

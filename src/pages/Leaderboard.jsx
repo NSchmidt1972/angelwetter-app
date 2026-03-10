@@ -1,33 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useFormattedNamesMap } from '@/hooks/useFormattedNamesMap';
+import { useViewerContext } from '@/hooks/useViewerContext';
 import PageContainer from '../components/PageContainer';
 import { isFerkensbruchLocation } from '@/utils/location';
 import { Card } from '@/components/ui';
+import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
+import { isMarilouAngler, isTrustedAngler, isVisibleByDate } from '@/utils/visibilityPolicy';
 
 const PRESET_YEARS = [2025, 2026];
 
 export default function Leaderboard() {
+  const resumeTick = useAppResumeTick({ enabled: true });
   const [fishes, setFishes] = useState([]);
-  const [formattedNamesMap, setFormattedNamesMap] = useState({});
+  const formattedNamesMap = useFormattedNamesMap();
   const [showIntern, setShowIntern] = useState(false);
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
 
-  const rawName = (localStorage.getItem('anglerName') || 'Unbekannt').trim();
-  const anglerNameLC = rawName.toLowerCase();
-
-  const vertraute = ['nicol schmidt', 'laura rittlinger'];
-  const PUBLIC_FROM = new Date('2025-05-29');
-
-  // ✅ Marilou-Erkennung (mehrere Schreibweisen möglich)
-  const MARILOU_ALIASES = ['marilou', 'marilou boes'];
-  const isMarilouName = (name) =>
-    MARILOU_ALIASES.includes((name || '').trim().toLowerCase());
-  const isCurrentUserMarilou = isMarilouName(rawName);
+  const { isMarilouViewer: isCurrentUserMarilou, isTrustedViewer } = useViewerContext();
 
   // ⬇️ Nur zählbare Fänge laden
   useEffect(() => {
+    let active = true;
     async function loadData() {
       // lade nur die Felder, die wir hier brauchen
       const clubId = getActiveClubId();
@@ -39,36 +36,17 @@ export default function Leaderboard() {
 
       if (error) {
         console.error('Fehler beim Laden der Fänge:', error);
-        setFishes([]);
+        if (active) setFishes([]);
         return;
       }
 
-      setFishes(data || []);
+      if (active) setFishes(data || []);
     }
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    async function prepareFormattedNames() {
-      const { data: profileData, error } = await supabase
-        .from('profiles')
-        .select('name')
-        .eq('club_id', getActiveClubId());
-
-      if (error) {
-        console.error('Fehler beim Laden der Profile:', error);
-        return;
-      }
-
-      const mapping = {};
-      (profileData || []).forEach((p) => {
-        const full = (p.name || '').trim();
-        if (full) mapping[full] = full; // immer vollständiger Name
-      });
-      setFormattedNamesMap(mapping);
-    }
-    prepareFormattedNames();
-  }, []);
+    void loadData();
+    return () => {
+      active = false;
+    };
+  }, [resumeTick]);
 
   // 🔒 Clientseitige Zusatzsicherheit (falls mal alte Zeilen ohne Flag dabei sind)
   const eligibleFishes = fishes.filter((f) => {
@@ -79,25 +57,23 @@ export default function Leaderboard() {
     if (!isFerkensbruchLocation(f.location_name)) return false;
 
     // 2) Basis-Sichtbarkeit (wie gehabt)
-    const fangDatum = new Date(f.timestamp);
-    const istAbNeu = fangDatum >= PUBLIC_FROM;
+    const istAbNeu = isVisibleByDate(f?.timestamp, {
+      isTrusted: false,
+      filterSetting: 'recent',
+    });
 
-    const fangVonVertrautem = vertraute.includes(
-      (f.angler || '').trim().toLowerCase()
-    );
-    const eingeloggtVertraut = vertraute.includes(anglerNameLC);
+    const fangVonVertrautem = isTrustedAngler(f?.angler);
+    const eingeloggtVertraut = isTrustedViewer;
 
     const darfSehenBasis = showIntern
       ? (eingeloggtVertraut && fangVonVertrautem)
       : istAbNeu;
 
     // 3) verwertbar (Größe vorhanden > 0)
-    const size = parseFloat(f.size);
-    const istVerwertbar =
-      f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0;
+    const istVerwertbar = isValuableFishEntry(f, { requireNotBlank: false });
 
     // 4) Marilou-Regel
-    const istFangVonMarilou = isMarilouName(f.angler);
+    const istFangVonMarilou = isMarilouAngler(f?.angler);
     if (istFangVonMarilou) {
       return isCurrentUserMarilou && istVerwertbar;
     }
@@ -125,9 +101,9 @@ export default function Leaderboard() {
   useEffect(() => {
     if (availableYears.length === 0) return;
     if (selectedYear !== 'all' && !availableYears.includes(selectedYear)) {
-      setSelectedYear('all');
+      setSelectedYear(currentYear);
     }
-  }, [availableYears, selectedYear]);
+  }, [availableYears, currentYear, selectedYear]);
 
   const filteredFishes = useMemo(() => {
     if (selectedYear === 'all' || !Number.isFinite(selectedYear)) return eligibleFishes;
@@ -145,7 +121,7 @@ export default function Leaderboard() {
     if (!byAngler[name]) {
       byAngler[name] = { total: 0, sizeSum: 0, byFish: {}, sizesByFish: {} };
     }
-    const size = parseFloat(f.size) || 0;
+    const size = parseFishSize(f.size) || 0;
     byAngler[name].total += 1;
     byAngler[name].sizeSum += size;
     const fishType = f.fish || 'Unbekannt';
@@ -186,7 +162,7 @@ export default function Leaderboard() {
         )}
       </p>
 
-      {vertraute.includes(anglerNameLC) && (
+      {isTrustedViewer && (
         <div className="flex justify-center items-center mb-6">
           <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 dark:text-gray-300">
             <span>Laura vs. Nicol</span>

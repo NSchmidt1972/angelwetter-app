@@ -8,8 +8,9 @@ import {
 import MarkerClusterGroup from 'react-leaflet-markercluster';
 import L from 'leaflet';
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '../supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
+import { FISH_SELECT, fetchClubFishesQuery } from '@/services/fishes';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -91,6 +92,7 @@ const MONTHS_DE = [
 ];
 
 export default function CatchMap() {
+  const resumeTick = useAppResumeTick({ enabled: true });
   const [entries, setEntries] = useState([]);
   const [onlyMine, setOnlyMine] = useState(false);
 
@@ -98,22 +100,23 @@ export default function CatchMap() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
 
-  const anglerName = (localStorage.getItem('anglerName') || '').trim().toLowerCase();
+  const [storedAnglerName] = useLocalStorageValue('anglerName', '');
+  const anglerName = (storedAnglerName || '').trim().toLowerCase();
 
   useEffect(() => {
+    let active = true;
     async function loadData() {
-      const clubId = getActiveClubId();
-      const { data: fishes, error } = await supabase
-        .from('fishes')
-        .select('*')
-        .eq('club_id', clubId)
+      const { data: fishes, error } = await fetchClubFishesQuery({ select: FISH_SELECT.MAP })
         .not('lat', 'is', null)
         .not('lon', 'is', null);
-      if (!error) setEntries(fishes || []);
+      if (!error && active) setEntries(fishes || []);
       else console.error("❌ Fehler bei fishes:", error);
     }
-    loadData();
-  }, []);
+    void loadData();
+    return () => {
+      active = false;
+    };
+  }, [resumeTick]);
 
   // Aktuelles Jahr immer in der Liste führen
   const availableYears = useMemo(() => {

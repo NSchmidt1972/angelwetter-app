@@ -1,7 +1,11 @@
 // src/hooks/useValidFishes.js
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '../supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useViewerContext } from '@/hooks/useViewerContext';
+import { PUBLIC_FROM as DEFAULT_PUBLIC_FROM, TRUSTED_ANGLERS } from '@/constants/visibility';
+import { isMarilouAngler, isTrustedAngler, isVisibleByDate } from '@/utils/visibilityPolicy';
+import { isValuableFishEntry } from '@/utils/fishValidation';
+import { FISH_SELECT, fetchClubFishesQuery } from '@/services/fishes';
 
 function useAbortableFetch() {
   const abortRef = useRef(null);
@@ -13,35 +17,11 @@ function useAbortableFetch() {
   };
 }
 
-export function useLocalStorageValue(key, defaultValue) {
-  const [val, setVal] = useState(() => localStorage.getItem(key) ?? defaultValue);
-  useEffect(() => {
-    const onStorage = (e) => { if (e.key === key) setVal(e.newValue ?? defaultValue); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [key, defaultValue]);
-  return [val, setVal];
-}
-
 function withTimeout(promise, ms = 8000) {
   return Promise.race([
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms)),
   ]);
-}
-
-// Robuster Datumsparser (ISO, "YYYY-MM-DD HH:mm:ss", Timestamp, etc.)
-function safeDate(ts) {
-  if (ts instanceof Date) return ts;
-  if (typeof ts === 'number') return new Date(ts);
-  if (typeof ts === 'string') {
-    let s = ts.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) s += 'T12:00:00';
-    if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
-    const d = new Date(s);
-    if (!Number.isNaN(d.getTime())) return d;
-  }
-  return new Date(NaN);
 }
 
 /**
@@ -50,16 +30,22 @@ function safeDate(ts) {
  *  - Vertraute: 'all' → alle, sonst nur ab PUBLIC_FROM
  *  - Nicht-Vertraute: nur ab PUBLIC_FROM
  */
-export function useValidFishes({ PUBLIC_FROM, vertraute }) {
+export function useValidFishes({ PUBLIC_FROM: publicFromArg, vertraute } = {}) {
+  const resumeTick = useAppResumeTick({ enabled: true });
   const abortable = useAbortableFetch();
 
-  const [storedAnglerName] = useLocalStorageValue('anglerName', 'Unbekannt');
-  const anglerName = (storedAnglerName || 'Unbekannt').trim();
-  const normalizedAnglerName = anglerName.toLowerCase();
-  const anglerFirstName = normalizedAnglerName.split(/\s+/)[0];
-  const isMarilou = anglerFirstName === 'marilou';
-  const istVertrauter = vertraute.includes(anglerName);
-  const [filterSetting] = useLocalStorageValue('dataFilter', 'recent');
+  const { anglerName, filterSetting, isMarilouViewer } = useViewerContext();
+  const trustedNames = Array.isArray(vertraute) ? vertraute : TRUSTED_ANGLERS;
+  const trustedNamesSet = useMemo(
+    () => new Set(trustedNames.map((name) => String(name || '').trim().toLowerCase())),
+    [trustedNames]
+  );
+  const isTrustedByConfig = useMemo(
+    () => trustedNamesSet.has(anglerName.toLowerCase()),
+    [anglerName, trustedNamesSet]
+  );
+  const istVertrauter = isTrustedByConfig || isTrustedAngler(anglerName);
+  const visibilityStart = publicFromArg || DEFAULT_PUBLIC_FROM;
 
   const [fishes, setFishes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,10 +57,7 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
       setLoading(true);
       setLoadError(null);
       try {
-        // WICHTIG: '*' nehmen, um 400 durch fehlende Spalten zu vermeiden
-        const clubId = getActiveClubId();
-        let query = supabase.from('fishes').select('*');
-        if (clubId) query = query.eq('club_id', clubId);
+        const query = fetchClubFishesQuery({ select: FISH_SELECT.VALIDATION });
 
         const { data, error, status } = await withTimeout(query, 8000);
         if (error) {
@@ -85,15 +68,14 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
 
         const arr = Array.isArray(data) ? data : [];
         const filtered = arr.filter((f) => {
-          const fangDatum = safeDate(f.timestamp);
-          const withinVisibility = istVertrauter
-            ? (filterSetting === 'all' || fangDatum >= PUBLIC_FROM)
-            : fangDatum >= PUBLIC_FROM;
+          const withinVisibility = isVisibleByDate(f?.timestamp, {
+            isTrusted: istVertrauter,
+            filterSetting,
+            publicFrom: visibilityStart,
+          });
           if (!withinVisibility) return false;
 
-          const anglerNormalized = (f?.angler || '').toString().trim().toLowerCase();
-          const anglerFirst = anglerNormalized.split(/\s+/)[0];
-          if (anglerFirst === 'marilou' && !isMarilou) return false;
+          if (isMarilouAngler(f?.angler) && !isMarilouViewer) return false;
           return true;
         });
 
@@ -108,18 +90,10 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [istVertrauter, filterSetting, isMarilou]);
+  }, [filterSetting, isMarilouViewer, istVertrauter, resumeTick, visibilityStart]);
 
   const validFishes = useMemo(() => {
-    return fishes.filter((f) => {
-      if (f.blank) return false;
-      const nameOk =
-        typeof f.fish === 'string' &&
-        f.fish.trim() !== '' &&
-        f.fish.toLowerCase() !== 'unbekannt';
-      const size = parseFloat(f.size);
-      return nameOk && !Number.isNaN(size) && size > 0;
-    });
+    return fishes.filter((f) => isValuableFishEntry(f));
   }, [fishes]);
 
   // Exponiere loadError, damit die Page was anzeigen kann
@@ -131,6 +105,6 @@ export function useValidFishes({ PUBLIC_FROM, vertraute }) {
     anglerName,
     filterSetting,
     istVertrauter,
-    isMarilou,
+    isMarilou: isMarilouViewer,
   };
 }

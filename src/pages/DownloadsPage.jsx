@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { createCatchPDF } from '@/utils/pdfExporter';
 import { isFerkensbruchLocation } from '@/utils/location';
+import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 import { Card } from '@/components/ui';
 
 export default function DownloadsPage() {
-  const [anglerName, setAnglerName] = useState('');
+  const [anglerName] = useLocalStorageValue('anglerName', 'Unbekannt');
   const [pdfYear, setPdfYear] = useState(new Date().getFullYear());
 
   const availableYears = useMemo(() => {
@@ -17,10 +18,6 @@ export default function DownloadsPage() {
       years.push(year);
     }
     return years;
-  }, []);
-
-  useEffect(() => {
-    setAnglerName(localStorage.getItem('anglerName') || 'Unbekannt');
   }, []);
 
   const downloadFile = (content, fileName, mimeType) => {

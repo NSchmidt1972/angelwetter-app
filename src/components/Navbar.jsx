@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import { supabase } from "@/supabaseClient";
+import { clearActiveClubId } from "@/utils/clubId";
 
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useResponsiveMenu } from "@/hooks/useResponsiveMenu";
@@ -103,7 +104,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     localStorage.removeItem("anglerName");
     localStorage.removeItem("shortAnglerName");
     localStorage.removeItem("angelwetter_profile_cache_v2");
-    localStorage.removeItem("activeClubId");
+    clearActiveClubId();
     setUser(null);
     navigate(prefixWithClub("/auth"));
   };
@@ -133,12 +134,12 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     const newValue = dataFilter === "recent" ? "all" : "recent";
     setDataFilter(newValue);
     localStorage.setItem("dataFilter", newValue);
+    window.dispatchEvent(new Event('angelwetter:storage-sync'));
     alert(
       newValue === "recent"
         ? "Nur Daten ab 01.06.2025 werden verwendet."
         : "Alle Daten werden verwendet."
     );
-    window.location.reload();
   };
 
   const handleCloseMobileMenu = () => {

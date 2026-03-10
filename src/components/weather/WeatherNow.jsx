@@ -4,6 +4,7 @@ import CurrentPanel from '@/components/weather/CurrentPanel';
 import HourlyScroller from '@/components/weather/HourlyScroller';
 import DailyScroller from '@/components/weather/DailyScroller';
 import {
+  getModelInfo,
   isAiCircuitOpen,
   isAiUnavailableError,
   predictForWeather,
@@ -13,6 +14,7 @@ import SegmentedSpinner from '@/components/weather/SegmentedSpinner';
 // --- prediction utils (unverändert gelassen) ---
 const PREDICTION_TTL_MS = 12 * 60 * 60 * 1000;
 const PREDICTION_CACHE_KEY = 'ai_pred_cache_v3';
+const MODEL_FINGERPRINT_SESSION_KEY = 'ai_model_fingerprint_v1';
 const REQUIRED_AI_MODEL_VERSION = '2026-02-14-main-max-agg-v10';
 const MAX_CONCURRENCY = 3;
 const INITIAL_HOURS = 12;
@@ -50,6 +52,127 @@ function makeKey(w) {
     w.humidity, w.wind_deg, w.moon_phase
   ].join('|');
 }
+
+function getFingerprintVersion(fingerprint) {
+  if (!fingerprint) return '';
+  return String(fingerprint).split('|')[0] || '';
+}
+
+function isVersionOnlyFingerprint(fingerprint) {
+  const value = String(fingerprint || '');
+  return Boolean(value) && !value.includes('|');
+}
+
+function isCompatibleFingerprint(requiredFingerprint, cachedFingerprint) {
+  if (!requiredFingerprint) return Boolean(cachedFingerprint);
+  if (!cachedFingerprint) return false;
+  if (requiredFingerprint === cachedFingerprint) return true;
+  const requiredVersion = getFingerprintVersion(requiredFingerprint);
+  const cachedVersion = getFingerprintVersion(cachedFingerprint);
+  return Boolean(requiredVersion && cachedVersion && requiredVersion === cachedVersion && isVersionOnlyFingerprint(cachedFingerprint));
+}
+
+function readStoredModelFingerprint() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = window.sessionStorage.getItem(MODEL_FINGERPRINT_SESSION_KEY);
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredModelFingerprint(fingerprint) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!fingerprint) {
+      window.sessionStorage.removeItem(MODEL_FINGERPRINT_SESSION_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(MODEL_FINGERPRINT_SESSION_KEY, fingerprint);
+  } catch {
+    // ignore quota/security errors
+  }
+}
+
+function mapDailyToPredictionInput(day) {
+  const dayDate = new Date(day.dt * 1000);
+  return {
+    temp: day.temp.day,
+    pressure: day.pressure,
+    wind: day.wind_speed,
+    humidity: day.humidity,
+    wind_deg: day.wind_deg,
+    moon_phase: day.moon_phase,
+    hour: 12,
+    date: dayDate.toISOString().slice(0, 10),
+    dt: day.dt,
+    timestamp: dayDate.toISOString(),
+  };
+}
+
+function mapHourlyToPredictionInput(hour, moonPhase) {
+  const hourDate = new Date(hour.dt * 1000);
+  return {
+    temp: hour.temp,
+    pressure: hour.pressure,
+    wind: hour.wind_speed,
+    humidity: hour.humidity,
+    wind_deg: hour.wind_deg,
+    moon_phase: moonPhase,
+    hour: hourDate.getHours(),
+    date: hourDate.toISOString().slice(0, 10),
+    dt: hour.dt,
+    timestamp: hourDate.toISOString(),
+  };
+}
+
+function normalizeIso(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function predictionFingerprint(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const apiVersion = String(payload?.api_model_version || '');
+  const trainedAt = normalizeIso(
+    payload?.trained_at
+      || payload?.model_trained_at
+      || payload?.last_trained_at
+      || payload?.models?.main?.trained_at
+      || payload?.stats?.trained_at
+      || payload?.metadata?.trained_at
+  ) || '';
+  const fishModelsAt = normalizeIso(
+    payload?.stats?.per_fish_model_trained_at
+      || payload?.metadata?.per_fish_model_trained_at
+      || payload?.models?.per_fish_type?.trained_at
+  ) || '';
+  const calibratorsAt = normalizeIso(
+    payload?.stats?.calibrators_trained_at
+      || payload?.metadata?.calibrators_trained_at
+      || payload?.models?.calibrators?.trained_at
+  ) || '';
+  const raw = `${apiVersion}|${trainedAt}|${fishModelsAt}|${calibratorsAt}`;
+  return raw.replace(/^\|+|\|+$/g, '') || null;
+}
+
+function modelInfoFingerprint(modelInfo) {
+  if (!modelInfo || typeof modelInfo !== 'object') return null;
+  const apiVersion = String(modelInfo?.api_model_version || '');
+  const trainedAt = normalizeIso(
+    modelInfo?.trained_at
+      || modelInfo?.main_from_species_trained_at
+      || modelInfo?.main_base_trained_at
+  ) || '';
+  const fishModelsAt = normalizeIso(modelInfo?.per_fish_model_trained_at) || '';
+  const calibratorsAt = normalizeIso(modelInfo?.calibrators_trained_at) || '';
+  const raw = `${apiVersion}|${trainedAt}|${fishModelsAt}|${calibratorsAt}`;
+  return raw.replace(/^\|+|\|+$/g, '') || null;
+}
+
 function usePredictionCache() {
   const ref = useRef(null);
 
@@ -62,17 +185,41 @@ function usePredictionCache() {
     }
   }
 
-  const get = useCallback((key) => {
+  const get = useCallback((key, requiredFingerprint = null, { allowFingerprintFallback = false } = {}) => {
     const entry = ref.current[key];
     if (!entry) return null;
     if (Date.now() - entry.ts > PREDICTION_TTL_MS) return null;
     const cachedVersion = entry?.v?.api_model_version;
     if (cachedVersion !== REQUIRED_AI_MODEL_VERSION) return null;
+    const cachedFingerprint = entry?.fp || predictionFingerprint(entry?.v);
+    if (requiredFingerprint) {
+      if (!isCompatibleFingerprint(requiredFingerprint, cachedFingerprint)) return null;
+      return entry.v;
+    }
+    if (!allowFingerprintFallback) return null;
     return entry.v;
   }, []);
 
-  const set = useCallback((key, value) => {
-    ref.current[key] = { ts: Date.now(), v: value };
+  const set = useCallback((key, value, { fingerprint = null } = {}) => {
+    ref.current[key] = { ts: Date.now(), v: value, fp: fingerprint || predictionFingerprint(value) };
+  }, []);
+
+  const purge = useCallback(({ requiredFingerprint = null } = {}) => {
+    const keys = Object.keys(ref.current || {});
+    let changed = false;
+    keys.forEach((key) => {
+      const entry = ref.current[key];
+      const expired = !entry || (Date.now() - entry.ts > PREDICTION_TTL_MS);
+      const wrongVersion = entry?.v?.api_model_version !== REQUIRED_AI_MODEL_VERSION;
+      const fingerprint = entry?.fp || predictionFingerprint(entry?.v);
+      const wrongFingerprint = Boolean(requiredFingerprint)
+        && !isCompatibleFingerprint(requiredFingerprint, fingerprint);
+      if (expired || wrongVersion || wrongFingerprint) {
+        delete ref.current[key];
+        changed = true;
+      }
+    });
+    return changed;
   }, []);
 
   const persist = useCallback(() => {
@@ -83,7 +230,7 @@ function usePredictionCache() {
     }
   }, []);
 
-  return useMemo(() => ({ get, set, persist }), [get, set, persist]);
+  return useMemo(() => ({ get, set, purge, persist }), [get, set, purge, persist]);
 }
 async function fetchPrediction(weather, signal) {
   return predictForWeather(weather, { signal });
@@ -109,6 +256,13 @@ async function runBatched(tasks, limit = MAX_CONCURRENCY) {
 
 function hasOwnPrediction(map, index) {
   return Object.prototype.hasOwnProperty.call(map, index);
+}
+
+function hasCompatiblePrediction(map, index, requiredFingerprint = null) {
+  if (!hasOwnPrediction(map, index)) return false;
+  if (!requiredFingerprint) return true;
+  const fingerprint = predictionFingerprint(map[index]);
+  return isCompatibleFingerprint(requiredFingerprint, fingerprint);
 }
 
 function isAbortError(error) {
@@ -146,6 +300,8 @@ export default function WeatherNow({
   }, [dailyBase, dailyPreds, dailyVisibleCount]);
 
   const cache = usePredictionCache();
+  const [modelFingerprint, setModelFingerprint] = useState(() => readStoredModelFingerprint());
+  const modelFingerprintRef = useRef(modelFingerprint);
   const hourlyRef = useRef(null);
   const dailyRef = useRef(null);
   const dailyAttemptsRef = useRef({});
@@ -153,6 +309,10 @@ export default function WeatherNow({
   const dailyInFlightRef = useRef(new Set());
   const hourlyInFlightRef = useRef(new Set());
   const aiUnavailableLoggedRef = useRef(false);
+
+  useEffect(() => {
+    modelFingerprintRef.current = modelFingerprint;
+  }, [modelFingerprint]);
 
   // ⏱ Auto-Refresh (nur sichtbar & online)
   useEffect(() => {
@@ -169,19 +329,65 @@ export default function WeatherNow({
   useEffect(() => {
     if (!data?.data?.daily || !data?.data?.current || !data?.data?.hourly) return;
     const dailySlice = data.data.daily.slice(0, 7);
+    const hourlySlice = data.data.hourly.slice(0, 24);
+    const moonPhase = dailySlice[0]?.moon_phase ?? null;
+    const activeFingerprint = modelFingerprintRef.current;
+    const hydratedDailyPreds = {};
+    const hydratedHourlyPreds = {};
+
+    for (let i = 0; i < dailySlice.length; i++) {
+      const weatherInput = mapDailyToPredictionInput(dailySlice[i]);
+      const key = makeKey(weatherInput);
+      const cached = cache.get(key, activeFingerprint, { allowFingerprintFallback: true });
+      if (cached) hydratedDailyPreds[i] = cached;
+    }
+    for (let i = 0; i < hourlySlice.length; i++) {
+      const weatherInput = mapHourlyToPredictionInput(hourlySlice[i], moonPhase);
+      const key = makeKey(weatherInput);
+      const cached = cache.get(key, activeFingerprint, { allowFingerprintFallback: true });
+      if (cached) hydratedHourlyPreds[i] = cached;
+    }
+
     setDailyBase(dailySlice);
     setDailyVisibleCount(Math.min(INITIAL_DAYS, dailySlice.length));
-    setDailyPreds({});
-    const slice = data.data.hourly.slice(0, 24);
-    setHourlyBase(slice);
-    setVisibleCount(Math.min(INITIAL_HOURS, slice.length));
-    setHourPreds({});
+    setDailyPreds(hydratedDailyPreds);
+    setHourlyBase(hourlySlice);
+    setVisibleCount(Math.min(INITIAL_HOURS, hourlySlice.length));
+    setHourPreds(hydratedHourlyPreds);
     dailyAttemptsRef.current = {};
     hourlyAttemptsRef.current = {};
     dailyInFlightRef.current.clear();
     hourlyInFlightRef.current.clear();
     if (hourlyRef.current) hourlyRef.current.scrollLeft = 0;
     if (dailyRef.current) dailyRef.current.scrollLeft = 0;
+  }, [data, cache]);
+
+  useEffect(() => {
+    if (!data?.data) return;
+    const ac = new AbortController();
+    let active = true;
+
+    (async () => {
+      try {
+        const info = await getModelInfo({ signal: ac.signal });
+        if (!active) return;
+        const fingerprint = modelInfoFingerprint(info);
+        if (!fingerprint) return;
+        setModelFingerprint((prev) => (prev === fingerprint ? prev : fingerprint));
+        writeStoredModelFingerprint(fingerprint);
+        const changed = cache.purge({ requiredFingerprint: fingerprint });
+        if (changed) cache.persist();
+      } catch (err) {
+        if (!isAbortError(err)) {
+          console.warn('ModelInfo für Cache-Invalidierung fehlgeschlagen:', err);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+      ac.abort();
+    };
   }, [data, cache]);
 
   // KI-Prognosen: sichtbare Daily-Karten
@@ -196,7 +402,7 @@ export default function WeatherNow({
         const maxVisible = Math.min(dailyVisibleCount, dailyBase.length);
         const indices = [];
         for (let i = 0; i < maxVisible; i++) {
-          if (hasOwnPrediction(dailyPreds, i)) continue;
+          if (hasCompatiblePrediction(dailyPreds, i, modelFingerprint)) continue;
           if (dailyInFlightRef.current.has(i)) continue;
           const retries = dailyAttemptsRef.current[i] || 0;
           if (retries >= MAX_PREDICTION_RETRIES) continue;
@@ -208,26 +414,14 @@ export default function WeatherNow({
 
         const tasks = indices.map((i) => {
           const day = dailyBase[i];
-          const dayDate = new Date(day.dt * 1000);
-          const w = {
-            temp: day.temp.day,
-            pressure: day.pressure,
-            wind: day.wind_speed,
-            humidity: day.humidity,
-            wind_deg: day.wind_deg,
-            moon_phase: day.moon_phase,
-            hour: 12,
-            date: dayDate.toISOString().slice(0, 10),
-            dt: day.dt,
-            timestamp: dayDate.toISOString(),
-          };
+          const w = mapDailyToPredictionInput(day);
           const key = makeKey(w);
           return async () => {
-            const c = cache.get(key);
+            const c = cache.get(key, modelFingerprint, { allowFingerprintFallback: true });
             if (c) return { i, pred: c };
             try {
               const pred = await fetchPrediction(w, signal);
-              cache.set(key, pred);
+              cache.set(key, pred, { fingerprint: modelFingerprint });
               return { i, pred: pred ?? null };
             } catch (err) {
               if (isAbortError(err)) {
@@ -269,7 +463,7 @@ export default function WeatherNow({
       };
     });
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
-  }, [dailyBase, dailyVisibleCount, dailyPreds, cache]);
+  }, [dailyBase, dailyVisibleCount, dailyPreds, cache, modelFingerprint]);
 
   // KI-Prognosen: sichtbare Stunden
   useEffect(() => {
@@ -285,7 +479,7 @@ export default function WeatherNow({
         const moonPhase = data?.data?.daily?.[0]?.moon_phase ?? null;
         const indices = [];
         for (let i = 0; i < Math.min(visibleCount, hourlyBase.length); i++) {
-          if (hasOwnPrediction(hourPreds, i)) continue;
+          if (hasCompatiblePrediction(hourPreds, i, modelFingerprint)) continue;
           if (hourlyInFlightRef.current.has(i)) continue;
           const retries = hourlyAttemptsRef.current[i] || 0;
           if (retries >= MAX_PREDICTION_RETRIES) continue;
@@ -297,26 +491,14 @@ export default function WeatherNow({
 
         const tasks = indices.map(i => {
           const h = hourlyBase[i];
-          const hDate = new Date(h.dt * 1000);
-          const w = {
-            temp: h.temp,
-            pressure: h.pressure,
-            wind: h.wind_speed,
-            humidity: h.humidity,
-            wind_deg: h.wind_deg,
-            moon_phase: moonPhase,
-            hour: hDate.getHours(),
-            date: hDate.toISOString().slice(0, 10),
-            dt: h.dt,
-            timestamp: hDate.toISOString(),
-          };
+          const w = mapHourlyToPredictionInput(h, moonPhase);
           const key = makeKey(w);
           return async () => {
-            const c = cache.get(key);
+            const c = cache.get(key, modelFingerprint, { allowFingerprintFallback: true });
             if (c) return { i, pred: c };
             try {
               const pred = await fetchPrediction(w, signal);
-              cache.set(key, pred);
+              cache.set(key, pred, { fingerprint: modelFingerprint });
               return { i, pred: pred ?? null };
             } catch (err) {
               if (isAbortError(err)) {
@@ -360,7 +542,7 @@ export default function WeatherNow({
     });
 
     return () => { if (typeof cancelIdle === 'function') cancelIdle(); };
-  }, [visibleCount, hourlyBase, hourPreds, cache, data]);
+  }, [visibleCount, hourlyBase, hourPreds, cache, data, modelFingerprint]);
 
   const loadMoreHours = useCallback(() => {
     setVisibleCount((vc) => {

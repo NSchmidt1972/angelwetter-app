@@ -7,6 +7,7 @@ import {
   formatDateTimeSafe,
   formatDayShortSafe,
   formatTimeSafe,
+  parseLocaleNumber,
 } from './utils';
 
 const Card = React.memo(function Card({ title, children }) {
@@ -151,21 +152,25 @@ export default function FunFactsCards({ data }) {
                   </b>
                 </p>
                 <ul className="space-y-2">
-                  {heaviestFish.items.map((f) => (
-                    <li key={f.id} className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">
-                          {f.fish}
-                          {parseFloat(f.size) > 0 ? ` • ${parseFloat(f.size).toFixed(0)} cm` : ''} •{' '}
-                          {formatDateTimeSafe(f.timestamp)}
+                  {heaviestFish.items.map((f) => {
+                    const size = parseLocaleNumber(f?.size);
+                    const weight = parseLocaleNumber(f?.weight);
+                    return (
+                      <li key={f.id} className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-green-700 dark:text-green-300">{f.angler}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-300">
+                            {f.fish}
+                            {Number.isFinite(size) && size > 0 ? ` • ${size.toFixed(0)} cm` : ''} •{' '}
+                            {formatDateTimeSafe(f.timestamp)}
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-xl font-bold text-green-700 dark:text-green-300">
-                        {parseFloat(f.weight).toFixed(1)} kg
-                      </div>
-                    </li>
-                  ))}
+                        <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                          {Number.isFinite(weight) && weight > 0 ? `${weight.toFixed(1)} kg` : 'k. A.'}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </>
             ) : (
@@ -285,31 +290,37 @@ export default function FunFactsCards({ data }) {
 
           // 4) Meiste Fische in einer Stunde
           <Card key="hour" title="Wer hat die meisten Fische in einer Stunde gefangen?">
-            <p className="mb-2">
-              <strong>{mostInOneHour.count}</strong> Fänge innerhalb einer Stunde – Rekordhalter:
-            </p>
-            <ul className="space-y-2">
-              {mostInOneHour.items.map((it, idx) => (
-                <li key={idx} className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-300">{it.hourLabel} Uhr</div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {it.examples.map((e) => (
-                        <Pill key={e.id}>
-                          {e.fish} • {parseFloat(e.size).toFixed(0)} cm
-                        </Pill>
-                      ))}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {mostInOneHour.count > 1 ? (
+              <>
+                <p className="mb-2">
+                  <strong>{mostInOneHour.count}</strong> Fänge innerhalb einer Stunde – Rekordhalter:
+                </p>
+                <ul className="space-y-2">
+                  {mostInOneHour.items.map((it, idx) => (
+                    <li key={idx} className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">{it.hourLabel} Uhr</div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {it.examples.map((e) => (
+                            <Pill key={e.id}>
+                              {e.fish} • {parseFloat(e.size).toFixed(0)} cm
+                            </Pill>
+                          ))}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>Keine Daten über 1 Fang pro Stunde.</p>
+            )}
           </Card>,
 
           // 5) Meiste Fischarten an einem Tag
           <Card key="speciesDay" title="Wer hat die meisten Fischarten an einem Tag gefangen?">
-            {mostSpeciesInOneDay.count > 0 ? (
+            {mostSpeciesInOneDay.count > 1 ? (
               <>
                 <p className="mb-2">
                   <strong>{mostSpeciesInOneDay.count}</strong> verschiedene Arten – Rekordhalter:
@@ -336,7 +347,7 @@ export default function FunFactsCards({ data }) {
                 </ul>
               </>
             ) : (
-              <p>Keine Daten</p>
+              <p>Keine Daten über 1 Art pro Tag.</p>
             )}
           </Card>,
 
@@ -629,7 +640,7 @@ export default function FunFactsCards({ data }) {
             )}
           </Card>,
           <Card key="speciesHour" title="Wer hat die meisten Fischarten in 1 Stunde gefangen?">
-            {mostSpeciesInOneHour.count > 0 ? (
+            {mostSpeciesInOneHour.count > 1 ? (
               <>
                 <p className="mb-2">
                   <strong>{mostSpeciesInOneHour.count}</strong> verschiedene Arten – Rekordhalter:
@@ -657,7 +668,7 @@ export default function FunFactsCards({ data }) {
                 </ul>
               </>
             ) : (
-              <p>Keine Daten</p>
+              <p>Keine Daten über 1 Art pro Stunde.</p>
             )}
           </Card>,
 
@@ -704,9 +715,11 @@ export default function FunFactsCards({ data }) {
 
           // 17) Nachteule – Meiste Nachtfänge
           <Card key="night-count" title="🦉 Wer ist unsere Nachteule?">
-            {nightOwls.winners.length > 0 ? (
+            {(nightOwls.ranking[0]?.count ?? 0) > 1 ? (
               <ul className="space-y-2">
-                {nightOwls.winners.map((it, idx) => (
+                {nightOwls.winners
+                  .filter((it) => it.count > 1)
+                  .map((it, idx) => (
                   <li key={idx} className="flex items-start justify-between gap-3">
                     <div className="max-w-[70%]">
                       <div className="font-medium text-green-700 dark:text-green-300">{it.angler}</div>
@@ -723,16 +736,19 @@ export default function FunFactsCards({ data }) {
                 ))}
               </ul>
             ) : (
-              <p>Keine Daten</p>
+              <p>Keine Daten über 1 Nachtfang.</p>
             )}
 
-            {nightOwls.ranking.length > 0 && (
+            {nightOwls.ranking.some((r) => r.count > 1) && (
               <div className="mt-4">
                 <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
                   Ranking (Top 5)
                 </div>
                 <ul className="divide-y divide-gray-200/60 dark:divide-white/10 rounded-lg border border-gray-200/60 dark:border-white/10 overflow-hidden">
-                  {nightOwls.ranking.slice(0, 5).map((r, i) => (
+                  {nightOwls.ranking
+                    .filter((r) => r.count > 1)
+                    .slice(0, 5)
+                    .map((r, i) => (
                     <li key={r.angler} className="flex items-center justify-between px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="w-6 text-sm tabular-nums text-gray-500 dark:text-gray-400">

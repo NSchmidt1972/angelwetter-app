@@ -3,12 +3,14 @@ import {
   ensureOneSignalInitialized,
   getPushStatusSnapshot,
   getSubscriptionId,
+  isOneSignalEnabledForRuntime,
   requestPushPermission,
   withOneSignal,
 } from '@/onesignal/onesignalService';
 
 export default function useOneSignal() {
   useEffect(() => {
+    if (!isOneSignalEnabledForRuntime()) return;
     ensureOneSignalInitialized().catch((err) => {
       console.warn('[useOneSignal] Initialisierung fehlgeschlagen:', err);
     });

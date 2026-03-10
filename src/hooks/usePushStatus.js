@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
   attachPushStatusListeners,
+  clearOneSignalSafariBackoff,
   ensureOneSignalInitialized,
+  getOneSignalRuntimeBlockReason,
   getPushStatusSnapshot,
   getSubscriptionId,
+  isOneSignalEnabledForRuntime,
   isPushSupported,
   subscribeCurrentUser,
   unsubscribeCurrentUser,
@@ -29,6 +32,25 @@ export default function usePushStatus() {
     let cleanup = null;
 
     const start = async () => {
+      if (!isOneSignalEnabledForRuntime()) {
+        if (!cancelled) {
+          const reason = getOneSignalRuntimeBlockReason();
+          setState((prev) => ({
+            ...prev,
+            sdk: null,
+            supported: reason === 'safari-disabled-by-env' ? false : null,
+            loading: false,
+            error:
+              reason === 'safari-backoff'
+                ? 'Push wird gerade in Safari vorbereitet. Bitte kurz erneut versuchen.'
+                : reason === 'safari-disabled-by-env'
+                  ? 'Push ist in Safari derzeit deaktiviert.'
+                  : null,
+          }));
+        }
+        return;
+      }
+
       try {
         const sdk = await ensureOneSignalInitialized();
         if (cancelled) return;
@@ -84,6 +106,33 @@ export default function usePushStatus() {
   }, []);
 
   const subscribe = async () => {
+    if (!isOneSignalEnabledForRuntime()) {
+      const reason = getOneSignalRuntimeBlockReason();
+      if (reason === 'safari-backoff') {
+        // Expliziter User-Intent darf den temporären Backoff einmalig aufheben.
+        clearOneSignalSafariBackoff();
+      } else {
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          supported: reason === 'safari-disabled-by-env' ? false : null,
+          error: reason === 'safari-backoff'
+            ? 'Push ist kurz pausiert (Safari-Backoff). Bitte in 1-2 Minuten erneut versuchen.'
+            : 'Push ist in Safari derzeit deaktiviert.',
+        }));
+        return;
+      }
+
+      if (!isOneSignalEnabledForRuntime()) {
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          supported: null,
+          error: 'Push ist kurz pausiert (Safari-Backoff). Bitte erneut versuchen.',
+        }));
+        return;
+      }
+    }
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const sdk = await ensureOneSignalInitialized();
@@ -129,6 +178,16 @@ export default function usePushStatus() {
   };
 
   const unsubscribe = async () => {
+    if (!isOneSignalEnabledForRuntime()) {
+      const reason = getOneSignalRuntimeBlockReason();
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        supported: reason === 'safari-disabled-by-env' ? false : null,
+        error: null,
+      }));
+      return;
+    }
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const sdk = await ensureOneSignalInitialized();

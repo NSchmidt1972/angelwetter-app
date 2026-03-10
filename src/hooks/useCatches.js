@@ -1,6 +1,6 @@
 // src/hooks/useCatches.js
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PAGE_SIZE, CACHE_KEY, VERTRAUTE } from '../constants';
+import { PAGE_SIZE, CACHE_KEY, PUBLIC_FROM } from '../constants';
 import {
   listFishes,
   countFishes,
@@ -13,6 +13,8 @@ import { isVisibleToUser } from '../utils/filters';
 import { readCache, writeCache } from '../utils/cache';
 import { withTimeout } from '@/utils/async';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { isTrustedAngler } from '@/utils/visibilityPolicy';
+import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 
 const CATCHES_TIMEOUT_MS = 12000;
 
@@ -25,13 +27,13 @@ export function useCatches(anglerName, onlyMine) {
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(null);
   const [visibilityPending, setVisibilityPending] = useState({});
+  const [filterSetting] = useLocalStorageValue('dataFilter', 'recent');
 
-  const isTrusted = useMemo(() => VERTRAUTE.includes(anglerName), [anglerName]);
+  const isTrusted = useMemo(() => isTrustedAngler(anglerName), [anglerName]);
   const sentinelRef = useRef(null);
   const queryVersionRef = useRef(0);
   const activeRequestIdRef = useRef(0);
   const applyVisibilityFilter = useCallback((items, mineFlag = onlyMine) => {
-    const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
     return (items || []).filter((entry) =>
       isVisibleToUser(entry, {
         isTrusted,
@@ -40,7 +42,7 @@ export function useCatches(anglerName, onlyMine) {
         filterSetting,
       })
     );
-  }, [onlyMine, isTrusted, anglerName]);
+  }, [onlyMine, isTrusted, anglerName, filterSetting]);
 
   // initial cache warm
   useEffect(() => {
@@ -58,7 +60,7 @@ export function useCatches(anglerName, onlyMine) {
     setHasMore(true);
     setPage(0);
     setLoading(true);
-  }, [onlyMine, anglerName]);
+  }, [onlyMine, anglerName, filterSetting]);
 
   useEffect(() => {
     if (resumeTick === 0) return;
@@ -113,8 +115,7 @@ export function useCatches(anglerName, onlyMine) {
   useEffect(() => {
     let active = true;
     (async () => {
-      const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
-      const fromIso = (!isTrusted || filterSetting !== 'all') ? new Date('2025-06-01').toISOString() : null;
+      const fromIso = (!isTrusted || filterSetting !== 'all') ? PUBLIC_FROM.toISOString() : null;
       const query = await countFishes({ onlyMine, anglerName, fromIso });
       const { count, error } = await withTimeout(query, 10000, 'Count timeout');
       if (!active) return;
@@ -124,7 +125,7 @@ export function useCatches(anglerName, onlyMine) {
     return () => {
       active = false;
     };
-  }, [onlyMine, anglerName, isTrusted]);
+  }, [onlyMine, anglerName, filterSetting, isTrusted, resumeTick]);
 
   const loadNext = useCallback(() => {
     if (loading || !hasMore) return;

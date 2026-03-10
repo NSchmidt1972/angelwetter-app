@@ -35,7 +35,7 @@ export default function DailyScroller({ days, onScroll, scrollRef }) {
               <p className="text-sm text-gray-600 dark:text-gray-400">{moonPhaseText(day.moon_phase)}</p>
               {day.aiPrediction?.probability != null ? (
                 <p className="text-sm text-green-700 dark:text-green-300 font-semibold mt-2">
-                  🎯 {Number(day.aiPrediction.probability).toFixed(0)} % <FishRating probability={day.aiPrediction.probability} />
+                  🎯 {Number(day.aiPrediction.probability).toFixed(1)} % <FishRating probability={day.aiPrediction.probability} />
                 </p>
               ) : (
                 <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-600 dark:text-gray-400">

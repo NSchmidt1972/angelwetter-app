@@ -8,6 +8,7 @@ import SeasonalSection from '@/features/boardOverview/components/SeasonalSection
 import CrayfishSection from '@/features/boardOverview/components/CrayfishSection';
 import AdminMembersManage from '@/pages/AdminMembersManage';
 import { Card } from '@/components/ui';
+import { hasKnownFishName, normalizeFishName } from '@/utils/fishValidation';
 import {
   fetchProfiles,
   fetchWhitelist,
@@ -23,13 +24,15 @@ import {
   formatDecimal,
   formatNumber,
   formatPercent,
-  getColorStyleByIndex,
+  getColorStyleByFishName,
   getMonthsForAllYears,
   getMonthsForSelection,
   normalizeRoleValue,
 } from '@/features/boardOverview/utils';
+import { PUBLIC_FROM } from '@/constants/visibility';
 
 export default function BoardOverview() {
+  const currentYear = new Date().getFullYear();
   const [profiles, setProfiles] = useState([]);
   const [whitelist, setWhitelist] = useState([]);
   const [fishEntries, setFishEntries] = useState([]);
@@ -43,19 +46,19 @@ export default function BoardOverview() {
   const [showActiveAnglers, setShowActiveAnglers] = useState(false);
   const [selectedFishDetail, setSelectedFishDetail] = useState('');
   const [activeSeasonalFish, setActiveSeasonalFish] = useState([]);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedYear, setSelectedYear] = useState(currentYear);
   const [activityRange, setActivityRange] = useState('30d');
   const detailSectionRef = useRef(null);
 
   const availableYears = useMemo(() => {
-    const years = new Set([new Date().getFullYear()]);
+    const years = new Set([currentYear]);
     fishEntries.forEach((entry) => {
       const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
       if (!ts || Number.isNaN(ts.getTime())) return;
       years.add(ts.getFullYear());
     });
     return Array.from(years).sort((a, b) => b - a);
-  }, [fishEntries]);
+  }, [currentYear, fishEntries]);
 
   const yearOptions = useMemo(() => ['all', ...availableYears], [availableYears]);
   const selectedYearLabel = selectedYear === 'all' ? 'Alle Jahre' : selectedYear;
@@ -66,17 +69,17 @@ export default function BoardOverview() {
 
   useEffect(() => {
     if (availableYears.length === 0) {
-      setSelectedYear('all');
+      setSelectedYear(currentYear);
       return;
     }
     if (selectedYear == null) {
-      setSelectedYear('all');
+      setSelectedYear(currentYear);
       return;
     }
     if (selectedYear !== 'all' && !availableYears.includes(selectedYear)) {
-      setSelectedYear(availableYears[0]);
+      setSelectedYear(currentYear);
     }
-  }, [availableYears, selectedYear]);
+  }, [availableYears, currentYear, selectedYear]);
 
   const filteredFishEntries = useMemo(() => {
     if (selectedYear === 'all') return fishEntries;
@@ -162,8 +165,8 @@ export default function BoardOverview() {
 
   const fishStats = useMemo(() => {
     const grouped = filteredFishEntries.reduce((acc, entry) => {
-      const fishName = entry?.fish ? String(entry.fish).trim() : '';
-      if (!fishName || entry?.blank === true) return acc;
+      const fishName = normalizeFishName(entry?.fish);
+      if (!hasKnownFishName(fishName) || entry?.blank === true) return acc;
 
       if (!acc[fishName]) acc[fishName] = { fish: fishName, total: 0, taken: 0, entries: [] };
       acc[fishName].total += 1;
@@ -239,9 +242,8 @@ export default function BoardOverview() {
       const dateKey = ts.toISOString().slice(0, 10);
       const anglerKey = (entry?.angler || 'Unbekannt').trim() || 'Unbekannt';
       const isBlank = entry?.blank === true;
-      const fishName = entry?.fish ? String(entry.fish).trim() : '';
-      const hasFish =
-        fishName !== '' && fishName.toLowerCase() !== 'unbekannt' && entry.blank !== true;
+      const fishName = normalizeFishName(entry?.fish);
+      const hasFish = hasKnownFishName(fishName) && entry.blank !== true;
 
       if (isBlank) {
         const hour = ts.getHours();
@@ -362,9 +364,8 @@ export default function BoardOverview() {
       const dateKey = ts.toISOString().slice(0, 10);
       const anglerKey = (entry?.angler || 'Unbekannt').trim() || 'Unbekannt';
       const isBlank = entry?.blank === true;
-      const fishName = entry?.fish ? String(entry.fish).trim() : '';
-      const hasFish =
-        fishName !== '' && fishName.toLowerCase() !== 'unbekannt' && entry.blank !== true;
+      const fishName = normalizeFishName(entry?.fish);
+      const hasFish = hasKnownFishName(fishName) && entry.blank !== true;
 
       if (isBlank) {
         blankSessionsMap[monthKey].add(`${anglerKey}__${dateKey}`);
@@ -492,8 +493,8 @@ export default function BoardOverview() {
 
     filteredFishEntries.forEach((entry) => {
       if (entry?.blank === true) return;
-      const fishName = entry?.fish ? String(entry.fish).trim() : '';
-      if (!fishName) return;
+      const fishName = normalizeFishName(entry?.fish);
+      if (!hasKnownFishName(fishName)) return;
       const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
       if (!ts || Number.isNaN(ts.getTime())) return;
       const monthKey = allYearsMode
@@ -508,8 +509,8 @@ export default function BoardOverview() {
     const fishList = Object.entries(totalByFish)
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'de'))
-      .map((fish, index) => {
-        const color = getColorStyleByIndex(index);
+      .map((fish) => {
+        const color = getColorStyleByFishName(fish.name);
         return { ...fish, color };
       });
 
@@ -583,7 +584,7 @@ export default function BoardOverview() {
     setFishStatsError('');
     try {
       const data = await fetchFishAggregates();
-      const PUBLIC_FROM_ANALYSIS = new Date('2025-06-01').getTime();
+      const publicFromAnalysisTs = PUBLIC_FROM.getTime();
       const items = Array.isArray(data) ? data : [];
 
       // Analyse-Logik für Fang-/Schneidertage: keine Größenpflicht, kein count_in_stats-Filter
@@ -592,12 +593,11 @@ export default function BoardOverview() {
         if (!isFerkensbruchLocation(entry?.location_name)) return false;
 
         const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
-        if (!Number.isFinite(ts) || ts < PUBLIC_FROM_ANALYSIS) return false;
+        if (!Number.isFinite(ts) || ts < publicFromAnalysisTs) return false;
 
         if (entry?.blank === true) return false;
 
-        const fishName = entry?.fish ? String(entry.fish).trim() : '';
-        if (!fishName || fishName.toLowerCase() === 'unbekannt') return false;
+        if (!hasKnownFishName(entry?.fish)) return false;
 
         return true;
       });
@@ -607,7 +607,7 @@ export default function BoardOverview() {
         if (!isFerkensbruchLocation(entry?.location_name)) return false;
 
         const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
-        if (!Number.isFinite(ts) || ts < PUBLIC_FROM_ANALYSIS) return false;
+        if (!Number.isFinite(ts) || ts < publicFromAnalysisTs) return false;
 
         return entry?.blank === true;
       });

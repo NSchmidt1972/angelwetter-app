@@ -2,8 +2,9 @@
 import { Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom';
 import { lazy, useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
-import { setActiveClubId } from '@/utils/clubId';
+import { getClubIdForSlug, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
+import { debugLog } from '@/utils/runtimeDebug';
 
 // 🔐 Sicherer Lazy-Helper
 function safeLazy(importer, FallbackName) {
@@ -84,14 +85,13 @@ function ClubGuard() {
   const { clubSlug } = useParams();
   const [status, setStatus] = useState('loading'); // loading | ok | notfound
 
-  const canUseLocalClubFallback = useCallback(() => {
-    try {
-      const stored = window.localStorage.getItem('activeClubId');
-      if (stored) return true;
-    } catch {
-      /* ignore */
+  const resolveLocalClubFallback = useCallback(() => {
+    const bySlug = getClubIdForSlug(clubSlug);
+    if (bySlug) return bySlug;
+    if ((clubSlug || '').toLowerCase() === 'asv-rotauge') {
+      return getClubIdForSlug('asv-rotauge');
     }
-    return (clubSlug || '').toLowerCase() === 'asv-rotauge';
+    return null;
   }, [clubSlug]);
 
   useEffect(() => {
@@ -104,14 +104,29 @@ function ClubGuard() {
     }
 
     setStatus('loading');
+    // Frühzeitige Wiederherstellung: Falls Club bereits einmal aufgelöst wurde,
+    // sofort in den aktiven Kontext übernehmen (auch wenn Club-Check später fehlschlägt).
+    const cachedClubId = resolveLocalClubFallback();
+    if (cachedClubId) {
+      setActiveClubId(cachedClubId);
+    }
+    debugLog('clubguard:start', {
+      clubSlug,
+      cachedClubId: cachedClubId || null,
+    });
+
     if (typeof window !== 'undefined') {
       fallbackTimerId = window.setTimeout(() => {
         if (!active) return;
-        if (canUseLocalClubFallback()) {
+        const fallbackClubId = resolveLocalClubFallback();
+        if (fallbackClubId) {
+          setActiveClubId(fallbackClubId);
+          debugLog('clubguard:timeout-fallback-ok', { clubSlug, clubId: fallbackClubId });
           console.warn('⚠️ Club-Check Timeout-Fallback aktiv, Route wird mit lokalem Club-Kontext freigegeben.');
           setStatus('ok');
           return;
         }
+        debugLog('clubguard:timeout-fallback-miss', { clubSlug });
         console.warn('⚠️ Club-Check Timeout ohne Club-Kontext, Route wird nicht freigegeben.');
         setStatus('notfound');
       }, 12000);
@@ -132,12 +147,21 @@ function ClubGuard() {
         if (!active) return;
         if (error) {
           console.warn('⚠️ Club-Check fehlgeschlagen:', error?.message || error);
+          debugLog('clubguard:check-error', {
+            clubSlug,
+            status: error?.status || null,
+            message: error?.message || String(error || ''),
+          });
           // Wenn Policies oder temporäre Infra-Fehler vorliegen, UI nicht blockieren.
           if (error.status === 406 || error.status === 403 || error.status >= 500) {
-            if (!canUseLocalClubFallback()) {
+            const fallbackClubId = resolveLocalClubFallback();
+            if (!fallbackClubId) {
+              debugLog('clubguard:fallback-unavailable', { clubSlug });
               setStatus('notfound');
               return;
             }
+            setActiveClubId(fallbackClubId);
+            debugLog('clubguard:fallback-ok-after-error', { clubSlug, clubId: fallbackClubId });
             setStatus('ok');
             return;
           }
@@ -146,14 +170,33 @@ function ClubGuard() {
         }
         if (data?.id) {
           setActiveClubId(data.id);
+          rememberClubSlugId(clubSlug, data.id);
+          debugLog('clubguard:check-ok', {
+            clubSlug,
+            clubId: data.id,
+            slugFromDb: data.slug || null,
+          });
           setStatus('ok');
         } else {
+          debugLog('clubguard:check-notfound', { clubSlug });
           setStatus('notfound');
         }
       } catch (error) {
         if (!active) return;
         console.warn('⚠️ Club-Check abgebrochen/fehlgeschlagen:', error?.message || error);
-        setStatus(canUseLocalClubFallback() ? 'ok' : 'notfound');
+        debugLog('clubguard:check-exception', {
+          clubSlug,
+          message: error?.message || String(error || ''),
+        });
+        const fallbackClubId = resolveLocalClubFallback();
+        if (fallbackClubId) {
+          setActiveClubId(fallbackClubId);
+          debugLog('clubguard:exception-fallback-ok', { clubSlug, clubId: fallbackClubId });
+          setStatus('ok');
+        } else {
+          debugLog('clubguard:exception-fallback-miss', { clubSlug });
+          setStatus('notfound');
+        }
       } finally {
         if (fallbackTimerId != null && typeof window !== 'undefined') {
           window.clearTimeout(fallbackTimerId);
@@ -169,7 +212,7 @@ function ClubGuard() {
         window.clearTimeout(fallbackTimerId);
       }
     };
-  }, [clubSlug, canUseLocalClubFallback]);
+  }, [clubSlug, resolveLocalClubFallback]);
 
   if (status === 'loading') {
     return <div className="p-6 text-center">Lädt Verein...</div>;

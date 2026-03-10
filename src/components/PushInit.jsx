@@ -3,8 +3,12 @@ import { supabase } from '@/supabaseClient';
 import {
   attachPushStatusListeners,
   ensureOneSignalInitialized,
+  getOneSignalRuntimeBlockReason,
   getSubscriptionId,
+  isOneSignalDisabledError,
+  shouldAutoInitOneSignalRuntime,
   revokeCurrentSubscription,
+  setOneSignalSafariBackoff,
   syncCurrentSubscription,
 } from '@/onesignal/onesignalService';
 
@@ -21,6 +25,14 @@ export default function PushInit() {
 
     const start = async () => {
       try {
+        const blockReason = getOneSignalRuntimeBlockReason();
+        if (!shouldAutoInitOneSignalRuntime()) {
+          if (blockReason === 'safari-backoff') {
+            console.warn('[PushInit] Safari OneSignal-Init im Backoff, wird übersprungen.');
+          }
+          return;
+        }
+
         const OneSignal = await ensureOneSignalInitialized();
         if (disposed) return;
 
@@ -77,6 +89,13 @@ export default function PushInit() {
         });
         registerCleanup(() => authSub?.subscription?.unsubscribe?.());
       } catch (err) {
+        if (isOneSignalDisabledError(err)) {
+          return;
+        }
+        const message = String(err?.message || err || '').toLowerCase();
+        if (message.includes('serviceworkerregistration') || message.includes('postmessage')) {
+          setOneSignalSafariBackoff();
+        }
         console.warn('[PushInit] OneSignal-Initialisierung fehlgeschlagen:', err);
       }
     };

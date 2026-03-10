@@ -14,6 +14,10 @@ import {
 const ONESIGNAL_APP_ID =
   import.meta.env.VITE_ONESIGNAL_APP_ID?.trim() ||
   'b05a44e8-bea5-4941-8972-5194254aadad';
+const DISABLE_PUSH_ON_SAFARI = import.meta.env.VITE_DISABLE_PUSH_ON_SAFARI === '1';
+const PUSH_AUTO_INIT_MODE = String(import.meta.env.VITE_PUSH_AUTO_INIT || 'default').trim().toLowerCase();
+const SAFARI_ONESIGNAL_BACKOFF_KEY = '__aw_safari_onesignal_backoff_until';
+const SAFARI_ONESIGNAL_BACKOFF_MS = 30 * 60 * 1000;
 
 const GLOBAL_STATE_KEY = '__awOneSignalServiceState';
 
@@ -21,6 +25,8 @@ const localState = {
   initialized: false,
   initPromise: null,
 };
+const SAFARI_ONESIGNAL_INIT_DELAY_MS = 1200;
+const SW_READY_TIMEOUT_MS = 8000;
 
 function getServiceState() {
   if (typeof window === 'undefined') return localState;
@@ -55,6 +61,109 @@ function readLocalStorageValue(key) {
     return window.localStorage.getItem(key) || null;
   } catch {
     return null;
+  }
+}
+
+function isLikelySafariWebKit() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = String(navigator.userAgent || '').toLowerCase();
+  return ua.includes('safari') && !ua.includes('chrome') && !ua.includes('chromium') && !ua.includes('android');
+}
+
+function readSafariBackoffUntil() {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const parsed = Number.parseInt(window.sessionStorage.getItem(SAFARI_ONESIGNAL_BACKOFF_KEY) || '0', 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeSafariBackoffUntil(until) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(SAFARI_ONESIGNAL_BACKOFF_KEY, String(until));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function setOneSignalSafariBackoff(durationMs = SAFARI_ONESIGNAL_BACKOFF_MS) {
+  if (!isLikelySafariWebKit()) return;
+  writeSafariBackoffUntil(Date.now() + Math.max(1000, durationMs));
+}
+
+export function clearOneSignalSafariBackoff() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(SAFARI_ONESIGNAL_BACKOFF_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function shouldAutoInitByMode() {
+  if (PUSH_AUTO_INIT_MODE === 'off') return false;
+  if (PUSH_AUTO_INIT_MODE === 'on') return true;
+  // default: Safari nur lazy/on-demand initialisieren, um Resume stabil zu halten.
+  return !isLikelySafariWebKit();
+}
+
+export function getOneSignalRuntimeBlockReason() {
+  if (DISABLE_PUSH_ON_SAFARI && isLikelySafariWebKit()) return 'safari-disabled-by-env';
+  if (isLikelySafariWebKit() && readSafariBackoffUntil() > Date.now()) return 'safari-backoff';
+  return null;
+}
+
+export function isOneSignalEnabledForRuntime() {
+  return !getOneSignalRuntimeBlockReason();
+}
+
+export function shouldAutoInitOneSignalRuntime() {
+  return isOneSignalEnabledForRuntime() && shouldAutoInitByMode();
+}
+
+export function isOneSignalDisabledError(error) {
+  return String(error?.code || '') === 'ONE_SIGNAL_DISABLED_RUNTIME';
+}
+
+async function wait(ms) {
+  if (typeof window === 'undefined') return;
+  await new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForVisible({ timeoutMs = 10_000 } = {}) {
+  if (typeof document === 'undefined') return;
+  if (document.visibilityState === 'visible') return;
+  await new Promise((resolve) => {
+    let done = false;
+    let timeoutId = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      resolve();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') finish();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    timeoutId = window.setTimeout(finish, timeoutMs);
+  });
+}
+
+async function waitForServiceWorkerReady({ timeoutMs = SW_READY_TIMEOUT_MS } = {}) {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  let timeoutId = null;
+  const timeout = new Promise((resolve) => {
+    timeoutId = window.setTimeout(resolve, timeoutMs);
+  });
+  try {
+    await Promise.race([navigator.serviceWorker.ready, timeout]);
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId);
   }
 }
 
@@ -176,28 +285,30 @@ async function ensureSubscribedWhenPermissionGranted(OneSignal) {
 }
 
 function buildInitOptions(registration) {
-  const origin =
-    typeof window !== 'undefined' && window.location?.origin
-      ? window.location.origin
-      : '';
-  const workerPath =
-    (origin && new URL(SERVICE_WORKER_INFO.registerPath, origin).href) ||
-    SERVICE_WORKER_INFO.registerPath;
-  const updaterPath =
-    (origin && new URL(SERVICE_WORKER_INFO.updaterPath, origin).href) ||
-    SERVICE_WORKER_INFO.updaterPath;
-
   return {
     appId: ONESIGNAL_APP_ID,
     allowLocalhostAsSecureOrigin: true,
-    serviceWorkerPath: workerPath,
-    serviceWorkerUpdaterPath: updaterPath,
+    // Ohne führenden Slash, um URL-Edge-Cases in Safari/WebKit zu vermeiden.
+    serviceWorkerPath: SERVICE_WORKER_INFO.initPath,
+    serviceWorkerUpdaterPath: SERVICE_WORKER_INFO.initUpdaterPath,
     serviceWorkerRegistration: registration,
     serviceWorkerParam: { scope: SERVICE_WORKER_INFO.scope },
   };
 }
 
 export async function ensureOneSignalInitialized() {
+  const runtimeBlockReason = getOneSignalRuntimeBlockReason();
+  if (runtimeBlockReason) {
+    const runtimeError = new Error(
+      runtimeBlockReason === 'safari-backoff'
+        ? 'Push ist in Safari vorübergehend pausiert.'
+        : 'Push ist in Safari deaktiviert (ENV).'
+    );
+    runtimeError.code = 'ONE_SIGNAL_DISABLED_RUNTIME';
+    runtimeError.blockReason = runtimeBlockReason;
+    throw runtimeError;
+  }
+
   const state = getServiceState();
   if (state.initialized && typeof window !== 'undefined' && window.OneSignal?.Notifications) {
     return window.OneSignal;
@@ -214,12 +325,19 @@ export async function ensureOneSignalInitialized() {
       throw new Error('Service Worker wird in diesem Browser nicht unterstützt.');
     }
 
-    // Wichtig: Registrierung zuerst sichern, erst danach SDK laden/initen.
+    if (isLikelySafariWebKit()) {
+      await waitForVisible({ timeoutMs: 12_000 });
+      await waitForServiceWorkerReady({ timeoutMs: SW_READY_TIMEOUT_MS });
+      await wait(SAFARI_ONESIGNAL_INIT_DELAY_MS);
+    }
+
+    // Registrierung zuerst sichern, erst danach SDK laden/initen.
     // Sonst versucht das SDK teilweise zu früh "Page -> SW" postMessage.
     const registration = await waitForServiceWorkerRegistration({ timeoutMs: 10_000 });
     if (!registration) {
       throw new Error('OneSignal Service-Worker Registrierung nicht verfügbar.');
     }
+    await waitForServiceWorkerReady({ timeoutMs: SW_READY_TIMEOUT_MS });
 
     const OneSignal = await getOneSignal({ timeoutMs: 20_000 });
     try {
@@ -235,6 +353,15 @@ export async function ensureOneSignalInitialized() {
     state.initialized = true;
     return OneSignal;
   })().catch((err) => {
+    const message = String(err?.message || err || '').toLowerCase();
+    if (
+      isLikelySafariWebKit() &&
+      (message.includes('service-worker registrierung') ||
+        message.includes('serviceworkerregistration') ||
+        message.includes('postmessage'))
+    ) {
+      setOneSignalSafariBackoff();
+    }
     state.initialized = false;
     state.initPromise = null;
     throw err;

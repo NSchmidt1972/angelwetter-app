@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
-import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
+import { getActiveClubId, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
 
 const AUTH_REQUEST_TIMEOUT_MS = 12000;
@@ -44,6 +44,7 @@ export default function AuthForm() {
 
     if (clubErr || !clubRow?.id) return null;
     setActiveClubId(clubRow.id);
+    rememberClubSlugId(activeSlug, clubRow.id);
     return clubRow.id;
   };
 

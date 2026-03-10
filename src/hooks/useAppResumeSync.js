@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { supabase } from '@/supabaseClient';
-import { withTimeout } from '@/utils/async';
+import { supabase, getSupabaseNetworkHealthSnapshot } from '@/supabaseClient';
+import { beginResumeGate } from '@/utils/resumeGate';
+import { debugLog } from '@/utils/runtimeDebug';
 
 const RESUME_SYNC_EVENT = 'angelwetter:resume-sync';
-const RESUME_SYNC_TIMEOUT_MS = 12000;
-const RESUME_SYNC_RETRY_DELAYS_MS = [0, 1200, 3000];
+const RESUME_SYNC_STEP_TIMEOUT_MS = 1200;
 const RESUME_TRIGGER_DEBOUNCE_MS = 350;
 const RESUME_FOREGROUND_DEDUPE_MS = 2200;
+const RESUME_SYNC_STALE_INFLIGHT_MS = 15000;
+const RESUME_RECOVERY_CHECK_MS = 9000;
 const SAFARI_RESUME_RELOAD_THRESHOLD_MS = 45000;
 const SAFARI_RESUME_RELOAD_COOLDOWN_MS = 30000;
 const SAFARI_RESUME_RELOAD_KEY = '__aw_resume_reload_at';
@@ -15,19 +17,25 @@ const FILE_PICKER_RELOAD_SUPPRESS_MS = 300000;
 const ENABLE_SAFARI_FORCED_RELOAD = false;
 let lastForcedReloadAtMemory = 0;
 let lastFilePickerIntentAtMemory = 0;
+let resumeSyncSequence = 0;
+
+function withHardTimeout(promise, timeoutMs, timeoutMessage) {
+  let timerId = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timerId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timerId != null) {
+      window.clearTimeout(timerId);
+    }
+  });
+}
 
 function parseStoredTimestamp(rawValue) {
   const parsed = Number.parseInt(rawValue || '0', 10);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function isInvalidRefreshTokenError(error) {
-  const message = String(error?.message || error || '').toLowerCase();
-  if (!message) return false;
-  return (
-    message.includes('invalid refresh token') ||
-    message.includes('refresh token not found')
-  );
 }
 
 function isDocumentVisible() {
@@ -150,9 +158,11 @@ export function clearFilePickerIntent() {
 
 function dispatchResumeSync(detail) {
   if (typeof window === 'undefined') return;
+  resumeSyncSequence += 1;
   window.dispatchEvent(
     new CustomEvent(RESUME_SYNC_EVENT, {
       detail: {
+        sequence: resumeSyncSequence,
         at: Date.now(),
         ...detail,
       },
@@ -161,12 +171,17 @@ function dispatchResumeSync(detail) {
 }
 
 export function useAppResumeTick({ enabled = true } = {}) {
-  const [tick, setTick] = useState(0);
+  const [tick, setTick] = useState(() => resumeSyncSequence);
 
   useEffect(() => {
     if (!enabled || typeof window === 'undefined') return undefined;
 
-    const onResumeSync = () => {
+    const onResumeSync = (event) => {
+      const nextSequence = Number(event?.detail?.sequence);
+      if (Number.isFinite(nextSequence) && nextSequence > 0) {
+        setTick((value) => (nextSequence > value ? nextSequence : value));
+        return;
+      }
       setTick((value) => value + 1);
     };
 
@@ -181,79 +196,175 @@ export function useAppResumeTick({ enabled = true } = {}) {
 
 export function useAppResumeSync({ enabled = true, minIntervalMs = 1500 } = {}) {
   const inFlightRef = useRef(null);
+  const inFlightStartedAtRef = useRef(0);
   const lastRunRef = useRef(0);
   const queuedTimerRef = useRef(null);
   const hiddenAtRef = useRef(0);
   const forcedReloadIssuedRef = useRef(false);
   const lastForegroundQueueAtRef = useRef(0);
+  const recoveryTimerRef = useRef(null);
 
   useEffect(() => {
     if (!enabled || typeof window === 'undefined') return undefined;
 
     let disposed = false;
+    debugLog('resume:hook-enabled', {
+      minIntervalMs,
+      visibility: document.visibilityState,
+      online: isOnline(),
+      path: window.location.pathname,
+    });
 
     const runResumeSync = async ({ reason, force = false, allowHardReloadOnFailure = false }) => {
       if (disposed) return;
-      if (!force && !isDocumentVisible()) return;
+      if (!force && !isDocumentVisible()) {
+        debugLog('resume:skip-hidden', { reason, force });
+        return;
+      }
 
       const now = Date.now();
-      if (!force && now - lastRunRef.current < minIntervalMs) return;
-      if (inFlightRef.current) return;
-      lastRunRef.current = now;
-
-      inFlightRef.current = (async () => {
-        let sessionReady = false;
-        let lastError = null;
-
-        for (const retryDelay of RESUME_SYNC_RETRY_DELAYS_MS) {
-          if (disposed) return;
-          if (retryDelay > 0) {
-            await new Promise((resolve) => window.setTimeout(resolve, retryDelay));
-          }
-
-          try {
-            await withTimeout(
-              supabase.auth.getSession(),
-              RESUME_SYNC_TIMEOUT_MS,
-              '[ResumeSync] Session-Refresh timeout'
-            );
-            sessionReady = true;
-            break;
-          } catch (err) {
-            lastError = err;
-          }
-        }
-
-        if (sessionReady && !disposed) {
-          dispatchResumeSync({
+      if (!force && now - lastRunRef.current < minIntervalMs) {
+        debugLog('resume:skip-min-interval', {
+          reason,
+          minIntervalMs,
+          sinceLastMs: now - lastRunRef.current,
+        });
+        return;
+      }
+      if (inFlightRef.current) {
+        const inFlightAgeMs = now - (inFlightStartedAtRef.current || now);
+        if (inFlightAgeMs > RESUME_SYNC_STALE_INFLIGHT_MS) {
+          debugLog('resume:inflight-stale-reset', {
             reason,
+            inFlightAgeMs,
+            staleAfterMs: RESUME_SYNC_STALE_INFLIGHT_MS,
+          });
+          inFlightRef.current = null;
+          inFlightStartedAtRef.current = 0;
+        } else {
+          // Auch bei laufendem Resume-Flight einen Tick senden,
+          // damit neu geöffnete Views re-fetch auslösen können.
+          dispatchResumeSync({
+            reason: `${reason}:inflight`,
             visible: isDocumentVisible(),
             online: isOnline(),
+          });
+          debugLog('resume:dispatch-sync-inflight', {
+            reason,
+            inFlightAgeMs,
+          });
+          debugLog('resume:skip-inflight', { reason, inFlightAgeMs });
+          return;
+        }
+      }
+      lastRunRef.current = now;
+      const endResumeGate = beginResumeGate();
+      const resumeStartedAt = Date.now();
+      debugLog('resume:start', {
+        reason,
+        force,
+        allowHardReloadOnFailure,
+        visibility: document.visibilityState,
+        online: isOnline(),
+      });
+
+      const dispatchProgress = (nextReason = reason) => {
+        if (disposed) return;
+        debugLog('resume:dispatch-sync', {
+          reason: nextReason,
+          visible: isDocumentVisible(),
+          online: isOnline(),
+        });
+        dispatchResumeSync({
+          reason: nextReason,
+          visible: isDocumentVisible(),
+          online: isOnline(),
+        });
+      };
+
+      // Daten-Refresh sofort beim Foreground starten; Session-Check läuft parallel.
+      dispatchProgress(`${reason}:start`);
+
+      if (recoveryTimerRef.current != null) {
+        window.clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
+      }
+      recoveryTimerRef.current = window.setTimeout(() => {
+        recoveryTimerRef.current = null;
+        if (disposed || !isDocumentVisible()) return;
+        const health = getSupabaseNetworkHealthSnapshot();
+        const hasFreshSupabaseSuccess = health.lastSuccessAt >= resumeStartedAt;
+        if (hasFreshSupabaseSuccess) {
+          debugLog('resume:recovery-not-needed', {
+            reason,
+            lastSuccessAt: health.lastSuccessAt,
           });
           return;
         }
 
-        if (!disposed) {
-          console.warn('[ResumeSync] Session-Refresh fehlgeschlagen:', lastError?.message || lastError);
-          if (isInvalidRefreshTokenError(lastError)) {
-            try {
-              await supabase.auth.signOut({ scope: 'local' });
-            } catch {
-              /* ignore */
-            }
-            dispatchResumeSync({
-              reason: `${reason}:invalid-refresh-token`,
-              visible: isDocumentVisible(),
-              online: isOnline(),
+        debugLog('resume:recovery-trigger', {
+          reason,
+          checkAfterMs: RESUME_RECOVERY_CHECK_MS,
+          health,
+        });
+        dispatchProgress(`${reason}:recovery`);
+
+        if (
+          isLikelySafariWebKit() &&
+          isStandaloneMode() &&
+          health.consecutiveTimeouts >= 2 &&
+          !shouldSuppressForcedReloadForFilePicker(Date.now()) &&
+          maybeForceReloadOnForeground()
+        ) {
+          debugLog('resume:recovery-forced-reload', {
+            reason,
+            consecutiveTimeouts: health.consecutiveTimeouts,
+          });
+          return;
+        }
+
+        queueResumeSync({
+          reason: `${reason}:recovery-retry`,
+          force: true,
+          debounceMs: 0,
+          allowHardReloadOnFailure: true,
+        });
+      }, RESUME_RECOVERY_CHECK_MS);
+
+      inFlightStartedAtRef.current = Date.now();
+      inFlightRef.current = (async () => {
+        try {
+          if (!disposed && isDocumentVisible() && isOnline()) {
+            const { data, error } = await withHardTimeout(
+              supabase.auth.getSession(),
+              RESUME_SYNC_STEP_TIMEOUT_MS,
+              '[ResumeSync] getSession timeout'
+            );
+            debugLog('resume:session-probe', {
+              reason,
+              hasSession: Boolean(data?.session),
+              error: error?.message || null,
             });
-            return;
           }
-          if (allowHardReloadOnFailure && maybeForceReloadOnSafariResume()) {
+        } catch (err) {
+          debugLog('resume:session-probe-timeout', {
+            reason,
+            error: err?.message || String(err || ''),
+          });
+          if (!disposed && allowHardReloadOnFailure && maybeForceReloadOnSafariResume()) {
+            debugLog('resume:forced-reload-on-failure', { reason });
             return;
           }
         }
+
+        if (!disposed) {
+          dispatchProgress(`${reason}:settled`);
+        }
       })().finally(() => {
+        endResumeGate();
         inFlightRef.current = null;
+        inFlightStartedAtRef.current = 0;
+        debugLog('resume:done', { reason });
       });
     };
 
@@ -289,6 +400,10 @@ export function useAppResumeSync({ enabled = true, minIntervalMs = 1500 } = {}) 
     }) => {
       const now = Date.now();
       if (now - lastForegroundQueueAtRef.current < RESUME_FOREGROUND_DEDUPE_MS) {
+        debugLog('resume:foreground-deduped', {
+          reason,
+          dedupeMs: RESUME_FOREGROUND_DEDUPE_MS,
+        });
         return;
       }
       lastForegroundQueueAtRef.current = now;
@@ -347,12 +462,14 @@ export function useAppResumeSync({ enabled = true, minIntervalMs = 1500 } = {}) 
       if (document.visibilityState === 'hidden') {
         hiddenAtRef.current = Date.now();
         lastForegroundQueueAtRef.current = 0;
+        debugLog('resume:event-visibility-hidden', {});
         return;
       }
 
       if (document.visibilityState === 'visible') {
-        if (shouldSuppressForcedReloadForFilePicker(Date.now())) return;
-        if (maybeForceReloadOnForeground()) return;
+        debugLog('resume:event-visibility-visible', {});
+        const suppressHardReload = shouldSuppressForcedReloadForFilePicker(Date.now());
+        if (!suppressHardReload && maybeForceReloadOnForeground()) return;
         queueForegroundResumeSync({
           reason: 'visibilitychange',
           debounceMs: 500,
@@ -361,8 +478,8 @@ export function useAppResumeSync({ enabled = true, minIntervalMs = 1500 } = {}) 
       }
     };
     const onFocus = () => {
-      if (shouldSuppressForcedReloadForFilePicker(Date.now())) return;
       if (forcedReloadIssuedRef.current) return;
+      debugLog('resume:event-focus', {});
       queueForegroundResumeSync({
         reason: 'focus',
         debounceMs: 500,
@@ -370,8 +487,8 @@ export function useAppResumeSync({ enabled = true, minIntervalMs = 1500 } = {}) 
       });
     };
     const onPageShow = (event) => {
-      if (shouldSuppressForcedReloadForFilePicker(Date.now())) return;
       if (forcedReloadIssuedRef.current) return;
+      debugLog('resume:event-pageshow', { persisted: Boolean(event?.persisted) });
       queueForegroundResumeSync({
         reason: event?.persisted ? 'pageshow:restored' : 'pageshow',
         debounceMs: 300,
@@ -379,6 +496,7 @@ export function useAppResumeSync({ enabled = true, minIntervalMs = 1500 } = {}) 
       });
     };
     const onOnline = () => {
+      debugLog('resume:event-online', {});
       queueResumeSync({ reason: 'online', force: true, debounceMs: 0 });
     };
 
@@ -389,6 +507,12 @@ export function useAppResumeSync({ enabled = true, minIntervalMs = 1500 } = {}) 
 
     return () => {
       disposed = true;
+      inFlightRef.current = null;
+      inFlightStartedAtRef.current = 0;
+      if (recoveryTimerRef.current != null) {
+        window.clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
+      }
       if (queuedTimerRef.current != null) {
         window.clearTimeout(queuedTimerRef.current);
         queuedTimerRef.current = null;

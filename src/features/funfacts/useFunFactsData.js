@@ -21,24 +21,69 @@ import {
   TEMP_TOLERANCE,
   WIND_COMFORT,
 } from './constants';
-import { getWeatherDescription, normalizePlace } from './utils';
+import { getWeatherDescription, normalizePlace, parseLocaleNumber } from './utils';
+import { PUBLIC_FROM as DEFAULT_PUBLIC_FROM, TRUSTED_ANGLERS } from '@/constants/visibility';
 
 const FEMALE_FIRSTNAMES = new Set(['laura', 'marilou', 'julia']);
 const WEEKDAY_LABELS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
-const vertrauteDefaults = ['Nicol Schmidt', 'Laura Rittlinger'];
+function extractCatchYear(timestamp) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getFullYear();
+}
 
-export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) {
+function normalizeSelectedYear(value) {
+  if (value === 'all') return 'all';
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value === 'string' && /^\d{4}$/.test(value.trim())) return Number(value);
+  return 'all';
+}
+
+export function useFunFactsData({
+  PUBLIC_FROM = DEFAULT_PUBLIC_FROM,
+  vertraute = TRUSTED_ANGLERS,
+  selectedYear = new Date().getFullYear(),
+}) {
   const { fishes, validFishes, loading, loadError } = useValidFishes({ PUBLIC_FROM, vertraute });
 
+  const yearFilter = normalizeSelectedYear(selectedYear);
+
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    (fishes || []).forEach((entry) => {
+      const year = extractCatchYear(entry?.timestamp);
+      if (Number.isInteger(year)) years.add(year);
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [fishes]);
+
+  const yearFilteredFishes = useMemo(
+    () =>
+      (fishes || []).filter((entry) => {
+        if (yearFilter === 'all') return true;
+        return extractCatchYear(entry?.timestamp) === yearFilter;
+      }),
+    [fishes, yearFilter],
+  );
+
+  const yearFilteredValidFishes = useMemo(
+    () =>
+      (validFishes || []).filter((entry) => {
+        if (yearFilter === 'all') return true;
+        return extractCatchYear(entry?.timestamp) === yearFilter;
+      }),
+    [validFishes, yearFilter],
+  );
+
   const ferkensbruchFishes = useMemo(
-    () => (validFishes || []).filter((f) => normalizePlace(f) === 'Ferkensbruch'),
-    [validFishes],
+    () => yearFilteredValidFishes.filter((f) => normalizePlace(f) === 'Ferkensbruch'),
+    [yearFilteredValidFishes],
   );
 
   const ferkensbruchAllFishes = useMemo(
-    () => (fishes || []).filter((f) => normalizePlace(f) === 'Ferkensbruch'),
-    [fishes],
+    () => yearFilteredFishes.filter((f) => normalizePlace(f) === 'Ferkensbruch'),
+    [yearFilteredFishes],
   );
 
   const buildStatsFishes = (list) => {
@@ -55,8 +100,8 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
   );
 
   const statsFishesAllLocations = useMemo(
-    () => buildStatsFishes(validFishes),
-    [validFishes],
+    () => buildStatsFishes(yearFilteredValidFishes),
+    [yearFilteredValidFishes],
   );
 
   const mostInOneDay = useMemo(() => {
@@ -487,12 +532,14 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     });
 
     const max = Math.max(...counts);
-    const items = counts.map((count, day) => ({
-      day,
-      count,
-      label: WEEKDAY_LABELS[day] ?? `Wochentag ${day}`,
-      isBest: count === max,
-    }));
+    const items = counts
+      .map((count, day) => ({
+        day,
+        count,
+        label: WEEKDAY_LABELS[day] ?? `Wochentag ${day}`,
+        isBest: count === max,
+      }))
+      .sort((a, b) => b.count - a.count || a.day - b.day);
 
     return { items };
   }, [statsFishes]);
@@ -593,21 +640,21 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
   }, [statsFishes]);
 
   const heaviestFish = useMemo(() => {
-    const withWeight = ferkensbruchFishes.filter((f) => {
-      const w = parseFloat(f.weight);
-      return !Number.isNaN(w) && w > 0;
-    });
+    const withWeight = ferkensbruchAllFishes
+      .map((f) => ({ fish: f, weight: parseLocaleNumber(f?.weight) }))
+      .filter(({ fish, weight }) => fish?.blank !== true && Number.isFinite(weight) && weight > 0);
     if (withWeight.length === 0) return null;
 
     let maxW = -Infinity;
-    withWeight.forEach((f) => {
-      const w = parseFloat(f.weight);
-      if (w > maxW) maxW = w;
+    withWeight.forEach(({ weight }) => {
+      if (weight > maxW) maxW = weight;
     });
 
-    const items = withWeight.filter((f) => parseFloat(f.weight) === maxW);
+    const items = withWeight
+      .filter(({ weight }) => weight === maxW)
+      .map(({ fish }) => fish);
     return { weight: maxW, items };
-  }, [ferkensbruchFishes]);
+  }, [ferkensbruchAllFishes]);
 
   const mostEfficientAngler = useMemo(() => {
     if (ferkensbruchAllFishes.length === 0) return { max: 0, winners: [], ranking: [] };
@@ -1175,10 +1222,10 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
   }, [ferkensbruchFishes]);
 
   const foreignAnglers = useMemo(() => {
-    if (validFishes.length === 0) return { top3: [] };
+    if (yearFilteredValidFishes.length === 0) return { top3: [] };
 
     const byAngler = {};
-    for (const f of validFishes) {
+    for (const f of yearFilteredValidFishes) {
       const normalizedPlace = normalizePlace(f);
       if (normalizedPlace === 'Ferkensbruch') continue;
 
@@ -1203,7 +1250,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
       .slice(0, 3);
 
     return { top3: ranking };
-  }, [validFishes]);
+  }, [yearFilteredValidFishes]);
 
   const schneiderKoenig = useMemo(() => {
     const counts = {};
@@ -1227,10 +1274,20 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     if (ferkensbruchAllFishes.length === 0) return { max: 0, winners: [], ranking: [] };
 
     const byMonth = {};
+    const seenSessions = new Set();
     for (const f of ferkensbruchAllFishes) {
       if (!f.blank) continue;
-      const key = monthKey(new Date(f.timestamp));
-      byMonth[key] = (byMonth[key] || 0) + 1;
+      const dt = new Date(f.timestamp);
+      if (Number.isNaN(dt.getTime())) continue;
+
+      const month = monthKey(dt);
+      const day = localDayKey(dt);
+      const angler = (f.angler || 'Unbekannt').trim() || 'Unbekannt';
+      const sessionKey = `${month}__${angler}__${day}`;
+      if (seenSessions.has(sessionKey)) continue;
+      seenSessions.add(sessionKey);
+
+      byMonth[month] = (byMonth[month] || 0) + 1;
     }
 
     const entries = Object.entries(byMonth).map(([month, count]) => ({ month, count }));
@@ -1382,7 +1439,7 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
       ranking,
       winners,
     };
-  }, [validFishes]);
+  }, [ferkensbruchFishes]);
 
   const activitySummary = useMemo(() => {
     if (ferkensbruchAllFishes.length === 0) {
@@ -1708,6 +1765,8 @@ export function useFunFactsData({ PUBLIC_FROM, vertraute = vertrauteDefaults }) 
     ferkensbruchFishes,
     ferkensbruchAllFishes,
     statsFishes,
+    yearFilter,
+    availableYears,
     loading,
     loadError,
     mostInOneDay,

@@ -5,12 +5,25 @@ import { getActiveClubId } from '@/utils/clubId';
 export const baseSelect =
   'id, angler, fish, size, weight, note, timestamp, weather, photo_url, location_name, lat, lon, is_marilou, blank, share_public_non_home';
 
-export async function listFishes({ from, to, onlyMine, anglerName }) {
+export const FISH_SELECT = Object.freeze({
+  CATCHES: baseSelect,
+  VALIDATION:
+    'id, angler, fish, size, weight, timestamp, location_name, weather, photo_url, blank, is_marilou, count_in_stats, under_min_size, out_of_season',
+  TOP: 'id, angler, fish, size, timestamp, location_name, blank, is_marilou',
+  ANALYSIS: 'id, angler, fish, size, timestamp, location_name, blank, is_marilou, weather',
+  MAP: 'id, angler, fish, size, timestamp, lat, lon',
+});
+
+export function fetchClubFishesQuery({ select = baseSelect, options } = {}) {
   const clubId = getActiveClubId();
-  let q = supabase
+  return supabase
     .from('fishes')
-    .select(baseSelect)
-    .eq('club_id', clubId)
+    .select(select, options)
+    .eq('club_id', clubId);
+}
+
+export async function listFishes({ from, to, onlyMine, anglerName }) {
+  let q = fetchClubFishesQuery({ select: FISH_SELECT.CATCHES })
     .order('timestamp', { ascending: false })
     .range(from, to)
     .eq('blank', false)
@@ -21,11 +34,7 @@ export async function listFishes({ from, to, onlyMine, anglerName }) {
 }
 
 export async function countFishes({ onlyMine, anglerName, fromIso, includeLobberich = true }) {
-  const clubId = getActiveClubId();
-  let q = supabase
-    .from('fishes')
-    .select('*', { count: 'exact', head: true })
-    .eq('club_id', clubId)
+  let q = fetchClubFishesQuery({ select: 'id', options: { count: 'exact', head: true } })
     .eq('blank', false)
     .neq('is_marilou', true);
 

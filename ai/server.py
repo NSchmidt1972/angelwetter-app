@@ -54,9 +54,9 @@ PRESSURE_TREND_CLIP_HPA_PER_DAY = 25.0
 SPECIES_PROFILE = {
     "aal": {"active_months": [5, 6, 7, 8, 9], "min_temp": 12, "type": "warm"},
     "schleie": {"active_months": [6, 7, 8], "min_temp": 14, "type": "warm"},
-    "karpfen": {"active_months": [4, 5, 6, 7, 8, 9], "min_temp": 10, "type": "warm"},
+    "karpfen": {"active_months": [3, 4, 5, 6, 7, 8, 9, 10], "min_temp": 9, "type": "warm"},
     "karausche": {"active_months": [5, 6, 7, 8, 9], "min_temp": 12, "type": "warm"},
-    "brasse": {"active_months": [4, 5, 6, 7, 8, 9], "min_temp": 8, "type": "moderate"},
+    "brasse": {"active_months": [3, 4, 5, 6, 7, 8, 9, 10], "min_temp": 7, "type": "moderate"},
     "rotfeder": {"active_months": [4, 5, 6, 7, 8, 9], "min_temp": 8, "type": "moderate"},
     "hecht": {"active_months": [3, 4, 5, 9, 10], "min_temp": 4, "type": "cold"},
     "barsch": {"active_months": list(range(1, 13)), "min_temp": 3, "type": "cold"},
@@ -609,6 +609,7 @@ def apply_biological_weighting(fish_type: str, month: int, temp: float, base_pro
     if not profile:
         return base_proba
 
+    fish_lc = str(fish_type or "").strip().lower()
     weight = 1.0
 
     if month not in profile["active_months"]:
@@ -628,14 +629,26 @@ def apply_biological_weighting(fish_type: str, month: int, temp: float, base_pro
         if month in [11, 12, 1, 2]:
             weight *= 0.12
         elif month in [3, 10]:
-            weight *= 0.45
+            # Schultermonate: Karpfen wird bei milderen Temperaturen weniger stark gedämpft.
+            if fish_lc == "karpfen" and temp >= 10:
+                weight *= 0.95
+            else:
+                weight *= 0.6
         if temp < 8:
             weight *= 0.2
 
     if profile["type"] == "moderate" and month in [12, 1, 2]:
         weight *= 0.4
 
-    fish_lc = str(fish_type or "").strip().lower()
+    # Frühjahrs-Tuning auf Basis der beobachteten Fänge:
+    # Brasse/Karpfen erhalten in März leichten Bonus, typische Winterarten leichten Dämpfer.
+    if month == 3 and temp >= 8 and fish_lc == "brasse":
+        weight *= 1.18
+    if month == 3 and temp >= 10 and fish_lc == "karpfen":
+        weight *= 1.12
+    if month == 3 and temp >= 12 and fish_lc in {"rotauge", "barsch", "rotfeder"}:
+        weight *= 0.88
+
     adjusted = base_proba * weight
     if fish_lc == "aal":
         if temp < 10:
@@ -674,6 +687,7 @@ def collect_model_training_metadata():
 
     fish_trained_at = {}
     species_positive_samples = {}
+    species_recent_priors = {}
     for fish_name, fish_file in fish_model_files.items():
         ts = pick_first_iso(
             get_nested(metadata, "models", "species", fish_name, "trained_at"),
@@ -690,6 +704,17 @@ def collect_model_training_metadata():
                 species_positive_samples[fish_name] = sample_count_int
         except Exception:
             pass
+
+    recent_prior_payload = get_nested(metadata, "stats", "species_recent_priors")
+    if isinstance(recent_prior_payload, dict):
+        for fish_name in fish_model_files.keys():
+            value = recent_prior_payload.get(fish_name)
+            try:
+                value_f = float(value)
+                if np.isfinite(value_f) and value_f > 0:
+                    species_recent_priors[fish_name] = value_f
+            except Exception:
+                continue
 
     per_fish_model_trained_at = pick_first_iso(
         get_nested(metadata, "models", "per_fish_type", "trained_at"),
@@ -710,6 +735,7 @@ def collect_model_training_metadata():
         "per_fish_model_trained_at": per_fish_model_trained_at,
         "species_models": fish_trained_at,
         "species_positive_samples": species_positive_samples,
+        "species_recent_priors": species_recent_priors,
         "calibrators_trained_at": calibrators_trained_at,
     }
 
@@ -798,6 +824,7 @@ async def predict(input_data: WeatherInput):
 
     training_meta = collect_model_training_metadata()
     species_positive_samples = training_meta.get("species_positive_samples", {})
+    species_recent_priors = training_meta.get("species_recent_priors", {})
 
     # Artspezifische Modelle – korrektes Mapping & robustes Feature-Building
     per_fish_type = {}
@@ -830,6 +857,8 @@ async def predict(input_data: WeatherInput):
                     float(input_data.temp),
                     calibrated_species_proba,
                 )
+                nightly_prior = species_recent_priors.get(name, 1.0)
+                weighted_species_proba = clamp_probability(weighted_species_proba * float(nightly_prior))
                 weighted_percent = float(weighted_species_proba) * 100.0
                 per_fish_type[name] = round(weighted_percent, 1)
 
@@ -887,6 +916,10 @@ async def predict(input_data: WeatherInput):
             "calibrators": {
                 "trained_at": calibrators_trained_at,
                 "file": calibrators_file,
+            },
+            "species_recent_priors": {
+                "source": "nightly_training_metadata",
+                "values": {k: round(float(v), 4) for k, v in species_recent_priors.items()},
             },
         },
         "metadata": {

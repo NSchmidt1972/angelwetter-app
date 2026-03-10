@@ -76,3 +76,28 @@ export function formatDayShortSafe(value, fallback = '–') {
   const date = toDate(value);
   return date ? formatDayShortDE(date) : fallback;
 }
+
+export function parseLocaleNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN;
+  if (typeof value !== 'string') return Number.NaN;
+
+  let normalized = value.trim();
+  if (!normalized) return Number.NaN;
+
+  normalized = normalized.replace(/\s+/g, '');
+  const hasComma = normalized.includes(',');
+  const hasDot = normalized.includes('.');
+
+  if (hasComma && hasDot) {
+    if (normalized.lastIndexOf(',') > normalized.lastIndexOf('.')) {
+      normalized = normalized.replace(/\./g, '').replace(',', '.');
+    } else {
+      normalized = normalized.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    normalized = normalized.replace(',', '.');
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}

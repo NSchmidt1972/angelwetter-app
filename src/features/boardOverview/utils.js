@@ -313,6 +313,28 @@ const FISH_COLOR_CLASSES = [
   'bg-orange-500 dark:bg-orange-400',
 ];
 
+const FIXED_FISH_COLOR_INDEX_BY_NAME = {
+  aal: 0,
+  barsch: 1,
+  brasse: 2,
+  hecht: 3,
+  karpfen: 4,
+  rotauge: 5,
+  rotfeder: 6,
+  schleie: 7,
+  wels: 8,
+  zander: 9,
+};
+
+function hashStringToUint(value) {
+  let hash = 2166136261;
+  for (const char of String(value)) {
+    hash ^= char.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 export function getColorStyleByIndex(index) {
   if (index == null || Number.isNaN(index)) {
     return { className: FISH_COLOR_CLASSES[0], style: undefined };
@@ -321,5 +343,18 @@ export function getColorStyleByIndex(index) {
     return { className: FISH_COLOR_CLASSES[index], style: undefined };
   }
   const hue = (index * 47) % 360;
+  return { className: '', style: { backgroundColor: `hsl(${hue}, 70%, 55%)` } };
+}
+
+export function getColorStyleByFishName(fishName) {
+  const normalizedName = fishName ? String(fishName).trim().toLowerCase() : '';
+  if (!normalizedName) return getColorStyleByIndex(0);
+
+  const fixedIndex = FIXED_FISH_COLOR_INDEX_BY_NAME[normalizedName];
+  if (Number.isInteger(fixedIndex)) {
+    return getColorStyleByIndex(fixedIndex);
+  }
+
+  const hue = hashStringToUint(normalizedName) % 360;
   return { className: '', style: { backgroundColor: `hsl(${hue}, 70%, 55%)` } };
 }

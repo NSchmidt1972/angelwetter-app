@@ -1,90 +1,67 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useFormattedNamesMap } from '@/hooks/useFormattedNamesMap';
+import { useViewerContext } from '@/hooks/useViewerContext';
 import PageContainer from '../components/PageContainer';
 import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
 import { Card } from '@/components/ui';
-
-const MARILOU_ALIASES = ['marilou boes', 'marilou'];
+import { hasKnownFishName, isValuableFishEntry, normalizeFishName, parseFishSize } from '@/utils/fishValidation';
+import { isMarilouAngler, isVisibleByDate } from '@/utils/visibilityPolicy';
+import { FISH_SELECT, fetchClubFishesQuery } from '@/services/fishes';
 
 export default function TopFishes() {
+  const resumeTick = useAppResumeTick({ enabled: true });
   const [searchParams, setSearchParams] = useSearchParams();
   const [fishes, setFishes] = useState([]);
   const [selectedFish, setSelectedFish] = useState(() => searchParams.get('fish') || '');
-  const [formattedNamesMap, setFormattedNamesMap] = useState({});
+  const formattedNamesMap = useFormattedNamesMap();
   const [onlyMine, setOnlyMine] = useState(false);
   const lastSelectedRef = useRef(null);
 
-  const anglerName = (localStorage.getItem('anglerName') || 'Unbekannt').trim();
-  const anglerNameNorm = anglerName.toLowerCase();
-
-  const isMarilouLoggedIn = MARILOU_ALIASES.includes(anglerNameNorm);
-  const isMarilouAngler = useCallback(
-    (name) => MARILOU_ALIASES.includes((name || '').trim().toLowerCase()),
-    []
-  );
+  const {
+    anglerName,
+    anglerNameNorm,
+    filterSetting,
+    isTrustedViewer,
+    isMarilouViewer,
+  } = useViewerContext();
 
   useEffect(() => {
+    let active = true;
     async function loadData() {
-      const clubId = getActiveClubId();
-      const { data, error } = await supabase.from('fishes').select('*').eq('club_id', clubId);
+      const { data, error } = await fetchClubFishesQuery({ select: FISH_SELECT.TOP });
       if (error || !Array.isArray(data)) {
         console.error('Fehler beim Laden der Fische:', error);
+        if (active) setFishes([]);
         return;
       }
 
-      const PUBLIC_FROM = new Date('2025-05-29');
-      const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
-      const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
-      const istVertrauter = vertraute.includes(anglerName);
-
       const filtered = data.filter((f) => {
-        const istMarilou = isMarilouAngler(f.angler) || f.is_marilou === true;
-        if (istMarilou && !isMarilouLoggedIn) return false;
+        const istMarilou = isMarilouAngler(f?.angler) || f?.is_marilou === true;
+        if (istMarilou && !isMarilouViewer) return false;
 
         if (onlyMine) {
           return (f.angler || '').trim() === anglerName;
         }
 
         if (!isFerkensbruchLocation(f.location_name)) return false;
+        if (!isValuableFishEntry(f)) return false;
 
-        const fangDatum = new Date(f.timestamp);
-        const size = parseFloat(f.size);
-        const istVerwertbar =
-          f.fish && f.fish !== 'Unbekannt' && !isNaN(size) && size > 0 && !f.blank;
-
-        if (!istVerwertbar) return false;
-
-        if (istVertrauter) {
-          if (filterSetting === 'all') return true;
-          return fangDatum >= PUBLIC_FROM;
-        }
-        return fangDatum >= PUBLIC_FROM;
+        return isVisibleByDate(f?.timestamp, {
+          isTrusted: isTrustedViewer,
+          filterSetting,
+        });
       });
 
-      setFishes(filtered);
-
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('name')
-        .eq('club_id', clubId);
-
-      if (profileError) {
-        console.error('Fehler beim Laden der Profile:', profileError);
-        return;
-      }
-
-      const mapping = {};
-      (profiles || []).forEach((p) => {
-        const n = (p.name || '').trim();
-        if (n) mapping[n] = n;
-      });
-      setFormattedNamesMap(mapping);
+      if (active) setFishes(filtered);
     }
 
-    loadData();
-  }, [onlyMine, anglerName, anglerNameNorm, isMarilouLoggedIn, isMarilouAngler]);
+    void loadData();
+    return () => {
+      active = false;
+    };
+  }, [filterSetting, onlyMine, anglerName, isMarilouViewer, isTrustedViewer, resumeTick]);
 
   useEffect(() => {
     const param = searchParams.get('fish') || '';
@@ -99,8 +76,8 @@ export default function TopFishes() {
 
   const allTypes = [...new Set(
     fishes
-      .map((f) => f.fish?.trim())
-      .filter((fish) => fish && fish !== 'Unbekannt')
+      .map((f) => normalizeFishName(f.fish))
+      .filter((fish) => hasKnownFishName(fish))
   )].sort();
 
   const handleFishChange = (value) => {
@@ -114,10 +91,8 @@ export default function TopFishes() {
 
   const selectedFishEntries = fishes.filter((f) =>
     f.fish === selectedFish &&
-    f.size &&
     f.angler &&
-    f.fish !== 'Unbekannt' &&
-    !f.blank &&
+    isValuableFishEntry(f) &&
     (onlyMine || isFerkensbruchLocation(f.location_name))
   );
 
@@ -208,7 +183,7 @@ export default function TopFishes() {
 
                   const ort = formatLocationLabel(f.location_name);
 
-                  const sizeNum = parseFloat(f.size);
+                  const sizeNum = parseFishSize(f.size);
                   const sizeFormatted = Number.isFinite(sizeNum) ? `${sizeNum.toFixed(1)} cm` : '–';
 
                   return (

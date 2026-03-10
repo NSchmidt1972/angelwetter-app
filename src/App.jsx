@@ -6,8 +6,10 @@ import { supabase } from '@/supabaseClient';
 import AppRoutes from '@/AppRoutes';
 import { WeatherProvider } from '@/hooks/useWeatherCache';
 import { useAppResumeSync, useAppResumeTick } from '@/hooks/useAppResumeSync';
-import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
+import { getActiveClubId, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
+import { debugLog } from '@/utils/runtimeDebug';
+import { shouldAutoInitOneSignalRuntime } from '@/onesignal/onesignalService';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
@@ -81,6 +83,8 @@ function writeProfileCache(cache) {
   } else {
     window.localStorage.removeItem('shortAnglerName');
   }
+
+  window.dispatchEvent(new Event('angelwetter:storage-sync'));
 }
 
 function clearProfileCache() {
@@ -88,6 +92,7 @@ function clearProfileCache() {
   window.localStorage.removeItem(PROFILE_CACHE_KEY);
   window.localStorage.removeItem('anglerName');
   window.localStorage.removeItem('shortAnglerName');
+  window.dispatchEvent(new Event('angelwetter:storage-sync'));
 }
 
 function scheduleLater(callback, delay = 400) {
@@ -212,9 +217,6 @@ function AppContent() {
     }
 
     if (!profileLoading) {
-      if (!resolvedName && !hasValidCache) {
-        clearProfileCache();
-      }
       setNameLoading(false);
     }
 
@@ -275,8 +277,12 @@ function AppContent() {
   useEffect(() => {
     if (profile?.club_id) {
       setActiveClubId(profile.club_id);
+      const slugFromPath = location.pathname.split('/').filter(Boolean)[0] || null;
+      if (slugFromPath) {
+        rememberClubSlugId(slugFromPath, profile.club_id);
+      }
     }
-  }, [profile]);
+  }, [profile, location.pathname]);
 
   const shouldShowSplash =
     !UX_TEST_MODE_ENABLED &&
@@ -343,15 +349,26 @@ function AppShell() {
   const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
   const shouldInitProtectedRuntime =
     !UX_TEST_MODE_ENABLED &&
-    isLoggedIn &&
-    !isPublicRoutePath(location.pathname);
+    isLoggedIn;
   const shouldInitPush =
     shouldInitProtectedRuntime &&
     !PUSH_DISABLED &&
+    shouldAutoInitOneSignalRuntime() &&
     !isPushExcludedPath(location.pathname);
   const shouldInitAnalytics = shouldInitProtectedRuntime;
   const shouldPingUserActivity = shouldInitProtectedRuntime;
   useAppResumeSync({ enabled: shouldInitProtectedRuntime });
+
+  useEffect(() => {
+    debugLog('app:route-context', {
+      path: location.pathname,
+      hash: location.hash || null,
+      userId: user?.id || null,
+      profileClubId: profile?.club_id || null,
+      activeClubId: getActiveClubId(),
+      visibility: typeof document !== 'undefined' ? document.visibilityState : null,
+    });
+  }, [location.pathname, location.hash, user?.id, profile?.club_id]);
 
   return (
     <>

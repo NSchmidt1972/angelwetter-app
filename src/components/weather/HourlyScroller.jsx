@@ -37,7 +37,7 @@ export default function HourlyScroller({ hours, hourPreds, onScroll, scrollRef, 
               </p>
               {pred?.probability != null ? (
                 <p className="text-sm text-green-700 dark:text-green-300 font-semibold mt-1">
-                  🎯 {Number(pred.probability).toFixed(0)} % <FishRating probability={pred.probability} />
+                  🎯 {Number(pred.probability).toFixed(1)} % <FishRating probability={pred.probability} />
                 </p>
               ) : (
                 <div className="mt-1 flex items-center justify-center gap-2 text-xs text-gray-600 dark:text-gray-400">

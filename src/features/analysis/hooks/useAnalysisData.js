@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/supabaseClient';
 import { fetchWeather } from '@/api/weather';
-import { getActiveClubId } from '@/utils/clubId';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 import {
   ANALYSIS_YEAR_FILTER_ALL,
   buildDescIconMap,
@@ -9,6 +9,9 @@ import {
   getMoonDescription,
   windDirection,
 } from '@/features/analysis/utils';
+import { isMarilouAngler, isTrustedAngler, isVisibleByDate } from '@/utils/visibilityPolicy';
+import { isValuableFishEntry } from '@/utils/fishValidation';
+import { FISH_SELECT, fetchClubFishesQuery } from '@/services/fishes';
 
 function isFishInYear(fishEntry, year) {
   const ts = fishEntry?.timestamp ? new Date(fishEntry.timestamp) : null;
@@ -17,6 +20,8 @@ function isFishInYear(fishEntry, year) {
 }
 
 export default function useAnalysisData({ anglerName }) {
+  const resumeTick = useAppResumeTick({ enabled: true });
+  const [filterSetting] = useLocalStorageValue('dataFilter', 'recent');
   const currentYear = new Date().getFullYear();
   const [fishes, setFishes] = useState([]);
   const [weatherNow, setWeatherNow] = useState(null);
@@ -28,24 +33,20 @@ export default function useAnalysisData({ anglerName }) {
     let isActive = true;
 
     async function loadData() {
-      const clubId = getActiveClubId();
-      const { data, error } = await supabase.from('fishes').select('*').eq('club_id', clubId);
+      const { data, error } = await fetchClubFishesQuery({ select: FISH_SELECT.ANALYSIS });
       if (error) {
         console.error('Fehler beim Laden der Fänge:', error);
         return;
       }
+      const entries = Array.isArray(data) ? data : [];
 
-      const PUBLIC_FROM = new Date('2025-06-01');
-      const vertraute = ['Nicol Schmidt', 'Laura Rittlinger'];
-      const istVertrauter = vertraute.includes(anglerName);
-      const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
+      const istVertrauter = isTrustedAngler(anglerName);
+      const isMarilouViewer = isMarilouAngler(anglerName);
 
-      const filtered = data.filter((fishEntry) => {
-        if (fishEntry.is_marilou) return false;
-
-        const fangDatum = new Date(fishEntry.timestamp);
-        if (!istVertrauter && fangDatum < PUBLIC_FROM) return false;
-        if (istVertrauter && filterSetting !== 'all' && fangDatum < PUBLIC_FROM) return false;
+      const filtered = entries.filter((fishEntry) => {
+        const isMarilouCatch = fishEntry?.is_marilou || isMarilouAngler(fishEntry?.angler);
+        if (isMarilouCatch && !isMarilouViewer) return false;
+        if (!isVisibleByDate(fishEntry?.timestamp, { isTrusted: istVertrauter, filterSetting })) return false;
 
         const istEigenerFang = fishEntry.angler === anglerName;
         const ort = fishEntry.location_name?.toLowerCase().trim() ?? '';
@@ -67,7 +68,7 @@ export default function useAnalysisData({ anglerName }) {
     return () => {
       isActive = false;
     };
-  }, [anglerName, onlyMine]);
+  }, [anglerName, filterSetting, onlyMine, resumeTick]);
 
   const sortedYears = Array.from(
     new Set(
@@ -95,12 +96,8 @@ export default function useAnalysisData({ anglerName }) {
     ? fishes
     : fishes.filter((fishEntry) => isFishInYear(fishEntry, Number(selectedYear)));
 
-  const baseValidFishes = fishes.filter(
-    (fishEntry) => !fishEntry.blank && fishEntry.fish && fishEntry.fish.trim().toLowerCase() !== 'unbekannt'
-  );
-  const summaryValidFishes = yearScopedFishes.filter(
-    (fishEntry) => !fishEntry.blank && fishEntry.fish && fishEntry.fish.trim().toLowerCase() !== 'unbekannt'
-  );
+  const baseValidFishes = fishes.filter((fishEntry) => isValuableFishEntry(fishEntry));
+  const summaryValidFishes = yearScopedFishes.filter((fishEntry) => isValuableFishEntry(fishEntry));
   const totalFishes = summaryValidFishes.length;
 
   const blankSessions = yearScopedFishes.filter((fishEntry) => fishEntry.blank === true).length;

@@ -73,6 +73,23 @@ PRESSURE_PA_THRESHOLD = 2000.0
 PRESSURE_HPA_MIN = 850.0
 PRESSURE_HPA_MAX = 1100.0
 PRESSURE_TREND_CLIP_HPA_PER_DAY = 25.0
+RECENCY_HALF_LIFE_DAYS = 90.0
+RECENCY_WEIGHT_MIN = 0.35
+RECENCY_WEIGHT_MAX = 3.0
+SPECIES_SEASONAL_TRAINING_BOOST = {
+    "Brasse": {2: 1.25, 3: 1.45, 4: 1.25},
+    "Karpfen": {2: 1.15, 3: 1.3, 4: 1.2},
+}
+SPECIES_RECENT_PRIOR_WINDOW_DAYS = 75
+SPECIES_RECENT_PRIOR_MIN_TOTAL = 6
+SPECIES_RECENT_PRIOR_STRENGTH = 0.30
+SPECIES_RECENT_PRIOR_MIN = 0.80
+SPECIES_RECENT_PRIOR_MAX = 1.60
+SPECIES_RECENT_PRIOR_BASELINE_ALPHA = 8.0
+SPECIES_RECENT_PRIOR_RECENT_ALPHA = 5.0
+CALIBRATION_RAW_FALLBACK_BLEND_MAIN = 0.18
+CALIBRATION_RAW_FALLBACK_BLEND_META = 0.20
+CALIBRATION_RAW_FALLBACK_BLEND_SPECIES = 0.25
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -225,6 +242,91 @@ def normalize_species_name(value):
     return SPECIES_NAME_MAP.get(key)
 
 
+def recency_weights_for_timestamps(timestamps, reference_ts=None):
+    ts = pd.to_datetime(timestamps, utc=True, errors="coerce")
+    if reference_ts is None:
+        reference_ts = pd.Timestamp(datetime.now(timezone.utc))
+    reference_ts = pd.Timestamp(reference_ts)
+    if reference_ts.tzinfo is None:
+        reference_ts = reference_ts.tz_localize("UTC")
+    else:
+        reference_ts = reference_ts.tz_convert("UTC")
+
+    age_days = (reference_ts - ts).dt.total_seconds() / 86400.0
+    age_days = age_days.clip(lower=0).fillna(RECENCY_HALF_LIFE_DAYS * 4.0)
+    decay = np.power(0.5, age_days / RECENCY_HALF_LIFE_DAYS)
+    decay = pd.Series(decay, index=ts.index, dtype=float)
+
+    mean_decay = float(decay.mean()) if len(decay) > 0 else 1.0
+    if not np.isfinite(mean_decay) or mean_decay <= 0:
+        mean_decay = 1.0
+    normalized = decay / mean_decay
+    return normalized.clip(lower=RECENCY_WEIGHT_MIN, upper=RECENCY_WEIGHT_MAX).astype(float)
+
+
+def seasonal_species_training_multiplier(species_name, month_value):
+    species_rules = SPECIES_SEASONAL_TRAINING_BOOST.get(species_name, {})
+    try:
+        month = int(month_value)
+    except Exception:
+        return 1.0
+    multiplier = species_rules.get(month, 1.0)
+    try:
+        return float(multiplier)
+    except Exception:
+        return 1.0
+
+
+def clipped_sample_weight_series(df, col_name="sample_weight"):
+    if col_name not in df.columns:
+        return pd.Series(1.0, index=df.index, dtype=float)
+    weights = pd.to_numeric(df[col_name], errors="coerce").fillna(1.0).astype(float)
+    return weights.clip(lower=0.05, upper=6.0)
+
+
+def compute_species_recent_priors(fish_df, reference_ts):
+    factors = {name: 1.0 for name in SPECIES_MODEL_FILES.keys()}
+    if fish_df.empty or "species_name" not in fish_df.columns or "timestamp" not in fish_df.columns:
+        return factors
+
+    known = fish_df[fish_df["species_name"].isin(SPECIES_MODEL_FILES.keys())].copy()
+    if known.empty:
+        return factors
+
+    total_counts = known["species_name"].value_counts().to_dict()
+    total_all = int(sum(total_counts.values()))
+    if total_all <= 0:
+        return factors
+
+    window_start = reference_ts - pd.Timedelta(days=SPECIES_RECENT_PRIOR_WINDOW_DAYS)
+    recent = known[known["timestamp"] >= window_start].copy()
+    recent_counts = recent["species_name"].value_counts().to_dict()
+    recent_total = int(sum(recent_counts.values()))
+    if recent_total < SPECIES_RECENT_PRIOR_MIN_TOTAL:
+        return factors
+
+    species_names = list(SPECIES_MODEL_FILES.keys())
+    species_count = float(max(1, len(species_names)))
+    baseline_alpha = float(max(0.0, SPECIES_RECENT_PRIOR_BASELINE_ALPHA))
+    recent_alpha = float(max(0.0, SPECIES_RECENT_PRIOR_RECENT_ALPHA))
+    baseline_denom = float(total_all) + baseline_alpha * species_count
+    recent_denom = float(recent_total) + recent_alpha * species_count
+
+    for species_name in species_names:
+        baseline = (float(total_counts.get(species_name, 0)) + baseline_alpha) / baseline_denom
+        recent_share = (float(recent_counts.get(species_name, 0)) + recent_alpha) / recent_denom
+        if baseline <= 0:
+            factors[species_name] = 1.0
+            continue
+
+        ratio = recent_share / baseline
+        factor = 1.0 + (ratio - 1.0) * SPECIES_RECENT_PRIOR_STRENGTH
+        factor = float(np.clip(factor, SPECIES_RECENT_PRIOR_MIN, SPECIES_RECENT_PRIOR_MAX))
+        factors[species_name] = factor
+
+    return factors
+
+
 def build_balanced_training_frame(positive_df, negative_df, negative_multiplier=1.0):
     if positive_df.empty or negative_df.empty:
         return None
@@ -257,7 +359,14 @@ def split_train_test(X, y, test_size=0.25):
     )
 
 
-def split_observed_for_calibration(positive_df, negative_df, holdout_size=CALIBRATION_HOLDOUT_SIZE):
+def split_observed_for_calibration(
+    positive_df,
+    negative_df,
+    holdout_size=CALIBRATION_HOLDOUT_SIZE,
+    train_extra_columns=None,
+):
+    extra_cols = [c for c in (train_extra_columns or []) if c not in FEATURE_COLUMNS]
+    train_columns = FEATURE_COLUMNS + extra_cols
     pos = positive_df.copy()
     neg = negative_df.copy()
     pos["label"] = 1
@@ -266,9 +375,10 @@ def split_observed_for_calibration(positive_df, negative_df, holdout_size=CALIBR
     observed = observed.sample(frac=1.0, random_state=RANDOM_STATE).reset_index(drop=True)
 
     if observed["label"].nunique() < 2 or observed["label"].value_counts().min() < 2:
+        selected = [c for c in train_columns if c in observed.columns]
         return (
-            positive_df.copy(),
-            negative_df.copy(),
+            positive_df[selected].copy(),
+            negative_df[selected].copy(),
             observed[FEATURE_COLUMNS].copy(),
             observed["label"].astype(int).copy(),
         )
@@ -279,14 +389,15 @@ def split_observed_for_calibration(positive_df, negative_df, holdout_size=CALIBR
         random_state=RANDOM_STATE,
         stratify=observed["label"],
     )
-    train_positive = train_observed[train_observed["label"] == 1][FEATURE_COLUMNS].copy()
-    train_negative = train_observed[train_observed["label"] == 0][FEATURE_COLUMNS].copy()
+    selected = [c for c in train_columns if c in train_observed.columns]
+    train_positive = train_observed[train_observed["label"] == 1][selected].copy()
+    train_negative = train_observed[train_observed["label"] == 0][selected].copy()
     X_calib = calib_observed[FEATURE_COLUMNS].copy()
     y_calib = calib_observed["label"].astype(int).copy()
     return train_positive, train_negative, X_calib, y_calib
 
 
-def fit_random_forest(X_train, y_train, class_weight):
+def fit_random_forest(X_train, y_train, class_weight, sample_weight=None):
     model = RandomForestClassifier(
         n_estimators=350,
         max_depth=14,
@@ -296,7 +407,10 @@ def fit_random_forest(X_train, y_train, class_weight):
         random_state=RANDOM_STATE,
         n_jobs=-1,
     )
-    model.fit(X_train, y_train)
+    if sample_weight is None:
+        model.fit(X_train, y_train)
+    else:
+        model.fit(X_train, y_train, sample_weight=np.asarray(sample_weight, dtype=float))
     return model
 
 
@@ -331,7 +445,14 @@ def fit_probability_calibrator(probabilities, labels):
     return calibrator, "ok"
 
 
-def build_calibrator_entry(calibrator, y_calib, status, cap, prior_override=None):
+def build_calibrator_entry(
+    calibrator,
+    y_calib,
+    status,
+    cap,
+    prior_override=None,
+    fallback_raw_blend_min=0.0,
+):
     y = np.asarray(y_calib, dtype=int)
     samples = int(len(y))
     prior = float(np.mean(y)) if samples > 0 else 0.5
@@ -339,7 +460,10 @@ def build_calibrator_entry(calibrator, y_calib, status, cap, prior_override=None
         prior = float(prior_override)
     blend_weight = float(samples / (samples + CALIBRATION_BLEND_BASE)) if samples > 0 else 0.0
     if calibrator is None:
-        blend_weight = 0.0
+        fallback = max(0.0, min(float(fallback_raw_blend_min), 1.0))
+        # Ohne trainierten Kalibrator nicht auf den Prior kollabieren:
+        # Ein kontrollierter Anteil Roh-Score bleibt erhalten.
+        blend_weight = max(fallback, blend_weight * 0.35)
     return {
         "model": calibrator,
         "prior": prior,
@@ -460,6 +584,7 @@ def write_model_metadata(
     calibration_stats,
     serving_main_model_file,
     serving_main_model_source,
+    species_recent_priors,
 ):
     now_iso = iso_utc_now()
     main_base_path = os.path.join(MODEL_DIR, MAIN_MODEL_FILE)
@@ -507,6 +632,7 @@ def write_model_metadata(
             "serving_main_model_file": serving_main_model_file,
             "serving_main_model_source": serving_main_model_source,
             "species_training": species_stats,
+            "species_recent_priors": species_recent_priors,
             "calibration": calibration_stats,
         },
     }
@@ -573,6 +699,9 @@ else:
     fish_data["species_name"] = None
 
 fish_data = fish_data.fillna(-1)
+training_reference_ts = pd.Timestamp(datetime.now(timezone.utc))
+fish_data["sample_weight"] = recency_weights_for_timestamps(fish_data["timestamp"], training_reference_ts)
+species_recent_priors = compute_species_recent_priors(fish_data, training_reference_ts)
 
 
 # =====================================================
@@ -595,16 +724,18 @@ blank_data["wind_deg"] = to_numeric_series(blank_data, "wind_deg", -1)
 blank_data["moon_phase"] = to_numeric_series(blank_data, "moon_phase", -1)
 blank_data = add_trend_features(blank_data, weather_log)
 blank_data = blank_data.fillna(-1)
+blank_data["sample_weight"] = recency_weights_for_timestamps(blank_data["timestamp"], training_reference_ts)
 
 
 # =====================================================
 # Training Basis-Hauptmodell (Fallback)
 # =====================================================
-main_positive = fish_data[FEATURE_COLUMNS].copy()
-main_negative = blank_data[FEATURE_COLUMNS].copy()
+main_positive = fish_data[FEATURE_COLUMNS + ["sample_weight"]].copy()
+main_negative = blank_data[FEATURE_COLUMNS + ["sample_weight"]].copy()
 main_train_positive, main_train_negative, X_main_calib, y_main_calib = split_observed_for_calibration(
     main_positive,
     main_negative,
+    train_extra_columns=["sample_weight"],
 )
 main_train_df = build_balanced_training_frame(
     main_train_positive,
@@ -617,9 +748,16 @@ if main_train_df is None:
 X_main = main_train_df[FEATURE_COLUMNS]
 y_main = main_train_df["label"].astype(int)
 X_train, X_test, y_train, y_test = split_train_test(X_main, y_main)
+main_sample_weights = clipped_sample_weight_series(main_train_df)
+main_train_weights = main_sample_weights.loc[X_train.index]
 
 print("🚀 Trainiere Basis-Hauptmodell...")
-main_model = fit_random_forest(X_train, y_train, class_weight={0: 1.5, 1: 1.0})
+main_model = fit_random_forest(
+    X_train,
+    y_train,
+    class_weight={0: 1.5, 1: 1.0},
+    sample_weight=main_train_weights,
+)
 print("\n📊 Basis-Hauptmodell Testreport:")
 print(classification_report(y_test, main_model.predict(X_test), zero_division=0))
 
@@ -642,6 +780,7 @@ main_base_calibrator_entry = build_calibrator_entry(
     status=main_base_calibration_reason,
     cap=MAIN_BASE_CALIBRATION_CAP,
     prior_override=MAIN_CALIBRATION_PRIOR,
+    fallback_raw_blend_min=CALIBRATION_RAW_FALLBACK_BLEND_MAIN,
 )
 
 main_model_path = os.path.join(MODEL_DIR, MAIN_MODEL_FILE)
@@ -661,17 +800,28 @@ calibration_stats = {
     "species": {},
 }
 for species_name, file_name in SPECIES_MODEL_FILES.items():
-    species_positive = fish_data[fish_data["species_name"] == species_name][FEATURE_COLUMNS].copy()
+    species_positive = fish_data[
+        fish_data["species_name"] == species_name
+    ][FEATURE_COLUMNS + ["sample_weight", "month"]].copy()
+    species_positive["sample_weight"] = (
+        clipped_sample_weight_series(species_positive)
+        * species_positive["month"].apply(
+            lambda month_value: seasonal_species_training_multiplier(species_name, month_value)
+        )
+        * float(species_recent_priors.get(species_name, 1.0))
+    ).clip(lower=0.05, upper=6.0)
+    species_positive = species_positive.drop(columns=["month"])
     species_negative_pool = pd.concat(
         [
-            blank_data[FEATURE_COLUMNS].copy(),
-            fish_data[fish_data["species_name"] != species_name][FEATURE_COLUMNS].copy(),
+            blank_data[FEATURE_COLUMNS + ["sample_weight"]].copy(),
+            fish_data[fish_data["species_name"] != species_name][FEATURE_COLUMNS + ["sample_weight"]].copy(),
         ],
         ignore_index=True,
     )
     species_train_positive, species_train_negative, X_species_calib, y_species_calib = split_observed_for_calibration(
         species_positive,
         species_negative_pool,
+        train_extra_columns=["sample_weight"],
     )
 
     species_stats[species_name] = {
@@ -709,8 +859,15 @@ for species_name, file_name in SPECIES_MODEL_FILES.items():
     X_species = species_train_df[FEATURE_COLUMNS]
     y_species = species_train_df["label"].astype(int)
     Xs_train, Xs_test, ys_train, ys_test = split_train_test(X_species, y_species)
+    species_sample_weights = clipped_sample_weight_series(species_train_df)
+    species_train_weights = species_sample_weights.loc[Xs_train.index]
 
-    species_model = fit_random_forest(Xs_train, ys_train, class_weight={0: 1.35, 1: 1.0})
+    species_model = fit_random_forest(
+        Xs_train,
+        ys_train,
+        class_weight={0: 1.35, 1: 1.0},
+        sample_weight=species_train_weights,
+    )
     print(f"\n📊 {species_name}-Modell Testreport:")
     print(classification_report(ys_test, species_model.predict(Xs_test), zero_division=0))
 
@@ -724,6 +881,7 @@ for species_name, file_name in SPECIES_MODEL_FILES.items():
         y_calib=y_species_calib,
         status=species_calibration_reason,
         cap=SPECIES_CALIBRATION_CAP,
+        fallback_raw_blend_min=CALIBRATION_RAW_FALLBACK_BLEND_SPECIES,
     )
 
     species_model_path = os.path.join(MODEL_DIR, file_name)
@@ -761,6 +919,7 @@ if len(trained_species_models) > 0:
     meta_train_positive, meta_train_negative, X_meta_calib_source, y_meta_calib = split_observed_for_calibration(
         main_positive,
         main_negative,
+        train_extra_columns=["sample_weight"],
     )
     meta_train_df = build_balanced_training_frame(
         meta_train_positive,
@@ -773,9 +932,16 @@ if len(trained_species_models) > 0:
         y_meta = meta_train_df["label"].astype(int)
         X_meta = build_species_meta_feature_frame(X_meta_source, trained_species_models, species_calibrators)
         Xm_train, Xm_test, ym_train, ym_test = split_train_test(X_meta, y_meta)
+        meta_sample_weights = clipped_sample_weight_series(meta_train_df)
+        meta_train_weights = meta_sample_weights.loc[Xm_train.index]
 
         print("\n🚀 Trainiere Hauptmodell aus Fischmodell-Prognosen...")
-        main_from_species_model = fit_random_forest(Xm_train, ym_train, class_weight={0: 1.25, 1: 1.0})
+        main_from_species_model = fit_random_forest(
+            Xm_train,
+            ym_train,
+            class_weight={0: 1.25, 1: 1.0},
+            sample_weight=meta_train_weights,
+        )
         print("\n📊 Hauptmodell-aus-Fischmodellen Testreport:")
         print(classification_report(ym_test, main_from_species_model.predict(Xm_test), zero_division=0))
 
@@ -803,6 +969,7 @@ if len(trained_species_models) > 0:
             status=main_meta_calibration_reason,
             cap=MAIN_META_CALIBRATION_CAP,
             prior_override=MAIN_CALIBRATION_PRIOR,
+            fallback_raw_blend_min=CALIBRATION_RAW_FALLBACK_BLEND_META,
         )
 
         main_from_species_path = os.path.join(MODEL_DIR, MAIN_FROM_SPECIES_MODEL_FILE)
@@ -838,6 +1005,7 @@ write_model_metadata(
     calibration_stats=calibration_stats,
     serving_main_model_file=serving_main_model_file,
     serving_main_model_source=serving_main_model_source,
+    species_recent_priors={k: round(float(v), 4) for k, v in species_recent_priors.items()},
 )
 
 print("🎯 Training abgeschlossen.")

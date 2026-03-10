@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 import { Card } from '@/components/ui';
+
+const YEAR_FILTER_ALL = 'all';
 
 function getKey(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -16,55 +20,91 @@ function getDaysInMonth(year, month) {
 }
 
 export default function FishCalendarMobileView() {
+  const currentYear = new Date().getFullYear();
+  const resumeTick = useAppResumeTick({ enabled: true });
   const [groupedData, setGroupedData] = useState({});
   const [loading, setLoading] = useState(true);
-  const anglerName = localStorage.getItem('anglerName') || 'Unbekannt';
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [anglerName] = useLocalStorageValue('anglerName', 'Unbekannt');
 
   useEffect(() => {
+    let active = true;
     async function fetchData() {
       const clubId = getActiveClubId();
-      const { data, error } = await supabase
-        .from('fishes')
-        .select('timestamp, fish, angler')
-        .eq('club_id', clubId)
-        .eq('angler', anglerName);
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('fishes')
+          .select('timestamp, fish, angler')
+          .eq('club_id', clubId)
+          .eq('angler', anglerName);
 
-      if (error) {
-        console.error('Fehler beim Laden:', error);
-        return;
+        if (!active) return;
+        if (error) {
+          console.error('Fehler beim Laden:', error);
+          setGroupedData({});
+          return;
+        }
+
+        const monthMap = {};
+
+        (data || []).forEach(entry => {
+          const date = new Date(entry.timestamp);
+          const year = date.getFullYear();
+          const month = date.getMonth();
+          const day = date.getDate();
+          const key = getKey(year, month, day);
+          const monthKey = `${year}-${month}`;
+          if (!monthMap[monthKey]) monthMap[monthKey] = { year, month, days: {} };
+
+          monthMap[monthKey].days[key] = entry.fish ? '🐟' : '❌';
+        });
+
+        setGroupedData(monthMap);
+      } finally {
+        if (active) setLoading(false);
       }
-
-      const monthMap = {};
-
-      data.forEach(entry => {
-        const date = new Date(entry.timestamp);
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const day = date.getDate();
-        const key = getKey(year, month, day);
-        const monthKey = `${year}-${month}`;
-        if (!monthMap[monthKey]) monthMap[monthKey] = { year, month, days: {} };
-
-        monthMap[monthKey].days[key] = entry.fish ? '🐟' : '❌';
-      });
-
-      setGroupedData(monthMap);
-      setLoading(false);
     }
 
-    fetchData();
-  }, [anglerName]);
+    void fetchData();
+    return () => {
+      active = false;
+    };
+  }, [anglerName, resumeTick]);
 
-  const sortedMonths = Object.values(groupedData).sort((a, b) => {
-    if (a.year !== b.year) return b.year - a.year;
-    return b.month - a.month;
-  });
+  const sortedMonths = useMemo(
+    () => Object.values(groupedData).sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    }),
+    [groupedData]
+  );
+
+  const availableYears = useMemo(() => {
+    const years = new Set([currentYear]);
+    sortedMonths.forEach(({ year }) => years.add(year));
+    return Array.from(years).sort((a, b) => b - a);
+  }, [currentYear, sortedMonths]);
+
+  useEffect(() => {
+    if (selectedYear === YEAR_FILTER_ALL) return;
+    if (!availableYears.includes(selectedYear)) {
+      setSelectedYear(currentYear);
+    }
+  }, [availableYears, currentYear, selectedYear]);
+
+  const filteredMonths = useMemo(
+    () => (selectedYear === YEAR_FILTER_ALL
+      ? sortedMonths
+      : sortedMonths.filter(({ year }) => year === selectedYear)),
+    [selectedYear, sortedMonths]
+  );
 
   if (loading) {
     return <p className="text-center text-gray-500 dark:text-gray-300 mt-6">Lade Kalenderdaten...</p>;
   }
 
-  const overallStats = sortedMonths.reduce(
+  const overallStats = filteredMonths.reduce(
     (acc, { days }) => {
       Object.values(days).forEach((status) => {
         if (status === '🐟') acc.catchDays += 1;
@@ -77,15 +117,46 @@ export default function FishCalendarMobileView() {
 
   return (
     <Card className="p-4 max-w-md mx-auto space-y-10">
+      <div className="flex flex-wrap justify-center gap-2">
+        {[YEAR_FILTER_ALL, ...availableYears].map((year) => {
+          const isAll = year === YEAR_FILTER_ALL;
+          const isSelected = selectedYear === year;
+          return (
+            <button
+              key={isAll ? 'all-years' : year}
+              type="button"
+              onClick={() => setSelectedYear(year)}
+              aria-pressed={isSelected}
+              className={`rounded-full border px-4 py-1 text-sm transition ${
+                isSelected
+                  ? 'border-blue-600 bg-blue-600 text-white font-semibold dark:border-blue-400 dark:bg-blue-500 dark:text-gray-900'
+                  : 'border-blue-400 bg-white text-blue-700 hover:bg-blue-50 dark:border-blue-500 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-gray-700'
+              }`}
+            >
+              {isAll ? 'Alle' : year}
+            </button>
+          );
+        })}
+      </div>
+
       <Card className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 text-center">
         <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100 mb-2">Gesamtübersicht</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+          {selectedYear === YEAR_FILTER_ALL ? 'Alle Jahre' : `Jahr ${selectedYear}`}
+        </p>
         <div className="flex items-center justify-center gap-6 text-sm text-gray-600 dark:text-gray-300">
           <span>🐟 Fangtage: <span className="font-bold text-gray-800 dark:text-gray-100">{overallStats.catchDays}</span></span>
           <span>❌ Schneidertage: <span className="font-bold text-gray-800 dark:text-gray-100">{overallStats.blankDays}</span></span>
         </div>
       </Card>
 
-      {sortedMonths.map(({ year, month, days }) => {
+      {filteredMonths.length === 0 ? (
+        <Card className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow text-center text-sm text-gray-500 dark:text-gray-300">
+          Keine Kalendereinträge für das gewählte Jahr.
+        </Card>
+      ) : null}
+
+      {filteredMonths.map(({ year, month, days }) => {
         const firstDay = new Date(year, month, 1);
         const startWeekday = (firstDay.getDay() + 6) % 7;
         const numDays = getDaysInMonth(year, month);

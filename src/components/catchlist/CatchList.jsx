@@ -12,13 +12,15 @@ import { shareEntry } from '../../utils/share';
 import { windDirection, getMoonDescription } from '../../utils/weather';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
-import { VERTRAUTE } from '@/constants';
 import { REACTION_OPTIONS } from '@/constants/reactions';
 import { isVisibleToUser } from '@/utils/filters';
 import { useReactions } from '@/hooks/useReactions';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
 import { withTimeout } from '@/utils/async';
+import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
+import { isTrustedAngler } from '@/utils/visibilityPolicy';
 
 export default function CatchList({ anglerName }) {
   const resumeTick = useAppResumeTick({ enabled: true });
@@ -38,6 +40,7 @@ export default function CatchList({ anglerName }) {
     setExternalVisibility,
     isVisibilityPending,
   } = useCatches(anglerName, onlyMine);
+  const [filterSetting] = useLocalStorageValue('dataFilter', 'recent');
 
   const [openMenuId, setOpenMenuId] = useState(null);
   const [modalPhoto, setModalPhoto] = useState(null);
@@ -54,7 +57,7 @@ export default function CatchList({ anglerName }) {
   useInfiniteScroll({ ref: sentinelRef, hasMore, loading, onHit: loadNext });
 
   const normalizedName = useMemo(() => (anglerName || '').trim(), [anglerName]);
-  const isTrusted = useMemo(() => VERTRAUTE.includes(normalizedName), [normalizedName]);
+  const isTrusted = useMemo(() => isTrustedAngler(normalizedName), [normalizedName]);
   const {
     loadReactionsFor,
     reactToFish,
@@ -114,12 +117,9 @@ export default function CatchList({ anglerName }) {
           return;
         }
 
-        const filterSetting = localStorage.getItem('dataFilter') ?? 'recent';
         const valid = (data || [])
           .filter((entry) => {
-            const sizeNum = parseFloat(entry?.size);
-            if (!entry?.fish || Number.isNaN(sizeNum) || sizeNum <= 0) return false;
-            if (entry.blank) return false;
+            if (!isValuableFishEntry(entry)) return false;
             if (!isFerkensbruchLocation(entry.location_name)) return false;
             return isVisibleToUser(entry, {
               isTrusted,
@@ -128,7 +128,7 @@ export default function CatchList({ anglerName }) {
               filterSetting,
             });
           })
-          .map((entry) => ({ ...entry, sizeNum: parseFloat(entry.size), key: entryKey(entry) }));
+          .map((entry) => ({ ...entry, sizeNum: parseFishSize(entry.size) || 0, key: entryKey(entry) }));
 
         const byFish = new Map();
         for (const entry of valid) {
@@ -161,7 +161,7 @@ export default function CatchList({ anglerName }) {
     return () => {
       cancelled = true;
     };
-  }, [isTrusted, normalizedName, entryKey, resumeTick]);
+  }, [filterSetting, isTrusted, normalizedName, entryKey, resumeTick]);
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {

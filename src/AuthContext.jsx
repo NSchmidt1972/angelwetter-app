@@ -3,8 +3,15 @@ import { supabase } from './supabaseClient';
 import { getActiveClubId } from './utils/clubId';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { withTimeout } from '@/utils/async';
+import { debugLog } from '@/utils/runtimeDebug';
 
 const AuthContext = createContext();
+const AUTH_RESUME_TIMEOUT_MS = 2500;
+const PROFILE_TIMEOUT_MS = 10000;
+
+function isDocumentVisible() {
+  return typeof document === 'undefined' || document.visibilityState === 'visible';
+}
 
 export const AuthProvider = ({ children }) => {
   const resumeTick = useAppResumeTick({ enabled: true });
@@ -12,6 +19,9 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+
+  const userId = user?.id ?? null;
+  const authStillLoading = user === undefined;
 
   useEffect(() => {
     let mounted = true;
@@ -22,7 +32,12 @@ export const AuthProvider = ({ children }) => {
           data: { session },
         } = await withTimeout(supabase.auth.getSession(), 10000, 'Auth-Session timeout');
         if (mounted) {
-          setUser(session?.user ?? null);
+          setUser((prev) => {
+            const nextUser = session?.user ?? null;
+            const prevId = prev?.id ?? null;
+            const nextId = nextUser?.id ?? null;
+            return prevId === nextId ? prev : nextUser;
+          });
         }
       } catch (error) {
         if (mounted) {
@@ -39,7 +54,17 @@ export const AuthProvider = ({ children }) => {
     loadSession();
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      debugLog('auth:on-state-change', {
+        event: _event,
+        hasSession: Boolean(session),
+        userId: session?.user?.id || null,
+      });
+      setUser((prev) => {
+        const nextUser = session?.user ?? null;
+        const prevId = prev?.id ?? null;
+        const nextId = nextUser?.id ?? null;
+        return prevId === nextId ? prev : nextUser;
+      });
     });
 
     return () => {
@@ -53,19 +78,40 @@ export const AuthProvider = ({ children }) => {
     let active = true;
 
     const syncSessionOnResume = async () => {
+      if (!isDocumentVisible()) {
+        debugLog('auth:resume-sync-skip-hidden', { resumeTick });
+        return;
+      }
+      if (userId) {
+        debugLog('auth:resume-sync-skip-user-present', { resumeTick, userId });
+        return;
+      }
+      debugLog('auth:resume-sync-start', { resumeTick });
       try {
-        const {
-          data: { session },
-        } = await withTimeout(
+        const { data, error } = await withTimeout(
           supabase.auth.getSession(),
-          8000,
+          AUTH_RESUME_TIMEOUT_MS,
           'Auth-Session-Resume timeout'
         );
-        if (!active) return;
-        setUser(session?.user ?? null);
+        if (error) throw error;
+        if (!active || !isDocumentVisible()) return;
+        const existingUser = data?.session?.user ?? null;
+        debugLog('auth:resume-session-ok', { userId: existingUser?.id || null });
+        if (existingUser) {
+          setUser((prev) => (prev?.id === existingUser.id ? prev : existingUser));
+        }
       } catch (error) {
         if (!active) return;
+        if (!isDocumentVisible()) {
+          debugLog('auth:resume-session-failed-hidden', {
+            message: error?.message || String(error || ''),
+          });
+          return;
+        }
         console.warn('⚠️ Session-Resume fehlgeschlagen:', error?.message || error);
+        debugLog('auth:resume-session-failed', {
+          message: error?.message || String(error || ''),
+        });
       }
     };
 
@@ -73,48 +119,81 @@ export const AuthProvider = ({ children }) => {
     return () => {
       active = false;
     };
-  }, [resumeTick]);
+  }, [resumeTick, userId]);
 
   useEffect(() => {
     let active = true;
 
     const loadProfile = async () => {
-      if (user === undefined) {
+      if (authStillLoading) {
         setProfile(null);
         setProfileLoading(true);
         return;
       }
-      if (!user) {
+      if (!userId) {
         setProfile(null);
         setProfileLoading(false);
+        return;
+      }
+
+      if (!isDocumentVisible()) {
+        debugLog('auth:profile-load-skip-hidden', { userId, resumeTick });
         return;
       }
 
       setProfileLoading(true);
       try {
         const clubId = getActiveClubId();
+        debugLog('auth:profile-load-start', {
+          userId,
+          clubId,
+          resumeTick,
+        });
         const { data, error } = await withTimeout(
           supabase
             .from('profiles')
-            .select('*')
-            .eq('id', user.id)
+            .select('id, name, role, club_id')
+            .eq('id', userId)
             .eq('club_id', clubId)
             .maybeSingle(),
-          10000,
+          PROFILE_TIMEOUT_MS,
           'Profile-Request timeout'
         );
 
-        if (!active) return;
+        if (!active || !isDocumentVisible()) return;
         if (error) {
           console.warn('⚠️ Profil konnte nicht geladen werden:', error.message || error);
-          setProfile(null);
+          debugLog('auth:profile-load-error', {
+            userId,
+            clubId,
+            message: error?.message || String(error || ''),
+          });
+          // Bei transienten Fehlern bestehendes Profil behalten.
+          setProfile((prev) => prev);
         } else {
-          setProfile(data || null);
+          debugLog('auth:profile-load-ok', {
+            userId,
+            clubId,
+            profileClubId: data?.club_id || null,
+          });
+          setProfile((prev) => data || prev || null);
         }
       } catch (err) {
         if (!active) return;
+        if (!isDocumentVisible()) {
+          debugLog('auth:profile-load-exception-hidden', {
+            userId,
+            message: err?.message || String(err || ''),
+          });
+          return;
+        }
         console.warn('⚠️ Profil-Ladevorgang abgebrochen:', err?.message || err);
-        setProfile(null);
+        debugLog('auth:profile-load-exception', {
+          userId,
+          message: err?.message || String(err || ''),
+        });
+        // Bei Resume-Fehlern altes Profil nicht löschen.
+        setProfile((prev) => prev);
       } finally {
         if (active) setProfileLoading(false);
       }
@@ -122,7 +201,7 @@ export const AuthProvider = ({ children }) => {
 
     loadProfile();
     return () => { active = false; };
-  }, [user, resumeTick]);
+  }, [authStillLoading, userId, resumeTick]);
 
   const value = useMemo(
     () => ({ user, setUser, loading, profile, profileLoading }),

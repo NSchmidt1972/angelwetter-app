@@ -6,6 +6,7 @@ import {
 } from '@/features/forecast/services/forecastApi';
 import { isAiUnavailableError } from '@/services/aiService';
 import { withModelTimestamps } from '@/features/forecast/services/predictionModelInfo';
+import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 
 function isAbortError(error) {
   return error?.name === 'AbortError' || /aborted|abort/i.test(error?.message ?? '');
@@ -119,6 +120,7 @@ async function withRetry(task, { attempts = RETRY_ATTEMPTS, delayMs = RETRY_DELA
 }
 
 export function useForecast() {
+  const resumeTick = useAppResumeTick({ enabled: true });
   const [loading, setLoading] = useState(false);
   const [weatherData, setWeatherData] = useState(null);
   const [aiPrediction, setAiPrediction] = useState(null);
@@ -259,7 +261,7 @@ export function useForecast() {
   useEffect(() => {
     load();
     return () => abortRef.current?.abort();
-  }, [load]);
+  }, [load, resumeTick]);
 
   return { loading, weatherData, aiPrediction, dailyPredictions, forecastError, reload: load };
 }

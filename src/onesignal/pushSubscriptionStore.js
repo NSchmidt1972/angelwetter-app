@@ -1,5 +1,5 @@
 import { supabase } from '@/supabaseClient';
-import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
+import { getActiveClubId } from '@/utils/clubId';
 
 const NULL_CLUB_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -52,7 +52,6 @@ async function resolveClubIdForUser(userId, preferredClubId = getActiveClubId())
   if (!membershipError && Array.isArray(membershipRows) && membershipRows.length > 0) {
     const membershipClubId = normalizeClubId(membershipRows[0]?.club_id);
     if (membershipClubId) {
-      setActiveClubId(membershipClubId);
       return membershipClubId;
     }
   }
@@ -67,7 +66,6 @@ async function resolveClubIdForUser(userId, preferredClubId = getActiveClubId())
   if (!profileError && Array.isArray(profileRows) && profileRows.length > 0) {
     const profileClubId = normalizeClubId(profileRows[0]?.club_id);
     if (profileClubId) {
-      setActiveClubId(profileClubId);
       return profileClubId;
     }
   }
