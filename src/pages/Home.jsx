@@ -16,7 +16,7 @@ export default function Home() {
   const [waterTemperatureHistory, setWaterTemperatureHistory] = useState([]);
   const [waterTemperatureLoading, setWaterTemperatureLoading] = useState(true);
   const weatherData = weather;
-  const errorMessage = error ? '⚠️ Wetterdaten konnten nicht geladen werden.' : null;
+  const errorMessage = error && !weatherData ? '⚠️ Wetterdaten konnten nicht geladen werden.' : null;
   const role = profile?.role ? String(profile.role).trim().toLowerCase() : null;
   const isAdmin = role === 'admin';
 

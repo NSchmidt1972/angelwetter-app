@@ -8,9 +8,11 @@ import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 const WeatherContext = createContext(null);
 
 const WEATHER_ID = 'latest';
+const WEATHER_SESSION_CACHE_KEY = 'weather_latest_session_v1';
 const INITIAL_DELAY_MS = 400;
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const WEATHER_TIMEOUT_MS = 10000;
+const INITIAL_RETRY_DELAY_MS = 8000;
 
 function schedule(callback, delay) {
   if (typeof window === 'undefined') {
@@ -23,6 +25,36 @@ function schedule(callback, delay) {
 
 function isDocumentVisible() {
   return typeof document === 'undefined' || document.visibilityState === 'visible';
+}
+
+function readSessionWeather() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(WEATHER_SESSION_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed.data) return null;
+    return {
+      data: parsed.data,
+      savedAt: Number(parsed.savedAt) || Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionWeather(value) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!value?.data) {
+      window.sessionStorage.removeItem(WEATHER_SESSION_CACHE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(WEATHER_SESSION_CACHE_KEY, JSON.stringify(value));
+  } catch {
+    /* ignore storage errors */
+  }
 }
 
 async function fetchLatestWeather() {
@@ -47,11 +79,17 @@ async function fetchLatestWeather() {
 
 export function WeatherProvider({ children }) {
   const resumeTick = useAppResumeTick();
-  const [weather, setWeather] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [weather, setWeather] = useState(() => readSessionWeather());
+  const [loading, setLoading] = useState(() => !readSessionWeather());
   const [error, setError] = useState(null);
   const intervalRef = useRef(null);
   const refreshPromiseRef = useRef(null);
+  const initialRetryRef = useRef(null);
+  const weatherRef = useRef(weather);
+
+  useEffect(() => {
+    weatherRef.current = weather;
+  }, [weather]);
 
   const refreshInternal = useCallback(async ({ silent = false } = {}) => {
     if (refreshPromiseRef.current) {
@@ -63,12 +101,16 @@ export function WeatherProvider({ children }) {
       try {
         const latest = await fetchLatestWeather();
         setWeather(latest);
+        writeSessionWeather(latest);
         setError(null);
         return true;
       } catch (err) {
         console.warn('⚠️ Wetter konnte nicht aus Supabase geladen werden:', err?.message ?? err);
-        setError(err);
-        return false;
+        const hasFallback = Boolean(weatherRef.current?.data);
+        if (!hasFallback) {
+          setError(err);
+        }
+        return hasFallback;
       } finally {
         if (!silent) setLoading(false);
       }
@@ -89,7 +131,19 @@ export function WeatherProvider({ children }) {
 
     const runInitial = () => {
       if (!disposed && isDocumentVisible()) {
-        void refreshInternal();
+        void refreshInternal().then((ok) => {
+          if (ok || disposed || !isDocumentVisible()) return;
+          if (initialRetryRef.current != null && typeof window !== 'undefined') {
+            window.clearTimeout(initialRetryRef.current);
+          }
+          if (typeof window !== 'undefined') {
+            initialRetryRef.current = window.setTimeout(() => {
+              if (!disposed && isDocumentVisible()) {
+                void refreshInternal({ silent: true });
+              }
+            }, INITIAL_RETRY_DELAY_MS);
+          }
+        });
       }
     };
 
@@ -106,6 +160,9 @@ export function WeatherProvider({ children }) {
     return () => {
       disposed = true;
       cancelInitial?.();
+      if (initialRetryRef.current != null && typeof window !== 'undefined') {
+        window.clearTimeout(initialRetryRef.current);
+      }
       if (intervalRef.current != null && typeof window !== 'undefined') {
         window.clearInterval(intervalRef.current);
       }
