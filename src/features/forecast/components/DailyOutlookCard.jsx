@@ -1,6 +1,55 @@
 import { Card } from '@/components/ui';
 import { formatDateFromUnix, renderFishRating } from '@/utils/formatters';
 import { FishChipsLoader } from '@/features/forecast/components/ForecastLoadingPanels';
+import { getClosedSeasonForFish, isFishInClosedSeason } from '@/rules/ferkensbruch';
+
+function formatSeasonDay(value) {
+  const match = /^(\d{2})-(\d{2})$/.exec(String(value ?? ''));
+  if (!match) return value ?? '';
+  const date = new Date(2000, Number(match[1]) - 1, Number(match[2]));
+  return new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit' }).format(date);
+}
+
+function FishForecastChip({ fish, prob, forecastDate, compact = false }) {
+  const season = getClosedSeasonForFish(fish);
+  const inClosedSeason = season ? isFishInClosedSeason(fish, forecastDate) : false;
+  const seasonLabel = season ? `${formatSeasonDay(season.start)}-${formatSeasonDay(season.end)}` : '';
+
+  if (inClosedSeason) {
+    return (
+      <div
+        className={`px-2 py-1 rounded-md border text-sm flex items-center gap-2 ${
+          compact
+            ? 'bg-red-50/90 dark:bg-red-950/30 border-red-200 dark:border-red-800/60'
+            : 'bg-red-50 dark:bg-red-950/40 border-red-200/80 dark:border-red-800/70'
+        }`}
+      >
+        <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
+        <span
+          className="font-semibold text-red-700 dark:text-red-300"
+          title={`Schonzeit${seasonLabel ? ` (${seasonLabel})` : ''}`}
+          aria-label={`${fish} hat Schonzeit${seasonLabel ? ` (${seasonLabel})` : ''}`}
+        >
+          🚫 Schonzeit
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`px-2 py-1 rounded-md border text-sm flex items-center gap-2 ${
+        compact
+          ? 'bg-white/60 dark:bg-black/10 border-gray-200/40 dark:border-white/10'
+          : 'bg-white/70 dark:bg-black/20 border-gray-200/50 dark:border-white/10'
+      }`}
+    >
+      <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
+      <span className="font-mono text-gray-700 dark:text-gray-200">{Number(prob).toFixed(1)}%</span>
+      <span className="leading-none">{renderFishRating(prob)}</span>
+    </div>
+  );
+}
 
 export default function DailyOutlookCard({ dailyPredictions, expanded, onToggle, loading }) {
   if (!dailyPredictions?.length) return null;
@@ -21,6 +70,7 @@ export default function DailyOutlookCard({ dailyPredictions, expanded, onToggle,
           const rest = sortedFish.slice(3);
           const moreCount = rest.length;
           const isOpen = !!expanded[index];
+          const forecastDate = dayPrediction?.dt ? new Date(dayPrediction.dt * 1000) : new Date();
 
           return (
             <div key={index} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
@@ -56,16 +106,7 @@ export default function DailyOutlookCard({ dailyPredictions, expanded, onToggle,
                   <>
                     <div className="flex flex-wrap gap-2">
                       {top.map(([fish, prob]) => (
-                        <div
-                          key={fish}
-                          className="px-2 py-1 rounded-md bg-white/70 dark:bg-black/20 border border-gray-200/50 dark:border-white/10 text-sm flex items-center gap-2"
-                        >
-                          <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
-                          <span className="font-mono text-gray-700 dark:text-gray-200">
-                            {Number(prob).toFixed(1)}%
-                          </span>
-                          <span className="leading-none">{renderFishRating(prob)}</span>
-                        </div>
+                        <FishForecastChip key={fish} fish={fish} prob={prob} forecastDate={forecastDate} />
                       ))}
 
                       {moreCount > 0 && (
@@ -87,16 +128,13 @@ export default function DailyOutlookCard({ dailyPredictions, expanded, onToggle,
                       >
                         <div className="flex flex-wrap gap-2">
                           {rest.map(([fish, prob]) => (
-                            <div
+                            <FishForecastChip
                               key={fish}
-                              className="px-2 py-1 rounded-md bg-white/60 dark:bg-black/10 border border-gray-200/40 dark:border-white/10 text-sm flex items-center gap-2"
-                            >
-                              <span className="font-medium text-gray-800 dark:text-gray-100">{fish}</span>
-                              <span className="font-mono text-gray-700 dark:text-gray-200">
-                                {Number(prob).toFixed(1)}%
-                              </span>
-                              <span className="leading-none">{renderFishRating(prob)}</span>
-                            </div>
+                              fish={fish}
+                              prob={prob}
+                              forecastDate={forecastDate}
+                              compact
+                            />
                           ))}
                         </div>
                       </div>

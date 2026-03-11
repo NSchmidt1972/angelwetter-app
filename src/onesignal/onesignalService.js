@@ -2,6 +2,7 @@ import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { getOneSignal } from '@/onesignal/sdkLoader';
 import {
+  cleanupLegacyOneSignalRegistrations,
   ensureServiceWorkerRegistration,
   waitForServiceWorkerRegistration,
   SERVICE_WORKER_INFO,
@@ -17,7 +18,11 @@ const ONESIGNAL_APP_ID =
 const DISABLE_PUSH_ON_SAFARI = import.meta.env.VITE_DISABLE_PUSH_ON_SAFARI === '1';
 const PUSH_AUTO_INIT_MODE = String(import.meta.env.VITE_PUSH_AUTO_INIT || 'default').trim().toLowerCase();
 const SAFARI_ONESIGNAL_BACKOFF_KEY = '__aw_safari_onesignal_backoff_until';
-const SAFARI_ONESIGNAL_BACKOFF_MS = 30 * 60 * 1000;
+const SAFARI_ONESIGNAL_BACKOFF_MS = (() => {
+  const parsed = Number.parseInt(import.meta.env.VITE_ONESIGNAL_SAFARI_BACKOFF_MS || '', 10);
+  if (Number.isFinite(parsed) && parsed >= 1000) return parsed;
+  return 5 * 60 * 1000;
+})();
 
 const GLOBAL_STATE_KEY = '__awOneSignalServiceState';
 
@@ -288,9 +293,9 @@ function buildInitOptions(registration) {
   return {
     appId: ONESIGNAL_APP_ID,
     allowLocalhostAsSecureOrigin: true,
-    // Ohne führenden Slash, um URL-Edge-Cases in Safari/WebKit zu vermeiden.
-    serviceWorkerPath: SERVICE_WORKER_INFO.initPath,
-    serviceWorkerUpdaterPath: SERVICE_WORKER_INFO.initUpdaterPath,
+    // Absolute SW-Pfade verwenden, damit Unterrouten/Slug-Routen die Registrierung nicht brechen.
+    serviceWorkerPath: SERVICE_WORKER_INFO.registerPath,
+    serviceWorkerUpdaterPath: SERVICE_WORKER_INFO.updaterPath,
     serviceWorkerRegistration: registration,
     serviceWorkerParam: { scope: SERVICE_WORKER_INFO.scope },
   };
@@ -435,7 +440,8 @@ export async function subscribeCurrentUser(OneSignal) {
   }
 
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-    await waitForServiceWorkerRegistration();
+    await waitForServiceWorkerRegistration({ timeoutMs: 10_000 });
+    await waitForServiceWorkerReady({ timeoutMs: SW_READY_TIMEOUT_MS });
   }
 
   const model = getPushSubscriptionModel(sdk);
@@ -446,7 +452,23 @@ export async function subscribeCurrentUser(OneSignal) {
     await sdk.Notifications.subscribe();
   }
 
-  return waitForSubscriptionId(sdk, { attempts: 15, delayMs: 400 });
+  let subscriptionId = await waitForSubscriptionId(sdk, { attempts: 30, delayMs: 500 });
+  if (subscriptionId) return subscriptionId;
+
+  // Zweiter Versuch: Manche Browser liefern die ID erst nach einem weiteren Subscribe-Pass.
+  try {
+    if (typeof model?.optIn === 'function') {
+      await model.optIn();
+    }
+    if (typeof sdk?.Notifications?.subscribe === 'function') {
+      await sdk.Notifications.subscribe();
+    }
+  } catch (err) {
+    console.warn('[onesignalService] Zweiter Subscribe-Versuch fehlgeschlagen:', err);
+  }
+
+  subscriptionId = await waitForSubscriptionId(sdk, { attempts: 20, delayMs: 500, timeoutMs: 16_000 });
+  return subscriptionId;
 }
 
 export async function unsubscribeCurrentUser(OneSignal) {
@@ -492,6 +514,11 @@ export async function syncCurrentSubscription({
     optedIn,
     revokedAt,
     anglerName,
+  });
+
+  // Legacy-Root-Registrierungen erst entfernen, wenn der neue Pfad stabil synchronisiert ist.
+  void cleanupLegacyOneSignalRegistrations().catch((err) => {
+    console.warn('[onesignalService] Legacy-OneSignal-Registrierungen konnten nicht bereinigt werden:', err);
   });
 
   return true;

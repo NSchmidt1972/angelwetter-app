@@ -3,9 +3,9 @@
 const ONESIGNAL_SW_SCOPE = '/push/onesignal/';
 const ONESIGNAL_SW_REGISTER_PATH = '/push/onesignal/OneSignalSDKWorker.js';
 const ONESIGNAL_SW_UPDATER_PATH = '/push/onesignal/OneSignalSDKUpdaterWorker.js';
-// Fuer OneSignal.init bewusst ohne fuehrenden Slash, damit kein //push => https://push entsteht.
-const ONESIGNAL_SW_INIT_PATH = 'push/onesignal/OneSignalSDKWorker.js';
-const ONESIGNAL_SW_INIT_UPDATER_PATH = 'push/onesignal/OneSignalSDKUpdaterWorker.js';
+// Fuer OneSignal.init immer absolute Pfade nutzen, damit Routing/Basenamen keinen Einfluss haben.
+const ONESIGNAL_SW_INIT_PATH = ONESIGNAL_SW_REGISTER_PATH;
+const ONESIGNAL_SW_INIT_UPDATER_PATH = ONESIGNAL_SW_UPDATER_PATH;
 
 // Diese Pfade bleiben waehrend der Migration bestehen, damit Alt-Abos nicht brechen.
 const LEGACY_ONESIGNAL_SW_PATHS = [
@@ -87,10 +87,12 @@ async function getOneSignalRegistration() {
   }
 }
 
-export async function ensureServiceWorkerRegistration() {
+export async function ensureServiceWorkerRegistration({ cleanupLegacy = false } = {}) {
   if (!hasServiceWorkerSupport()) return null;
 
-  await cleanupLegacyRootRegistrations();
+  if (cleanupLegacy) {
+    await cleanupLegacyRootRegistrations();
+  }
 
   const existing = await getOneSignalRegistration();
   if (existing) return existing;
@@ -149,6 +151,10 @@ export async function waitForServiceWorkerRegistration({ timeoutMs = 4000 } = {}
   });
 
   return Promise.race([activation, timeout]);
+}
+
+export async function cleanupLegacyOneSignalRegistrations() {
+  await cleanupLegacyRootRegistrations();
 }
 
 export const SERVICE_WORKER_INFO = {

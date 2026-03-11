@@ -117,7 +117,7 @@ export default function usePushStatus() {
           loading: false,
           supported: reason === 'safari-disabled-by-env' ? false : null,
           error: reason === 'safari-backoff'
-            ? 'Push ist kurz pausiert (Safari-Backoff). Bitte in 1-2 Minuten erneut versuchen.'
+            ? 'Push ist kurz pausiert (Safari-Backoff). Bitte in wenigen Minuten erneut versuchen.'
             : 'Push ist in Safari derzeit deaktiviert.',
         }));
         return;

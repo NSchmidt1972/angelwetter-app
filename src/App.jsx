@@ -1,6 +1,6 @@
 // src/App.jsx
 import { BrowserRouter as Router, useLocation } from 'react-router-dom';
-import { useEffect, useState, Suspense, lazy } from 'react';
+import { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 import AppRoutes from '@/AppRoutes';
@@ -15,6 +15,7 @@ import '@/index.css';
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
 const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
 const PUSH_DISABLED = import.meta.env.VITE_DISABLE_PUSH === '1';
+const SPLASH_HARD_TIMEOUT_MS = 12000;
 const PushInit = lazy(() => import('@/components/PushInit'));
 const AnalyticsInit = lazy(() => import('@/components/AnalyticsInit'));
 const PageViewTracker = lazy(() => import('@/components/PageViewTracker'));
@@ -119,6 +120,13 @@ function AppContent() {
   const [imageLoaded, setImageLoaded] = useState(true);
   const [initialBootDone, setInitialBootDone] = useState(false);
   const [minSplashDone, setMinSplashDone] = useState(false);
+  const [splashTimeoutDone, setSplashTimeoutDone] = useState(false);
+  const splashDebugRef = useRef({
+    authLoading: true,
+    nameLoading: true,
+    userState: 'unknown',
+    superAdminLoading: true,
+  });
   const isRecoveryHash = location.hash.includes('type=recovery');
   const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
   const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
@@ -130,6 +138,32 @@ function AppContent() {
     return cancel;
   }, []);
 
+  useEffect(() => {
+    splashDebugRef.current = {
+      authLoading,
+      nameLoading,
+      userState: user === undefined ? 'unknown' : user ? 'authenticated' : 'anonymous',
+      superAdminLoading,
+    };
+  }, [authLoading, nameLoading, user, superAdminLoading]);
+
+  // Fallback: Splash darf nicht unbegrenzt blockieren, wenn Auth/Profile in Dev hängen.
+  useEffect(() => {
+    if (initialBootDone) return undefined;
+    const cancel = scheduleLater(() => {
+      const snapshot = splashDebugRef.current;
+      setSplashTimeoutDone(true);
+      debugLog('app:splash-hard-timeout', {
+        authLoading: snapshot.authLoading,
+        nameLoading: snapshot.nameLoading,
+        userState: snapshot.userState,
+        superAdminLoading: snapshot.superAdminLoading,
+        timeoutMs: SPLASH_HARD_TIMEOUT_MS,
+      });
+    }, SPLASH_HARD_TIMEOUT_MS);
+    return cancel;
+  }, [initialBootDone]);
+
   // Splash nur beim initialen Boot anzeigen, nicht bei späteren Resume-Syncs.
   useEffect(() => {
     if (initialBootDone) return;
@@ -139,10 +173,18 @@ function AppContent() {
       user !== undefined &&
       minSplashDone &&
       (!user || !superAdminLoading);
-    if (bootReady) {
+    if (bootReady || splashTimeoutDone) {
       setInitialBootDone(true);
     }
-  }, [authLoading, nameLoading, user, minSplashDone, superAdminLoading, initialBootDone]);
+  }, [
+    authLoading,
+    nameLoading,
+    user,
+    minSplashDone,
+    superAdminLoading,
+    initialBootDone,
+    splashTimeoutDone,
+  ]);
 
   // Profilname laden
   useEffect(() => {
