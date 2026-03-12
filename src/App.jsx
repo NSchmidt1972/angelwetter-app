@@ -4,22 +4,18 @@ import { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 import AppRoutes from '@/AppRoutes';
-import { WeatherProvider } from '@/hooks/useWeatherCache';
-import { useAppResumeSync, useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useAppResumeTick } from '@/hooks/useAppResumeTick';
 import { getActiveClubId, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
 import { debugLog } from '@/utils/runtimeDebug';
-import { shouldAutoInitOneSignalRuntime } from '@/onesignal/onesignalService';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
 const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
-const PUSH_DISABLED = import.meta.env.VITE_DISABLE_PUSH === '1';
 const SPLASH_HARD_TIMEOUT_MS = 12000;
-const PushInit = lazy(() => import('@/components/PushInit'));
-const AnalyticsInit = lazy(() => import('@/components/AnalyticsInit'));
 const PageViewTracker = lazy(() => import('@/components/PageViewTracker'));
-const SessionActivityPing = lazy(() => import('@/components/SessionActivityPing'));
+const ProtectedRuntimeInit = lazy(() => import('@/components/ProtectedRuntimeInit'));
+const ProtectedWeatherProvider = lazy(() => import('@/components/ProtectedWeatherProvider'));
 const STATIC_PUBLIC_PATHS = new Set([
   '/auth',
   '/update-password',
@@ -41,11 +37,6 @@ function isPublicRoutePath(pathname) {
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length === 1) return true; // /:clubSlug
   return isClubAuthPath(pathname);
-}
-
-function isPushExcludedPath(pathname) {
-  if (!pathname || typeof pathname !== 'string') return false;
-  return STATIC_PUBLIC_PATHS.has(pathname) || isClubAuthPath(pathname);
 }
 
 function readProfileCache() {
@@ -377,14 +368,14 @@ function AppContent() {
     <>
       {pageViewTracker}
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
-        {isPublicLightweightRoute ? routes : <WeatherProvider>{routes}</WeatherProvider>}
+        {isPublicLightweightRoute ? routes : <ProtectedWeatherProvider>{routes}</ProtectedWeatherProvider>}
       </Suspense>
     </>
   );
 }
 
 function AppShell() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const isRecoveryHash = location.hash.includes('type=recovery');
   const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
@@ -392,45 +383,12 @@ function AppShell() {
   const shouldInitProtectedRuntime =
     !UX_TEST_MODE_ENABLED &&
     isLoggedIn;
-  const shouldInitPush =
-    shouldInitProtectedRuntime &&
-    !PUSH_DISABLED &&
-    shouldAutoInitOneSignalRuntime() &&
-    !isPushExcludedPath(location.pathname);
-  const shouldInitAnalytics = shouldInitProtectedRuntime;
-  const shouldPingUserActivity = shouldInitProtectedRuntime;
-  useAppResumeSync({ enabled: shouldInitProtectedRuntime });
-
-  useEffect(() => {
-    debugLog('app:route-context', {
-      path: location.pathname,
-      hash: location.hash || null,
-      userId: user?.id || null,
-      profileClubId: profile?.club_id || null,
-      activeClubId: getActiveClubId(),
-      visibility: typeof document !== 'undefined' ? document.visibilityState : null,
-    });
-  }, [location.pathname, location.hash, user?.id, profile?.club_id]);
 
   return (
     <>
-      {shouldPingUserActivity ? (
+      {shouldInitProtectedRuntime ? (
         <Suspense fallback={null}>
-          <SessionActivityPing
-            userId={user?.id || null}
-            profileClubId={profile?.club_id || null}
-            anglerName={user?.email || null}
-          />
-        </Suspense>
-      ) : null}
-      {shouldInitAnalytics ? (
-        <Suspense fallback={null}>
-          <AnalyticsInit />
-        </Suspense>
-      ) : null}
-      {shouldInitPush ? (
-        <Suspense fallback={null}>
-          <PushInit />
+          <ProtectedRuntimeInit />
         </Suspense>
       ) : null}
       <AppContent />

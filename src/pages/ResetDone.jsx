@@ -1,8 +1,14 @@
 // src/pages/ResetDone.jsx
 import { Link } from 'react-router-dom';
 import { Button, Card } from '@/components/ui';
+import usePageMeta from '@/hooks/usePageMeta';
 
 export default function ResetDone() {
+  usePageMeta({
+    title: 'Passwort-Reset gesendet | Angelwetter',
+    description: 'Der Link zum Zurücksetzen deines Passworts wurde versendet. Prüfe jetzt dein E-Mail-Postfach.',
+  });
+
   return (
     <Card className="max-w-md mx-auto mt-20 bg-white shadow-lg p-6 rounded-xl text-center">
       <h2 className="text-2xl font-bold text-blue-700 mb-4">📬 Link gesendet</h2>

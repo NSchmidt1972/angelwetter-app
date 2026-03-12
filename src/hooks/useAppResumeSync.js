@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase, getSupabaseNetworkHealthSnapshot } from '@/supabaseClient';
 import { beginResumeGate } from '@/utils/resumeGate';
 import { debugLog } from '@/utils/runtimeDebug';
+import { dispatchResumeSync } from '@/hooks/resumeSyncEvent';
+export { useAppResumeTick } from '@/hooks/useAppResumeTick';
 
-const RESUME_SYNC_EVENT = 'angelwetter:resume-sync';
 const RESUME_SYNC_STEP_TIMEOUT_MS = 1200;
 const RESUME_TRIGGER_DEBOUNCE_MS = 350;
 const RESUME_FOREGROUND_DEDUPE_MS = 2200;
@@ -17,7 +18,6 @@ const FILE_PICKER_RELOAD_SUPPRESS_MS = 300000;
 const ENABLE_SAFARI_FORCED_RELOAD = false;
 let lastForcedReloadAtMemory = 0;
 let lastFilePickerIntentAtMemory = 0;
-let resumeSyncSequence = 0;
 
 function withHardTimeout(promise, timeoutMs, timeoutMessage) {
   let timerId = null;
@@ -154,44 +154,6 @@ export function markFilePickerIntent() {
 
 export function clearFilePickerIntent() {
   clearFilePickerIntentAt();
-}
-
-function dispatchResumeSync(detail) {
-  if (typeof window === 'undefined') return;
-  resumeSyncSequence += 1;
-  window.dispatchEvent(
-    new CustomEvent(RESUME_SYNC_EVENT, {
-      detail: {
-        sequence: resumeSyncSequence,
-        at: Date.now(),
-        ...detail,
-      },
-    })
-  );
-}
-
-export function useAppResumeTick({ enabled = true } = {}) {
-  const [tick, setTick] = useState(() => resumeSyncSequence);
-
-  useEffect(() => {
-    if (!enabled || typeof window === 'undefined') return undefined;
-
-    const onResumeSync = (event) => {
-      const nextSequence = Number(event?.detail?.sequence);
-      if (Number.isFinite(nextSequence) && nextSequence > 0) {
-        setTick((value) => (nextSequence > value ? nextSequence : value));
-        return;
-      }
-      setTick((value) => value + 1);
-    };
-
-    window.addEventListener(RESUME_SYNC_EVENT, onResumeSync);
-    return () => {
-      window.removeEventListener(RESUME_SYNC_EVENT, onResumeSync);
-    };
-  }, [enabled]);
-
-  return tick;
 }
 
 export function useAppResumeSync({ enabled = true, minIntervalMs = 1500 } = {}) {

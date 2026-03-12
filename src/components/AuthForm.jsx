@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
+import usePageMeta from '@/hooks/usePageMeta';
 
 const AUTH_REQUEST_TIMEOUT_MS = 12000;
 
@@ -18,6 +19,15 @@ export default function AuthForm() {
   const { clubSlug } = useParams();
 
   const clubBasePath = clubSlug ? `/${clubSlug}` : '/';
+  const clubSeoLabel = clubSlug ? clubSlug.replace(/-/g, ' ') : 'asv rotauge';
+
+  usePageMeta({
+    title: mode === 'login' ? 'Anmeldung | Angelwetter' : 'Registrierung | Angelwetter',
+    description:
+      mode === 'login'
+        ? `Melde dich bei Angelwetter (${clubSeoLabel}) an, um Wetter, Fänge und Vereinsfunktionen zu nutzen.`
+        : `Registriere dich bei Angelwetter (${clubSeoLabel}) und erhalte Zugriff auf Fangmeldungen und Vereinsfunktionen.`,
+  });
 
   const resetForm = () => {
     setEmail('');

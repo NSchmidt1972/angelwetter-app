@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { getActiveClubId } from './utils/clubId';
-import { useAppResumeTick } from '@/hooks/useAppResumeSync';
+import { useAppResumeTick } from '@/hooks/useAppResumeTick';
 import { withTimeout } from '@/utils/async';
 import { debugLog } from '@/utils/runtimeDebug';
 

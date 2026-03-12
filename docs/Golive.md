@@ -45,3 +45,9 @@ Projekt: Angelwetter App
 
 - [ ] P0 vollständig abgeschlossen.
 - [ ] Go-Live Entscheidung dokumentiert (Datum, Verantwortliche, offene Restrisiken).
+
+## Hosting-Check robots.txt
+
+- [ ] Deployment enthält `public/robots.txt` als echte Datei im Webroot.
+- [ ] `https://app.asv-rotauge.de/robots.txt` liefert HTTP `200` mit `Content-Type: text/plain`.
+- [ ] CDN/Ingress-Rewrite-Regeln schließen `/robots.txt` vom SPA-Fallback auf `/index.html` aus.

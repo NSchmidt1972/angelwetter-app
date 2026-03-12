@@ -7,8 +7,14 @@ import { useUserProfile } from '@/AuthContext';
 import { Card } from '@/components/ui';
 import { supabase } from '@/supabaseClient';
 import { withTimeout } from '@/utils/async';
+import usePageMeta from '@/hooks/usePageMeta';
 
 export default function Home() {
+  usePageMeta({
+    title: 'Dashboard | Angelwetter',
+    description: 'Angelwetter Dashboard mit aktuellen Wetterdaten, Fangübersicht und Vereinsinformationen.',
+  });
+
   const { weather, loading, error, refresh } = useWeatherCache();
   const resumeTick = useAppResumeTick({ enabled: true });
   const { profile } = useUserProfile();
