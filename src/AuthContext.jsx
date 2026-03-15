@@ -176,7 +176,7 @@ export const AuthProvider = ({ children }) => {
             clubId,
             profileClubId: data?.club_id || null,
           });
-          setProfile((prev) => data || prev || null);
+          setProfile(data || null);
         }
       } catch (err) {
         if (!active) return;

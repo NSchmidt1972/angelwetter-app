@@ -378,7 +378,7 @@ export default function WeatherNow({
         const changed = cache.purge({ requiredFingerprint: fingerprint });
         if (changed) cache.persist();
       } catch (err) {
-        if (!isAbortError(err)) {
+        if (!isAbortError(err) && !isAiUnavailableError(err)) {
           console.warn('ModelInfo für Cache-Invalidierung fehlgeschlagen:', err);
         }
       }

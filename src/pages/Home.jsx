@@ -25,7 +25,6 @@ export default function Home() {
   const weatherData = weather;
   const errorMessage = error && !weatherData ? '⚠️ Wetterdaten konnten nicht geladen werden.' : null;
   const canSeeWaterTemperature = hasAtLeastRole(ROLES.ADMIN);
-
   useEffect(() => {
     let active = true;
 

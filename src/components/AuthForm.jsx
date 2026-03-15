@@ -4,6 +4,7 @@ import { supabase } from '@/supabaseClient';
 import { getActiveClubId, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
 import usePageMeta from '@/hooks/usePageMeta';
+import { ROLES, normalizeRole } from '@/permissions/roles';
 
 const AUTH_REQUEST_TIMEOUT_MS = 12000;
 
@@ -88,10 +89,25 @@ export default function AuthForm() {
   };
 
   const ensureProfileAndMembership = async ({ userId, clubId, emailForWhitelistCheck, fallbackName }) => {
+    const resolveWhitelistedRole = async () => {
+      const { data: whitelistedRole, error: roleError } = await runWithAuthTimeout(
+        supabase.rpc('whitelist_role_for_email', {
+          p_email: emailForWhitelistCheck,
+          p_club_id: clubId,
+        }),
+        'Whitelist-Rolle timeout'
+      );
+      if (roleError) {
+        console.warn('[AuthForm] Whitelist-Rolle konnte nicht geladen werden:', roleError?.message || roleError);
+        return ROLES.MEMBER;
+      }
+      return normalizeRole(whitelistedRole || ROLES.MEMBER, ROLES.MEMBER);
+    };
+
     const { data: membershipRow, error: membershipSelectError } = await runWithAuthTimeout(
       supabase
         .from('memberships')
-        .select('user_id, is_active')
+        .select('user_id, role, is_active')
         .eq('user_id', userId)
         .eq('club_id', clubId)
         .maybeSingle(),
@@ -187,7 +203,7 @@ export default function AuthForm() {
       supabase.from('memberships').insert({
         user_id: userId,
         club_id: clubId,
-        role: 'mitglied',
+        role: await resolveWhitelistedRole(),
         is_active: true,
       }),
       'Membership-Anlage timeout'

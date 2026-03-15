@@ -9,10 +9,9 @@ const UserMenu = forwardRef(function UserMenu(
     dark,
     onToggleDark,
     displayName,
+    clubLogoSrc = '/logo.png',
     showMenu,
     onToggleMenu,
-    showSuperAdminLink = false,
-    onNavigateSuperAdmin,
     showDataFilter = false,
     dataFilterValue = 'recent',
     onToggleDataFilter,
@@ -33,12 +32,25 @@ const UserMenu = forwardRef(function UserMenu(
       <button
         type="button"
         onClick={onToggleMenu}
-        className="px-3 py-2 rounded"
+        className="inline-flex items-center gap-2 rounded-full border border-gray-200/80 bg-white/70 px-2.5 py-1.5 text-sm text-gray-700 shadow-sm hover:bg-white dark:border-gray-700 dark:bg-gray-800/80 dark:text-gray-200 dark:hover:bg-gray-800"
         aria-expanded={showMenu}
         aria-haspopup="menu"
         aria-controls="navbar-user-menu"
       >
-        👤 {displayName}
+        <img
+          src={clubLogoSrc}
+          alt=""
+          aria-hidden="true"
+          className="h-5 w-5 rounded-full object-cover"
+          loading="lazy"
+          onError={(event) => {
+            const img = event.currentTarget;
+            if (img.dataset.logoFallbackApplied === '1') return;
+            img.dataset.logoFallbackApplied = '1';
+            img.src = '/logo.png';
+          }}
+        />
+        <span className="font-medium">{displayName}</span>
       </button>
 
       {showMenu && (
@@ -70,15 +82,6 @@ const UserMenu = forwardRef(function UserMenu(
                   {dataFilterValue === 'all' ? 'Alle Daten' : 'Nur ab 01.06.25'}
                 </p>
               </div>
-            )}
-            {showSuperAdminLink && (
-              <button
-                type="button"
-                onClick={onNavigateSuperAdmin}
-                className="w-full rounded px-3 py-2 text-left text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-200 dark:hover:bg-blue-900/30"
-              >
-                🛠 Superadmin
-              </button>
             )}
           </div>
 

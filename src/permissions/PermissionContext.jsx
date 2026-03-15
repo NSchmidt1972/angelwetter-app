@@ -25,6 +25,17 @@ const STATIC_NON_CLUB_SEGMENTS = new Set([
   '__ux',
 ]);
 
+const MEMBERSHIP_SELECT_VARIANTS = Object.freeze([
+  {
+    select: 'user_id, club_id, role, is_active, clubs:club_id(id, slug, name, logo_url)',
+    hasLogoUrl: true,
+  },
+  {
+    select: 'user_id, club_id, role, is_active, clubs:club_id(id, slug, name)',
+    hasLogoUrl: false,
+  },
+]);
+
 function getClubSlugFromPath(pathname) {
   if (typeof pathname !== 'string') return null;
   const first = pathname.split('/').filter(Boolean)[0] || null;
@@ -38,6 +49,12 @@ function isMissingTableError(error) {
   const code = String(error?.code || '');
   const message = String(error?.message || '').toLowerCase();
   return code === '42P01' || message.includes('does not exist');
+}
+
+function isMissingClubLogoUrlError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '').toLowerCase();
+  return code === '42703' && message.includes('clubs.logo_url');
 }
 
 function buildRoleFeatureMap(rows) {
@@ -83,6 +100,32 @@ async function resolveClubIdBySlug(slug) {
   return data.id;
 }
 
+async function fetchMembershipRowsForUser(userId) {
+  let lastError = null;
+
+  for (const variant of MEMBERSHIP_SELECT_VARIANTS) {
+    const result = await supabase
+      .from('memberships')
+      .select(variant.select)
+      .eq('user_id', userId);
+
+    if (!result.error) {
+      return {
+        rows: result.data || [],
+        hasLogoUrl: variant.hasLogoUrl,
+      };
+    }
+
+    if (!isMissingClubLogoUrlError(result.error)) {
+      throw result.error;
+    }
+    lastError = result.error;
+  }
+
+  if (lastError) throw lastError;
+  return { rows: [], hasLogoUrl: false };
+}
+
 async function tryProvisionMembershipForUser({ userId, userEmail, fallbackName, clubId }) {
   const email = String(userEmail || '').trim().toLowerCase();
   if (!userId || !clubId || !email) return false;
@@ -113,10 +156,23 @@ async function tryProvisionMembershipForUser({ userId, userEmail, fallbackName, 
     }
   }
 
+  let roleForClub = ROLES.MEMBER;
+  try {
+    const { data: whitelistedRole, error: roleError } = await supabase.rpc('whitelist_role_for_email', {
+      p_email: email,
+      p_club_id: clubId,
+    });
+    if (!roleError) {
+      roleForClub = normalizeRole(whitelistedRole || ROLES.MEMBER, ROLES.MEMBER);
+    }
+  } catch {
+    roleForClub = ROLES.MEMBER;
+  }
+
   const { error: membershipInsertError } = await supabase.from('memberships').insert({
     user_id: userId,
     club_id: clubId,
-    role: ROLES.MEMBER,
+    role: roleForClub,
     is_active: true,
   });
   if (membershipInsertError && !isDuplicateKeyError(membershipInsertError)) {
@@ -189,18 +245,14 @@ export function PermissionProvider({ children }) {
 
       try {
         const [membershipsResult, superadminResult] = await Promise.all([
-          supabase
-            .from('memberships')
-            .select('user_id, club_id, role, is_active, clubs:club_id(id, slug, name)')
-            .eq('user_id', user.id),
+          fetchMembershipRowsForUser(user.id),
           supabase.rpc('is_superadmin'),
         ]);
 
         if (!active) return;
-        if (membershipsResult.error) throw membershipsResult.error;
         if (superadminResult.error) throw superadminResult.error;
 
-        let memberships = normalizeMembershipRows(membershipsResult.data || []);
+        let memberships = normalizeMembershipRows(membershipsResult.rows || []);
         const clubSlug = clubSlugFromPath;
         const cachedClubIdFromSlug = clubSlug ? getClubIdForSlug(clubSlug) : null;
         let clubIdFromPath = cachedClubIdFromSlug;
@@ -229,12 +281,8 @@ export function PermissionProvider({ children }) {
               clubId: clubIdFromPath,
             });
             if (provisioned) {
-              const refreshedMembershipsResult = await supabase
-                .from('memberships')
-                .select('user_id, club_id, role, is_active, clubs:club_id(id, slug, name)')
-                .eq('user_id', user.id);
-              if (refreshedMembershipsResult.error) throw refreshedMembershipsResult.error;
-              memberships = normalizeMembershipRows(refreshedMembershipsResult.data || []);
+              const refreshedMembershipsResult = await fetchMembershipRowsForUser(user.id);
+              memberships = normalizeMembershipRows(refreshedMembershipsResult.rows || []);
             }
           }
         }
@@ -268,6 +316,7 @@ export function PermissionProvider({ children }) {
               id: resolvedClubId,
               slug: clubSlug || membership?.clubs?.slug || null,
               name: membership?.clubs?.name || null,
+              logoUrl: membership?.clubs?.logo_url || null,
               isActive: membership?.clubs?.is_active ?? true,
             }
           : null;

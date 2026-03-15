@@ -25,6 +25,15 @@ const STATIC_PUBLIC_PATHS = new Set([
   '/auth-verified',
   '/forgot-password',
 ]);
+const STATIC_NON_CLUB_SEGMENTS = new Set([
+  'auth',
+  'update-password',
+  'reset-done',
+  'auth-verified',
+  'forgot-password',
+  'superadmin',
+  '__ux',
+]);
 
 function isClubAuthPath(pathname) {
   if (!pathname || typeof pathname !== 'string') return false;
@@ -39,6 +48,15 @@ function isPublicRoutePath(pathname) {
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length === 1) return true; // /:clubSlug
   return isClubAuthPath(pathname);
+}
+
+function isClubScopedPath(pathname) {
+  if (!pathname || typeof pathname !== 'string') return false;
+  const segments = pathname.split('/').filter(Boolean);
+  if (!segments.length) return false;
+  const first = String(segments[0] || '').toLowerCase();
+  if (!first || STATIC_NON_CLUB_SEGMENTS.has(first)) return false;
+  return true;
 }
 
 function readProfileCache() {
@@ -127,6 +145,7 @@ function AppContent() {
   const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
   const hasClubAccess = Boolean(currentClub?.id) && (Boolean(membership) || isSuperAdmin);
   const isPublicLightweightRoute = !isLoggedIn && isPublicRoutePath(location.pathname);
+  const isClubScopedRoute = isClubScopedPath(location.pathname);
 
   // Splash kurz anzeigen
   useEffect(() => {
@@ -281,6 +300,7 @@ function AppContent() {
   const shouldShowSplash =
     !UX_TEST_MODE_ENABLED &&
     !isPublicLightweightRoute &&
+    !(isLoggedIn && isClubScopedRoute) &&
     !initialBootDone;
 
   if (shouldShowSplash) {

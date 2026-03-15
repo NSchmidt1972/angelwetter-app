@@ -10,7 +10,6 @@ import RequireClubAccess from '@/components/guards/RequireClubAccess';
 import { FEATURES } from '@/permissions/features';
 import { ROLES } from '@/permissions/roles';
 import { usePermissions } from '@/permissions/usePermissions';
-import { getSuperadminAppUrl } from '@/config/superadminApp';
 
 function safeLazy(importer, fallbackName) {
   return lazy(async () => {
@@ -77,14 +76,6 @@ function LegacyTenantRedirect({ to }) {
   const { currentClub, membership } = usePermissions();
   const resolvedSlug = currentClub?.slug || membership?.clubs?.slug || 'asv-rotauge';
   return <Navigate to={`/${resolvedSlug}${to}`} replace />;
-}
-
-function ExternalRedirect({ to }) {
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.location.replace(to);
-  }, [to]);
-  return <div className="p-6 text-center">Weiterleitung...</div>;
 }
 
 function ClubGuard() {
@@ -260,7 +251,6 @@ export default function ProtectedRoutes({ anglerName }) {
 
       <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
       <Route path="/auth" element={<Navigate to="/asv-rotauge/auth" replace />} />
-      <Route path="/superadmin/*" element={<ExternalRedirect to={getSuperadminAppUrl('/superadmin')} />} />
       <Route path="/admin" element={<LegacyTenantRedirect to="/vorstand" />} />
       <Route path="/admin/members" element={<LegacyTenantRedirect to="/vorstand" />} />
       <Route path="/admin/verein" element={<LegacyTenantRedirect to="/vorstand" />} />
@@ -395,10 +385,6 @@ export default function ProtectedRoutes({ anglerName }) {
                   <AdminOverview />
                 </ManagementGate>
               }
-            />
-            <Route
-              path="superadmin"
-              element={<ExternalRedirect to={getSuperadminAppUrl('/superadmin')} />}
             />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<PageNotFound />} />

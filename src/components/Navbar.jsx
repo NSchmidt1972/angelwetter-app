@@ -7,7 +7,6 @@ import { clearActiveClubId } from "@/utils/clubId";
 import { usePermissions } from '@/permissions/usePermissions';
 import { FEATURES } from '@/permissions/features';
 import { ROLES } from '@/permissions/roles';
-import { getSuperadminAppUrl } from '@/config/superadminApp';
 
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useResponsiveMenu } from "@/hooks/useResponsiveMenu";
@@ -20,7 +19,7 @@ import UserMenu from "@/components/navbar/UserMenu";
 
 export default function Navbar({ name }) {
   const { user, setUser } = useAuth();
-  const { hasAtLeastRole, hasFeatureForRole, isSuperAdmin } = usePermissions();
+  const { hasAtLeastRole, hasFeatureForRole, currentClub } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
   const { clubSlug } = useParams();
@@ -159,7 +158,7 @@ export default function Navbar({ name }) {
   const showDataFilter =
     hasFeatureForRole(FEATURES.ADMIN_TOOLS) &&
     hasAtLeastRole(ROLES.BOARD);
-  const showSuperAdminLink = Boolean(isSuperAdmin);
+  const clubLogoSrc = currentClub?.logoUrl || '/logo.png';
 
   return (
     <>
@@ -204,13 +203,9 @@ export default function Navbar({ name }) {
             dark={dark}
             onToggleDark={toggle}
             displayName={displayName}
+            clubLogoSrc={clubLogoSrc}
             showMenu={showMenu}
             onToggleMenu={() => setShowMenu((v) => !v)}
-            showSuperAdminLink={showSuperAdminLink}
-            onNavigateSuperAdmin={() => {
-              setShowMenu(false);
-              window.open(getSuperadminAppUrl('/superadmin'), '_blank', 'noopener,noreferrer');
-            }}
             showDataFilter={showDataFilter}
             dataFilterValue={dataFilter}
             onToggleDataFilter={handleToggleDataFilter}
