@@ -8,6 +8,7 @@ import './styles/tokens.css';
 import './styles/themes/light.css';
 import './styles/themes/dark.css';
 import './styles/base.css';
+import { installGlobalErrorMonitoring } from '@/services/opsAlert';
 
 function scheduleIdle(callback, timeout = 2000) {
   if (typeof window === 'undefined') return;
@@ -30,6 +31,8 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     });
   }, { once: true });
 }
+
+installGlobalErrorMonitoring();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

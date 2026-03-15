@@ -1,8 +1,8 @@
 // src/services/rulesService.js
-import { MIN_SIZES, CLOSED_SEASONS, isCatchAllowed } from "../rules/ferkensbruch";
+import { MIN_SIZES, CLOSED_SEASONS, isCatchAllowed } from "../rules/clubRules";
 
 /**
- * Baut eine normalisierte Regelliste aus den hart codierten Ferkensbruch-Regeln.
+ * Baut eine normalisierte Regelliste aus den hinterlegten Vereinsregeln.
  * Rückgabe-Shape ist kompatibel zu früheren Beispielen:
  * { species, min_size_cm, season_start, season_end, protected, notes, water_body }
  */
@@ -26,7 +26,7 @@ export async function fetchRules() {
       notes: season
         ? "Während der Schonzeit sind toter Köderfisch und alle Kunstköder verboten."
         : "",
-      water_body: "Ferkensbruch",
+      water_body: "Vereinsgewässer",
     };
   });
 
@@ -56,7 +56,7 @@ export function evaluateCatchAgainstRules({ species, sizeCm, dateISO }) {
     notes: CLOSED_SEASONS[species]
       ? "Während der Schonzeit sind toter Köderfisch und alle Kunstköder verboten."
       : "",
-    water_body: "Ferkensbruch",
+    water_body: "Vereinsgewässer",
   };
 
   return {

@@ -73,7 +73,13 @@ export default defineConfig(({ command, mode }) => {
       outDir: 'dist',
       emptyOutDir: true,
       sourcemap: false,
-      rollupOptions: { output: { manualChunks: undefined } }
+      rollupOptions: {
+        input: {
+          tenant: path.resolve(__dirname, 'index.html'),
+          superadmin: path.resolve(__dirname, 'superadmin.html'),
+        },
+        output: { manualChunks: undefined },
+      },
     },
     define: {
       __BUILD_INFO__: JSON.stringify(BUILD_INFO),

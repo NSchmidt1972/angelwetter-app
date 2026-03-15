@@ -1,4 +1,4 @@
-// src/regulations/ferkensbruch.js
+// src/rules/clubRules.js
 
 // Mindestmaße (cm)
 export const MIN_SIZES = {

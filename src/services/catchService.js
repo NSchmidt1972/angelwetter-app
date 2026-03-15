@@ -1,35 +1,33 @@
 // src/services/catchService.js
 import { supabase } from '../supabaseClient';
-import { getDistanceKm } from '../utils/geo';
 import { getActiveClubId } from '@/utils/clubId';
 
-const FERKENSBRUCH_LAT = 51.3135;
-const FERKENSBRUCH_LON = 6.256;
-const LOBBERICH_RADIUS_KM = 3.5;
+const ASV_ROTAUGE_ID = '00000000-0000-0000-0000-000000000001';
+const ROTAUGE_HOME_DB_VALUE = 'Lobberich';
+const GENERIC_HOME_DB_VALUE = 'Vereinsgewässer';
 
-function normalizeLobberichLocation(rawLocation, lat, lon, { forceLobberich = false } = {}) {
+function normalizeHomeWaterLocation(rawLocation, { forceHomeWater = false, isRotaugeClub = false } = {}) {
   const trimmed = typeof rawLocation === 'string' ? rawLocation.trim() : '';
-  const nearFerkensbruch =
-    lat != null &&
-    lon != null &&
-    getDistanceKm(lat, lon, FERKENSBRUCH_LAT, FERKENSBRUCH_LON) <= LOBBERICH_RADIUS_KM;
+  const homeWaterLabel = isRotaugeClub ? ROTAUGE_HOME_DB_VALUE : GENERIC_HOME_DB_VALUE;
 
   if (!trimmed) {
-    if (forceLobberich) return 'Lobberich';
-    return nearFerkensbruch ? 'Lobberich' : null;
+    if (forceHomeWater) return homeWaterLabel;
+    return null;
   }
 
   const lower = trimmed.toLowerCase();
-  if (lower.includes('lobberich') || lower.includes('ferkensbruch')) {
-    return 'Lobberich';
+  if (
+    lower.includes('lobberich') ||
+    lower.includes('ferkensbruch') ||
+    lower.includes('vereinsgewässer') ||
+    lower.includes('vereinsgewaesser') ||
+    lower.includes('vereinssee')
+  ) {
+    return homeWaterLabel;
   }
 
-  if (nearFerkensbruch && (lower.startsWith('kreis ') || lower.startsWith('landkreis ') || lower.includes('kreis viersen'))) {
-    return 'Lobberich';
-  }
-
-  if (forceLobberich && nearFerkensbruch) {
-    return 'Lobberich';
+  if (forceHomeWater && (lower.startsWith('kreis ') || lower.startsWith('landkreis '))) {
+    return homeWaterLabel;
   }
 
   return trimmed;
@@ -55,16 +53,13 @@ export async function saveCatchEntry(entry, taken, position, anglerName, options
   // 1) Insert
   const payload = { ...entry, taken: !!taken };
   payload.club_id = getActiveClubId();
-  const locationLat = payload.lat ?? position?.lat ?? null;
-  const locationLon = payload.lon ?? position?.lon ?? null;
-  const isFerkensbruchRegion = typeof options.region === 'string'
+  const isRotaugeClub = payload.club_id === ASV_ROTAUGE_ID;
+  const isHomeWaterRegion = typeof options.region === 'string'
     ? options.region.toLowerCase() === 'ferkensbruch'
     : false;
-  const normalizedLocation = normalizeLobberichLocation(
+  const normalizedLocation = normalizeHomeWaterLocation(
     payload.location_name,
-    locationLat,
-    locationLon,
-    { forceLobberich: isFerkensbruchRegion },
+    { forceHomeWater: isHomeWaterRegion, isRotaugeClub },
   );
   payload.location_name = normalizedLocation;
   const { data, error: insertErr } = await supabase

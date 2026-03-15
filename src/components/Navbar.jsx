@@ -4,6 +4,10 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import { supabase } from "@/supabaseClient";
 import { clearActiveClubId } from "@/utils/clubId";
+import { usePermissions } from '@/permissions/usePermissions';
+import { FEATURES } from '@/permissions/features';
+import { ROLES } from '@/permissions/roles';
+import { getSuperadminAppUrl } from '@/config/superadminApp';
 
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useResponsiveMenu } from "@/hooks/useResponsiveMenu";
@@ -14,8 +18,9 @@ import DesktopNav from "@/components/navbar/DesktopNav";
 import MobileMenu from "@/components/navbar/MobileMenu";
 import UserMenu from "@/components/navbar/UserMenu";
 
-export default function Navbar({ name, isAdmin, canAccessBoard }) {
+export default function Navbar({ name }) {
   const { user, setUser } = useAuth();
+  const { hasAtLeastRole, hasFeatureForRole, isSuperAdmin } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
   const { clubSlug } = useParams();
@@ -27,7 +32,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
   const [open, setOpen] = useState(false);                 // Mobile-Overlay
   const [openDropdown, setOpenDropdown] = useState(false); // Statistik-Dropdown (Desktop & Mobile, durch Outside-Click geschützt)
   const [showMenu, setShowMenu] = useState(false);         // Profil-Menü
-  const [dataFilter, setDataFilter] = useState('recent');  // Nur für Nicol
+  const [dataFilter, setDataFilter] = useState('recent');
 
   const headerRef = useRef(null);
   const [headerH, setHeaderH] = useState(64);
@@ -60,7 +65,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     };
   }, [open]);
 
-  // Datenfilter (Nicol): aktuelles Setting laden
+  // Datenfilter: aktuelles Setting laden
   useEffect(() => {
     if (typeof localStorage === "undefined") return;
     const storedFilter = localStorage.getItem("dataFilter") || "recent";
@@ -109,7 +114,7 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     navigate(prefixWithClub("/auth"));
   };
 
-  const navItems = navItemsFor({ isAdmin: !!isAdmin, canAccessBoard: !!canAccessBoard, anglerName: name }).map((item) =>
+  const navItems = navItemsFor({ hasFeatureForRole, hasAtLeastRole }).map((item) =>
     item.children
       ? {
           ...item,
@@ -122,11 +127,6 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
 
   const handleToggleDropdown = (next) => {
     setOpenDropdown((prev) => (typeof next === "boolean" ? next : !prev));
-  };
-
-  const handleNavigateAdmin = () => {
-    setShowMenu(false);
-    navigate(prefixWithClub("/admin2"));
   };
 
   const handleToggleDataFilter = () => {
@@ -156,8 +156,10 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
     return shortName || first || "Profil";
   })();
 
-  const showAdminLink = isAdmin && canAccessBoard;
-  const showDataFilter = (name || "").trim().toLowerCase() === "nicol schmidt";
+  const showDataFilter =
+    hasFeatureForRole(FEATURES.ADMIN_TOOLS) &&
+    hasAtLeastRole(ROLES.BOARD);
+  const showSuperAdminLink = Boolean(isSuperAdmin);
 
   return (
     <>
@@ -204,8 +206,11 @@ export default function Navbar({ name, isAdmin, canAccessBoard }) {
             displayName={displayName}
             showMenu={showMenu}
             onToggleMenu={() => setShowMenu((v) => !v)}
-            onNavigateAdmin={handleNavigateAdmin}
-            showAdminLink={showAdminLink}
+            showSuperAdminLink={showSuperAdminLink}
+            onNavigateSuperAdmin={() => {
+              setShowMenu(false);
+              window.open(getSuperadminAppUrl('/superadmin'), '_blank', 'noopener,noreferrer');
+            }}
             showDataFilter={showDataFilter}
             dataFilterValue={dataFilter}
             onToggleDataFilter={handleToggleDataFilter}

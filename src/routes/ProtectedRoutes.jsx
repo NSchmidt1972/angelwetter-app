@@ -4,6 +4,13 @@ import { supabase } from '@/supabaseClient';
 import { getClubIdForSlug, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
 import { debugLog } from '@/utils/runtimeDebug';
+import RequireRole from '@/components/guards/RequireRole';
+import RequireFeature from '@/components/guards/RequireFeature';
+import RequireClubAccess from '@/components/guards/RequireClubAccess';
+import { FEATURES } from '@/permissions/features';
+import { ROLES } from '@/permissions/roles';
+import { usePermissions } from '@/permissions/usePermissions';
+import { getSuperadminAppUrl } from '@/config/superadminApp';
 
 function safeLazy(importer, fallbackName) {
   return lazy(async () => {
@@ -23,7 +30,6 @@ function safeLazy(importer, fallbackName) {
 }
 
 const AppLayout = lazy(() => import('@/AppLayout'));
-const AdminLayout = lazy(() => import('@/AdminLayout'));
 const UpdatePassword = lazy(() => import('@/pages/UpdatePassword'));
 const ResetDone = lazy(() => import('@/pages/ResetDone'));
 const AuthVerified = lazy(() => import('@/pages/AuthVerified'));
@@ -36,15 +42,11 @@ const TopFishes = lazy(() => import('@/pages/TopFishes'));
 const Forecast = lazy(() => import('@/pages/Forecast'));
 const CrayfishForm = lazy(() => import('@/pages/CrayfishForm'));
 const AdminOverview = lazy(() => import('@/pages/AdminOverview'));
-const AdminMembers = lazy(() => import('@/pages/Admin'));
-const AdminMembersManage = lazy(() => import('@/pages/AdminMembersManage'));
-const AdminVereinManage = lazy(() => import('@/pages/AdminVereinManage'));
 const Calendar = lazy(() => import('@/pages/Calendar'));
 const MapView = lazy(() => import('@/pages/MapView'));
 const Regulations = lazy(() => import('@/pages/Regulations'));
 const BoardOverview = lazy(() => import('@/pages/BoardOverview'));
 const DownloadsPage = lazy(() => import('@/pages/DownloadsPage'));
-const SuperAdmin = safeLazy(() => import('@/pages/SuperAdmin'), 'SuperAdmin');
 
 const SettingsPage = safeLazy(() => import('@/pages/SettingsPage'), 'SettingsPage');
 const FunFacts = safeLazy(() => import('@/pages/FunFacts'), 'FunFacts');
@@ -64,6 +66,25 @@ function PageNotFound() {
 function LoggedInClubAuthRedirect() {
   const { clubSlug } = useParams();
   return <Navigate to={`/${clubSlug}/dashboard`} replace />;
+}
+
+function TenantBoardRedirect() {
+  const { clubSlug } = useParams();
+  return <Navigate to={`/${clubSlug}/vorstand`} replace />;
+}
+
+function LegacyTenantRedirect({ to }) {
+  const { currentClub, membership } = usePermissions();
+  const resolvedSlug = currentClub?.slug || membership?.clubs?.slug || 'asv-rotauge';
+  return <Navigate to={`/${resolvedSlug}${to}`} replace />;
+}
+
+function ExternalRedirect({ to }) {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.location.replace(to);
+  }, [to]);
+  return <div className="p-6 text-center">Weiterleitung...</div>;
 }
 
 function ClubGuard() {
@@ -126,7 +147,7 @@ function ClubGuard() {
             .eq('slug', clubSlug)
             .maybeSingle(),
           8000,
-          'Club-Check timeout'
+          'Club-Check timeout',
         );
 
         if (!active) return;
@@ -206,21 +227,15 @@ function ClubGuard() {
   return <Outlet />;
 }
 
-function RequireManagement({ canAccessBoard, children }) {
-  if (!canAccessBoard) {
-    return <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Nur für Vorstand/Admin</div>;
-  }
-  return children;
+function ManagementGate({ children }) {
+  return (
+    <RequireFeature feature={FEATURES.ADMIN_TOOLS}>
+      <RequireRole role={ROLES.BOARD}>{children}</RequireRole>
+    </RequireFeature>
+  );
 }
 
-function RequireSuperAdmin({ isSuperAdmin, children }) {
-  if (!isSuperAdmin) {
-    return <div className="p-6 text-center text-red-600">🚫 Kein Zugriff – Nur für Superadmins</div>;
-  }
-  return children;
-}
-
-export default function ProtectedRoutes({ isAdmin, canAccessBoard, isSuperAdmin, anglerName }) {
+export default function ProtectedRoutes({ anglerName }) {
   return (
     <Routes>
       {UX_TEST_MODE_ENABLED && (
@@ -242,8 +257,16 @@ export default function ProtectedRoutes({ isAdmin, canAccessBoard, isSuperAdmin,
           <Route path="/__ux/menu/vorstand" element={<BoardOverview />} />
         </>
       )}
+
       <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
       <Route path="/auth" element={<Navigate to="/asv-rotauge/auth" replace />} />
+      <Route path="/superadmin/*" element={<ExternalRedirect to={getSuperadminAppUrl('/superadmin')} />} />
+      <Route path="/admin" element={<LegacyTenantRedirect to="/vorstand" />} />
+      <Route path="/admin/members" element={<LegacyTenantRedirect to="/vorstand" />} />
+      <Route path="/admin/verein" element={<LegacyTenantRedirect to="/vorstand" />} />
+      <Route path="/admin/permissions" element={<LegacyTenantRedirect to="/vorstand" />} />
+      <Route path="/admin2" element={<LegacyTenantRedirect to="/admin2" />} />
+      <Route path="/vorstand" element={<LegacyTenantRedirect to="/vorstand" />} />
 
       <Route path="/update-password" element={<UpdatePassword />} />
       <Route path="/reset-done" element={<ResetDone />} />
@@ -251,61 +274,135 @@ export default function ProtectedRoutes({ isAdmin, canAccessBoard, isSuperAdmin,
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
       <Route path="/:clubSlug/*" element={<ClubGuard />}>
-        <Route
-          element={
-            <RequireManagement canAccessBoard={canAccessBoard}>
-              <AdminLayout />
-            </RequireManagement>
-          }
-        >
-          <Route path="admin" element={<AdminMembers />} />
-          <Route path="admin/members" element={<AdminMembersManage />} />
-          <Route path="admin/verein" element={<AdminVereinManage />} />
-        </Route>
-
-        <Route element={<AppLayout name={anglerName} isAdmin={isAdmin} canAccessBoard={canAccessBoard} />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="auth" element={<LoggedInClubAuthRedirect />} />
-          <Route path="dashboard" element={<Home />} />
-          <Route path="new-catch" element={<FishCatchForm anglerName={anglerName} />} />
-          <Route path="crayfish" element={<CrayfishForm anglerName={anglerName} />} />
-          <Route path="catches" element={<CatchList anglerName={anglerName} />} />
-          <Route path="analysis" element={<Analysis anglerName={anglerName} />} />
-          <Route path="statistik" element={<Analysis anglerName={anglerName} />} />
-          <Route path="leaderboard" element={<Leaderboard />} />
-          <Route path="top-fishes" element={<TopFishes />} />
-          <Route path="calendar" element={<Calendar />} />
-          <Route path="map" element={<MapView />} />
-          <Route path="forecast" element={<Forecast />} />
-          <Route path="regeln" element={<Regulations />} />
-          <Route path="downloads" element={<DownloadsPage />} />
-          <Route path="fun" element={<FunFacts />} />
-          <Route
-            path="vorstand"
-            element={
-              <RequireManagement canAccessBoard={canAccessBoard}>
-                <BoardOverview />
-              </RequireManagement>
-            }
-          />
-          <Route
-            path="admin2"
-            element={
-              <RequireManagement canAccessBoard={canAccessBoard}>
-                <AdminOverview isAdmin={isAdmin} canAccessBoard={canAccessBoard} />
-              </RequireManagement>
-            }
-          />
-          <Route
-            path="superadmin"
-            element={
-              <RequireSuperAdmin isSuperAdmin={isSuperAdmin}>
-                <SuperAdmin />
-              </RequireSuperAdmin>
-            }
-          />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="*" element={<PageNotFound />} />
+        <Route element={<RequireClubAccess />}>
+          <Route element={<AppLayout name={anglerName} />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="auth" element={<LoggedInClubAuthRedirect />} />
+            <Route path="admin" element={<TenantBoardRedirect />} />
+            <Route path="admin/members" element={<TenantBoardRedirect />} />
+            <Route path="admin/verein" element={<TenantBoardRedirect />} />
+            <Route path="admin/permissions" element={<TenantBoardRedirect />} />
+            <Route
+              path="dashboard"
+              element={
+                <RequireFeature feature={FEATURES.WEATHER}>
+                  <Home />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="new-catch"
+              element={
+                <RequireFeature feature={FEATURES.CATCH_LOGGING} minRole={ROLES.MEMBER}>
+                  <FishCatchForm anglerName={anglerName} />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="crayfish"
+              element={
+                <RequireFeature feature={FEATURES.CATCH_LOGGING} minRole={ROLES.MEMBER}>
+                  <CrayfishForm anglerName={anglerName} />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="catches"
+              element={
+                <RequireFeature feature={FEATURES.CATCH_LOGGING}>
+                  <CatchList anglerName={anglerName} />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="analysis"
+              element={
+                <RequireFeature feature={FEATURES.ANALYSIS}>
+                  <Analysis anglerName={anglerName} />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="statistik"
+              element={
+                <RequireFeature feature={FEATURES.ANALYSIS}>
+                  <Analysis anglerName={anglerName} />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="leaderboard"
+              element={
+                <RequireFeature feature={FEATURES.LEADERBOARD}>
+                  <Leaderboard />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="top-fishes"
+              element={
+                <RequireFeature feature={FEATURES.ANALYSIS}>
+                  <TopFishes />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="calendar"
+              element={
+                <RequireFeature feature={FEATURES.CATCH_LOGGING}>
+                  <Calendar />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="map"
+              element={
+                <RequireFeature feature={FEATURES.MAP}>
+                  <MapView />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="forecast"
+              element={
+                <RequireFeature feature={FEATURES.FORECAST}>
+                  <Forecast />
+                </RequireFeature>
+              }
+            />
+            <Route path="regeln" element={<Regulations />} />
+            <Route path="downloads" element={<DownloadsPage />} />
+            <Route
+              path="fun"
+              element={
+                <RequireFeature feature={FEATURES.ANALYSIS}>
+                  <FunFacts />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="vorstand"
+              element={
+                <ManagementGate>
+                  <BoardOverview />
+                </ManagementGate>
+              }
+            />
+            <Route
+              path="admin2"
+              element={
+                <ManagementGate>
+                  <AdminOverview />
+                </ManagementGate>
+              }
+            />
+            <Route
+              path="superadmin"
+              element={<ExternalRedirect to={getSuperadminAppUrl('/superadmin')} />}
+            />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="*" element={<PageNotFound />} />
+          </Route>
         </Route>
       </Route>
 

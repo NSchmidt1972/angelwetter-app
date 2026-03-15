@@ -17,7 +17,7 @@ import { isVisibleToUser } from '@/utils/filters';
 import { useReactions } from '@/hooks/useReactions';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
-import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
+import { formatLocationLabel, isHomeWaterEntry } from '@/utils/location';
 import { withTimeout } from '@/utils/async';
 import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
 import { isTrustedAngler } from '@/utils/visibilityPolicy';
@@ -26,6 +26,7 @@ export default function CatchList({ anglerName }) {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [onlyMine, setOnlyMine] = useState(false);
   const [topBadges, setTopBadges] = useState({});
+  const [clubCoords, setClubCoords] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -39,7 +40,7 @@ export default function CatchList({ anglerName }) {
     deleteEntry,
     setExternalVisibility,
     isVisibilityPending,
-  } = useCatches(anglerName, onlyMine);
+  } = useCatches(anglerName, onlyMine, { clubCoords });
   const [filterSetting] = useLocalStorageValue('dataFilter', 'recent');
 
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -65,6 +66,45 @@ export default function CatchList({ anglerName }) {
     getUserReactionFor,
     isPending: isReactionPending,
   } = useReactions(normalizedName);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadClubCoords() {
+      try {
+        const clubId = getActiveClubId();
+        if (!clubId) {
+          if (!cancelled) setClubCoords(null);
+          return;
+        }
+        const { data, error } = await withTimeout(
+          supabase
+            .from('clubs')
+            .select('weather_lat, weather_lon')
+            .eq('id', clubId)
+            .maybeSingle(),
+          10000,
+          'Club-Koordinaten timeout'
+        );
+        if (error) throw error;
+
+        const lat = Number(data?.weather_lat);
+        const lon = Number(data?.weather_lon);
+        const nextCoords = Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+        if (!cancelled) setClubCoords(nextCoords);
+      } catch (error) {
+        if (!cancelled) {
+          setClubCoords(null);
+          console.warn('Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+        }
+      }
+    }
+
+    void loadClubCoords();
+    return () => {
+      cancelled = true;
+    };
+  }, [clubSlug, resumeTick]);
 
   const entryKey = useCallback(
     (entry) => entry.id ?? `${entry.angler || 'anon'}-${entry.timestamp}-${entry.fish}-${entry.size}`,
@@ -107,7 +147,7 @@ export default function CatchList({ anglerName }) {
         const { data, error } = await withTimeout(
           supabase
             .from('fishes')
-            .select('id, fish, size, angler, timestamp, location_name, blank, share_public_non_home')
+            .select('id, fish, size, angler, timestamp, location_name, lat, lon, blank, share_public_non_home')
             .eq('club_id', clubId),
           16000,
           'Top10 timeout'
@@ -120,12 +160,13 @@ export default function CatchList({ anglerName }) {
         const valid = (data || [])
           .filter((entry) => {
             if (!isValuableFishEntry(entry)) return false;
-            if (!isFerkensbruchLocation(entry.location_name)) return false;
+            if (!isHomeWaterEntry(entry, { clubCoords })) return false;
             return isVisibleToUser(entry, {
               isTrusted,
               onlyMine: false,
               anglerName: normalizedName,
               filterSetting,
+              clubCoords,
             });
           })
           .map((entry) => ({ ...entry, sizeNum: parseFishSize(entry.size) || 0, key: entryKey(entry) }));
@@ -161,7 +202,7 @@ export default function CatchList({ anglerName }) {
     return () => {
       cancelled = true;
     };
-  }, [filterSetting, isTrusted, normalizedName, entryKey, resumeTick]);
+  }, [clubCoords, filterSetting, isTrusted, normalizedName, entryKey, resumeTick]);
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
@@ -359,7 +400,7 @@ export default function CatchList({ anglerName }) {
             const pendingReaction = isReactionPending(entry.id);
             const hasReactions = Object.keys(reactionCounts || {}).length > 0;
             const isOwnEntry = entry.angler === anglerName;
-            const isHomeWater = isFerkensbruchLocation(entry.location_name);
+            const isHomeWater = isHomeWaterEntry(entry, { clubCoords });
             const isExternalCatch = !isHomeWater;
             const isSharedExternal = entry.share_public_non_home === true;
             const visibilityPending = isVisibilityPending(entry.id);
@@ -644,7 +685,7 @@ export default function CatchList({ anglerName }) {
                 const key = entryKey(entry);
                 const topInfo = topBadges[key];
                 const dateStr = new Date(entry.timestamp).toLocaleDateString('de-DE');
-                const isHomeWater = isFerkensbruchLocation(entry.location_name);
+                const isHomeWater = isHomeWaterEntry(entry, { clubCoords });
 
                 return (
                   <li key={`${key}-gallery`} className={galleryTileClassName(index)}>

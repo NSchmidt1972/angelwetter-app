@@ -6,6 +6,8 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ONESIGNAL_APP_ID = Deno.env.get("ONESIGNAL_APP_ID") ?? "";
 const ONESIGNAL_API_KEY = Deno.env.get("ONESIGNAL_API_KEY") ?? "";
 const EDGE_SECRET = (Deno.env.get("EDGE_SECRET") ?? "").trim();
+const OPS_ALERT_SECRET = (Deno.env.get("OPS_ALERT_SECRET") ?? "").trim();
+const OPS_ALERT_URL = (Deno.env.get("OPS_ALERT_URL") ?? `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/opsAlert`).trim();
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: {
@@ -15,6 +17,62 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
 });
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ROLE_LEVEL = {
+  gast: 10,
+  mitglied: 20,
+  tester: 30,
+  vorstand: 40,
+  admin: 50,
+} as const;
+
+function normalizeRole(value: unknown): keyof typeof ROLE_LEVEL | "inactive" {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "inaktiv") return "inactive";
+  if (normalized in ROLE_LEVEL) return normalized as keyof typeof ROLE_LEVEL;
+  return "inactive";
+}
+
+function isMissingDbObjectError(error: unknown) {
+  const code = String((error as { code?: string })?.code ?? "");
+  const message = String((error as { message?: string })?.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42883" || message.includes("does not exist") || message.includes("could not find the function");
+}
+
+async function fallbackFeatureCheck(clubId: string, role: string) {
+  const { data: clubFeatureRows, error: clubFeatureError } = await supabase
+    .from("club_features")
+    .select("enabled")
+    .eq("club_id", clubId)
+    .eq("feature_key", "push")
+    .limit(1);
+
+  if (clubFeatureError) {
+    throw clubFeatureError;
+  }
+
+  const clubFeatureOn = Array.isArray(clubFeatureRows) && clubFeatureRows.length > 0
+    ? Boolean(clubFeatureRows[0]?.enabled)
+    : false;
+
+  if (!clubFeatureOn) return false;
+
+  const { data: roleFeatureRows, error: roleFeatureError } = await supabase
+    .from("club_role_features")
+    .select("enabled")
+    .eq("club_id", clubId)
+    .eq("feature_key", "push")
+    .eq("role", role)
+    .limit(1);
+
+  if (roleFeatureError) {
+    throw roleFeatureError;
+  }
+
+  if (!Array.isArray(roleFeatureRows) || roleFeatureRows.length === 0) {
+    return true;
+  }
+  return Boolean(roleFeatureRows[0]?.enabled);
+}
 
 function readBearerToken(req: Request): string | null {
   const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
@@ -49,6 +107,29 @@ function artikel(fish) {
   return dict[fish] ?? "einen";
 }
 
+async function sendOpsAlert(message, meta = {}) {
+  if (!OPS_ALERT_URL) return;
+  try {
+    await fetch(OPS_ALERT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(SERVICE_KEY ? { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } : {}),
+        ...(OPS_ALERT_SECRET ? { "x-ops-secret": OPS_ALERT_SECRET } : {}),
+      },
+      body: JSON.stringify({
+        source: "edge",
+        service: "sendCatchPush",
+        severity: "error",
+        message,
+        context: meta,
+      }),
+    });
+  } catch (error) {
+    console.error("[send-push-notification] opsAlert dispatch failed:", error);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -67,6 +148,9 @@ serve(async (req) => {
 
     if (missingEnv.length) {
       console.error("[send-push-notification] missing env vars:", missingEnv.map(([k]) => k));
+      await sendOpsAlert("sendCatchPush missing env vars", {
+        missing: missingEnv.map(([k]) => k),
+      });
       return json(500, {
         error: "Missing ENV",
         missing: missingEnv.map(([k]) => k)
@@ -133,7 +217,7 @@ serve(async (req) => {
 
     const { data: membership, error: membershipErr } = await supabase
       .from("memberships")
-      .select("user_id")
+      .select("user_id, role")
       .eq("user_id", callerUser.id)
       .eq("club_id", clubId)
       .eq("is_active", true)
@@ -146,7 +230,9 @@ serve(async (req) => {
       });
     }
 
+    const callerRole = normalizeRole(membership?.role);
     let callerAllowed = Boolean(membership?.user_id);
+    let callerIsSuperAdmin = false;
     if (!callerAllowed) {
       const { data: superadminRow, error: superadminErr } = await supabase
         .from("superadmins")
@@ -162,6 +248,7 @@ serve(async (req) => {
       }
 
       callerAllowed = Boolean(superadminRow?.user_id);
+      callerIsSuperAdmin = callerAllowed;
     }
 
     if (!callerAllowed) {
@@ -170,9 +257,48 @@ serve(async (req) => {
       });
     }
 
+    if (!callerIsSuperAdmin) {
+      const callerRoleLevel = ROLE_LEVEL[callerRole as keyof typeof ROLE_LEVEL] ?? 0;
+      if (callerRoleLevel < ROLE_LEVEL.mitglied) {
+        return json(403, {
+          error: "Insufficient role for push dispatch"
+        });
+      }
+
+      let pushAllowed = false;
+      const pushFeatureRpc = await supabase.rpc("is_role_feature_enabled", {
+        p_club_id: clubId,
+        p_role: callerRole,
+        p_feature_key: "push",
+      });
+
+      if (pushFeatureRpc.error) {
+        if (!isMissingDbObjectError(pushFeatureRpc.error)) {
+          console.error("[send-push-notification] feature check rpc failed:", pushFeatureRpc.error);
+          return json(500, { error: "Feature check failed" });
+        }
+        try {
+          pushAllowed = await fallbackFeatureCheck(clubId, callerRole);
+        } catch (fallbackFeatureError) {
+          console.error("[send-push-notification] fallback feature check failed:", fallbackFeatureError);
+          return json(500, { error: "Feature check failed" });
+        }
+      } else {
+        pushAllowed = Boolean(pushFeatureRpc.data);
+      }
+
+      if (!pushAllowed) {
+        return json(403, {
+          error: "Push feature disabled for this club/role"
+        });
+      }
+    }
+
     console.info("[send-push-notification] authorized caller", {
       callerUserId: callerUser.id,
-      clubId
+      clubId,
+      role: callerRole,
+      isSuperAdmin: callerIsSuperAdmin,
     });
 
     if (fish === "Aal" && sizeNum != null && sizeNum >= 200) {
@@ -291,6 +417,12 @@ serve(async (req) => {
     const txt = await res.text();
     if (!res.ok) {
       console.error("[send-push-notification] OneSignal failure:", res.status, txt);
+      await sendOpsAlert("sendCatchPush OneSignal API failure", {
+        status: res.status,
+        response: txt.slice(0, 180),
+        recipients: recipients.length,
+        clubId,
+      });
       return json(500, {
         error: "OneSignal failure",
         response: txt
@@ -305,6 +437,10 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("[send-push-notification] failure:", error);
+    await sendOpsAlert("sendCatchPush unhandled failure", {
+      error: String(error),
+      method: req.method,
+    });
     return json(500, {
       error: String(error)
     });

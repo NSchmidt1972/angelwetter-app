@@ -5,16 +5,18 @@ import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useFormattedNamesMap } from '@/hooks/useFormattedNamesMap';
 import { useViewerContext } from '@/hooks/useViewerContext';
 import PageContainer from '../components/PageContainer';
-import { isFerkensbruchLocation } from '@/utils/location';
+import { isHomeWaterEntry } from '@/utils/location';
 import { Card } from '@/components/ui';
 import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
 import { isMarilouAngler, isTrustedAngler, isVisibleByDate } from '@/utils/visibilityPolicy';
+import { withTimeout } from '@/utils/async';
 
 const PRESET_YEARS = [2025, 2026];
 
 export default function Leaderboard() {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [fishes, setFishes] = useState([]);
+  const [clubCoords, setClubCoords] = useState(null);
   const formattedNamesMap = useFormattedNamesMap();
   const [showIntern, setShowIntern] = useState(false);
   const currentYear = new Date().getFullYear();
@@ -25,12 +27,40 @@ export default function Leaderboard() {
   // ⬇️ Nur zählbare Fänge laden
   useEffect(() => {
     let active = true;
+    async function loadClubCoords() {
+      try {
+        const clubId = getActiveClubId();
+        if (!clubId) {
+          if (active) setClubCoords(null);
+          return;
+        }
+        const { data, error } = await withTimeout(
+          supabase
+            .from('clubs')
+            .select('weather_lat, weather_lon')
+            .eq('id', clubId)
+            .maybeSingle(),
+          10000,
+          'Leaderboard Club-Koordinaten timeout'
+        );
+        if (error) throw error;
+        const lat = Number(data?.weather_lat);
+        const lon = Number(data?.weather_lon);
+        if (!active) return;
+        setClubCoords(Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null);
+      } catch (error) {
+        if (!active) return;
+        setClubCoords(null);
+        console.warn('Leaderboard: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+      }
+    }
+
     async function loadData() {
       // lade nur die Felder, die wir hier brauchen
       const clubId = getActiveClubId();
       const { data, error } = await supabase
         .from('fishes')
-        .select('fish,size,angler,timestamp,location_name,count_in_stats,under_min_size,out_of_season')
+        .select('fish,size,angler,timestamp,location_name,lat,lon,count_in_stats,under_min_size,out_of_season')
         .eq('club_id', clubId)
         .eq('count_in_stats', true); // <— Hauptfilter
 
@@ -42,6 +72,7 @@ export default function Leaderboard() {
 
       if (active) setFishes(data || []);
     }
+    void loadClubCoords();
     void loadData();
     return () => {
       active = false;
@@ -49,42 +80,46 @@ export default function Leaderboard() {
   }, [resumeTick]);
 
   // 🔒 Clientseitige Zusatzsicherheit (falls mal alte Zeilen ohne Flag dabei sind)
-  const eligibleFishes = fishes.filter((f) => {
-    // 0) Falls Flag vorhanden: harte Schranke
-    if (typeof f.count_in_stats === 'boolean' && f.count_in_stats === false) return false;
+  const eligibleFishes = useMemo(
+    () =>
+      fishes.filter((f) => {
+        // 0) Falls Flag vorhanden: harte Schranke
+        if (typeof f.count_in_stats === 'boolean' && f.count_in_stats === false) return false;
 
-    // 1) Standort prüfen (nur Ferkensbruch zählt in der Rangliste)
-    if (!isFerkensbruchLocation(f.location_name)) return false;
+        // 1) Standort prüfen (nur Heimgewässer des aktiven Clubs zählt in der Rangliste)
+        if (!isHomeWaterEntry(f, { clubCoords })) return false;
 
-    // 2) Basis-Sichtbarkeit (wie gehabt)
-    const istAbNeu = isVisibleByDate(f?.timestamp, {
-      isTrusted: false,
-      filterSetting: 'recent',
-    });
+        // 2) Basis-Sichtbarkeit (wie gehabt)
+        const istAbNeu = isVisibleByDate(f?.timestamp, {
+          isTrusted: false,
+          filterSetting: 'recent',
+        });
 
-    const fangVonVertrautem = isTrustedAngler(f?.angler);
-    const eingeloggtVertraut = isTrustedViewer;
+        const fangVonVertrautem = isTrustedAngler(f?.angler);
+        const eingeloggtVertraut = isTrustedViewer;
 
-    const darfSehenBasis = showIntern
-      ? (eingeloggtVertraut && fangVonVertrautem)
-      : istAbNeu;
+        const darfSehenBasis = showIntern
+          ? (eingeloggtVertraut && fangVonVertrautem)
+          : istAbNeu;
 
-    // 3) verwertbar (Größe vorhanden > 0)
-    const istVerwertbar = isValuableFishEntry(f, { requireNotBlank: false });
+        // 3) verwertbar (Größe vorhanden > 0)
+        const istVerwertbar = isValuableFishEntry(f, { requireNotBlank: false });
 
-    // 4) Marilou-Regel
-    const istFangVonMarilou = isMarilouAngler(f?.angler);
-    if (istFangVonMarilou) {
-      return isCurrentUserMarilou && istVerwertbar;
-    }
+        // 4) Marilou-Regel
+        const istFangVonMarilou = isMarilouAngler(f?.angler);
+        if (istFangVonMarilou) {
+          return isCurrentUserMarilou && istVerwertbar;
+        }
 
-    // 5) Optionaler Fallback auf Roh-Flags, falls count_in_stats fehlt
-    if (typeof f.count_in_stats !== 'boolean') {
-      if (f.under_min_size === true || f.out_of_season === true) return false;
-    }
+        // 5) Optionaler Fallback auf Roh-Flags, falls count_in_stats fehlt
+        if (typeof f.count_in_stats !== 'boolean') {
+          if (f.under_min_size === true || f.out_of_season === true) return false;
+        }
 
-    return darfSehenBasis && istVerwertbar;
-  });
+        return darfSehenBasis && istVerwertbar;
+      }),
+    [fishes, showIntern, isTrustedViewer, isCurrentUserMarilou, clubCoords]
+  );
 
   const availableYears = useMemo(() => {
     const years = new Set();

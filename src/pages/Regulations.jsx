@@ -46,12 +46,13 @@ export default function Regulations() {
     () => [...rules].sort((a, b) => a.species.localeCompare(b.species, "de")),
     [rules]
   );
+  const waterBody = sorted[0]?.water_body || "Vereinsgewässer";
 
   return (
     <Card className="mx-auto max-w-5xl p-4 text-gray-800 dark:text-gray-100">
-      <h1 className="text-2xl font-bold mb-2">📜 Regeln – Ferkensbruch</h1>
+      <h1 className="text-2xl font-bold mb-2">📜 Regeln – {waterBody}</h1>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        Diese Übersicht basiert auf den Vereinsregeln für den Ferkensbruch (über die
+        Diese Übersicht basiert auf den Vereinsregeln für {waterBody} (über die
         Landesfischereiordnung hinausgehende Mindestmaße und Schonzeiten).
       </p>
 
@@ -106,7 +107,7 @@ export default function Regulations() {
       </div>
 
       <p className="text-xs text-gray-500 mt-3">
-        Quelle: Vereinsvorgaben Ferkensbruch (ergänzend zur Landesfischereiordnung).
+        Quelle: Vereinsvorgaben (ergänzend zur Landesfischereiordnung).
       </p>
     </Card>
   );

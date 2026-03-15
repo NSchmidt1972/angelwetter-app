@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui';
 import { formatDateFromUnix, renderFishRating } from '@/utils/formatters';
 import { FishChipsLoader } from '@/features/forecast/components/ForecastLoadingPanels';
-import { getClosedSeasonForFish, isFishInClosedSeason } from '@/rules/ferkensbruch';
+import { getClosedSeasonForFish, isFishInClosedSeason } from '@/rules/clubRules';
 
 function formatSeasonDay(value) {
   const match = /^(\d{2})-(\d{2})$/.exec(String(value ?? ''));

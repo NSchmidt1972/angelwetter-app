@@ -5,9 +5,11 @@ import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 import AppRoutes from '@/AppRoutes';
 import { useAppResumeTick } from '@/hooks/useAppResumeTick';
-import { getActiveClubId, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
+import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
 import { debugLog } from '@/utils/runtimeDebug';
+import { PermissionProvider } from '@/permissions/PermissionContext';
+import { usePermissions } from '@/permissions/usePermissions';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
@@ -98,12 +100,15 @@ function scheduleLater(callback, delay = 400) {
 
 function AppContent() {
   const { user, loading: authLoading, profile, profileLoading } = useAuth();
+  const {
+    loading: permissionsLoading,
+    isSuperAdmin,
+    currentClub,
+    membership,
+  } = usePermissions();
   const location = useLocation();
   const resumeTick = useAppResumeTick({ enabled: Boolean(user) });
   const [anglerName, setAnglerName] = useState(() => readProfileCache()?.name ?? null);
-  const [profileRole, setProfileRole] = useState(() => readProfileCache()?.role ?? null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [superAdminLoading, setSuperAdminLoading] = useState(true);
   const [nameLoading, setNameLoading] = useState(() => {
     const cached = readProfileCache();
     return !(cached && cached.name);
@@ -116,11 +121,11 @@ function AppContent() {
     authLoading: true,
     nameLoading: true,
     userState: 'unknown',
-    superAdminLoading: true,
   });
   const isRecoveryHash = location.hash.includes('type=recovery');
   const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
   const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
+  const hasClubAccess = Boolean(currentClub?.id) && (Boolean(membership) || isSuperAdmin);
   const isPublicLightweightRoute = !isLoggedIn && isPublicRoutePath(location.pathname);
 
   // Splash kurz anzeigen
@@ -134,9 +139,8 @@ function AppContent() {
       authLoading,
       nameLoading,
       userState: user === undefined ? 'unknown' : user ? 'authenticated' : 'anonymous',
-      superAdminLoading,
     };
-  }, [authLoading, nameLoading, user, superAdminLoading]);
+  }, [authLoading, nameLoading, user]);
 
   // Fallback: Splash darf nicht unbegrenzt blockieren, wenn Auth/Profile in Dev hängen.
   useEffect(() => {
@@ -148,7 +152,6 @@ function AppContent() {
         authLoading: snapshot.authLoading,
         nameLoading: snapshot.nameLoading,
         userState: snapshot.userState,
-        superAdminLoading: snapshot.superAdminLoading,
         timeoutMs: SPLASH_HARD_TIMEOUT_MS,
       });
     }, SPLASH_HARD_TIMEOUT_MS);
@@ -162,8 +165,7 @@ function AppContent() {
       !authLoading &&
       !nameLoading &&
       user !== undefined &&
-      minSplashDone &&
-      (!user || !superAdminLoading);
+      minSplashDone;
     if (bootReady || splashTimeoutDone) {
       setInitialBootDone(true);
     }
@@ -172,7 +174,6 @@ function AppContent() {
     nameLoading,
     user,
     minSplashDone,
-    superAdminLoading,
     initialBootDone,
     splashTimeoutDone,
   ]);
@@ -185,7 +186,6 @@ function AppContent() {
 
     if (user === null) {
       setAnglerName(null);
-      setProfileRole(null);
       clearProfileCache();
       setNameLoading(false);
       return;
@@ -197,7 +197,6 @@ function AppContent() {
       const fullName = (resolvedName || '').trim();
       setAnglerName(fullName);
       const rawRole = profile?.role ? String(profile.role).trim() : null;
-      setProfileRole(rawRole || null);
 
       const [first] = fullName.split(' ');
       const fallbackShort = first || 'Profil';
@@ -242,10 +241,8 @@ function AppContent() {
     if (!hasValidCache) {
       setNameLoading(true);
       setAnglerName(null);
-      setProfileRole(null);
     } else {
       setAnglerName(cached.name);
-      setProfileRole(cached.role ?? null);
       setNameLoading(false);
     }
 
@@ -259,63 +256,27 @@ function AppContent() {
     };
   }, [user, profile, profileLoading, resumeTick]);
 
+  // Profil-Club nur auf globalen Routen übernehmen.
+  // Auf Club-Routen (/:clubSlug/...) darf der Pfad-Kontext nicht überschrieben werden.
   useEffect(() => {
-    let active = true;
+    const profileClubId = profile?.club_id;
+    if (!profileClubId) return;
 
-    if (user === undefined) {
-      setSuperAdminLoading(true);
-      return () => {
-        active = false;
-      };
-    }
+    const firstSegment = location.pathname.split('/').filter(Boolean)[0] || null;
+    const staticSegments = new Set([
+      'auth',
+      'update-password',
+      'reset-done',
+      'auth-verified',
+      'forgot-password',
+      'superadmin',
+      '__ux',
+    ]);
+    const isClubRoute = Boolean(firstSegment && !staticSegments.has(String(firstSegment).toLowerCase()));
+    if (isClubRoute) return;
 
-    if (!user) {
-      setIsSuperAdmin(false);
-      setSuperAdminLoading(false);
-      return () => {
-        active = false;
-      };
-    }
-
-    setSuperAdminLoading(true);
-    withTimeout(
-      supabase.rpc('is_superadmin'),
-      10000,
-      'Superadmin-Status timeout'
-    )
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) {
-          console.warn('⚠️ Superadmin-Status konnte nicht geladen werden:', error.message || error);
-          setIsSuperAdmin(false);
-          return;
-        }
-        setIsSuperAdmin(Boolean(data));
-      })
-      .catch((err) => {
-        if (!active) return;
-        console.warn('⚠️ Superadmin-Status-Request fehlgeschlagen:', err?.message || err);
-        setIsSuperAdmin(false);
-      })
-      .finally(() => {
-        if (active) setSuperAdminLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [user]);
-
-  // Club aus Profil in den aktiven Kontext übernehmen
-  useEffect(() => {
-    if (profile?.club_id) {
-      setActiveClubId(profile.club_id);
-      const slugFromPath = location.pathname.split('/').filter(Boolean)[0] || null;
-      if (slugFromPath) {
-        rememberClubSlugId(slugFromPath, profile.club_id);
-      }
-    }
-  }, [profile, location.pathname]);
+    setActiveClubId(profileClubId);
+  }, [profile?.club_id, location.pathname]);
 
   const shouldShowSplash =
     !UX_TEST_MODE_ENABLED &&
@@ -341,10 +302,7 @@ function AppContent() {
     );
   }
 
-  const cachedRole = profileRole ? profileRole.toLowerCase() : null;
-  const isAdmin = isSuperAdmin || cachedRole === 'admin';
-  const canAccessBoard = isSuperAdmin || isAdmin || cachedRole === 'vorstand';
-  const shouldTrackPageViews = isLoggedIn;
+  const shouldTrackPageViews = isLoggedIn && !permissionsLoading && hasClubAccess;
   const pageViewTracker = shouldTrackPageViews ? (
     <Suspense fallback={null}>
       <PageViewTracker
@@ -357,9 +315,6 @@ function AppContent() {
   const routes = (
     <AppRoutes
       isLoggedIn={isLoggedIn}
-      isAdmin={isAdmin}
-      canAccessBoard={canAccessBoard}
-      isSuperAdmin={isSuperAdmin}
       anglerName={anglerName}
     />
   );
@@ -368,7 +323,7 @@ function AppContent() {
     <>
       {pageViewTracker}
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
-        {isPublicLightweightRoute ? routes : <ProtectedWeatherProvider>{routes}</ProtectedWeatherProvider>}
+        {isPublicLightweightRoute || !hasClubAccess ? routes : <ProtectedWeatherProvider>{routes}</ProtectedWeatherProvider>}
       </Suspense>
     </>
   );
@@ -385,14 +340,14 @@ function AppShell() {
     isLoggedIn;
 
   return (
-    <>
+    <PermissionProvider>
       {shouldInitProtectedRuntime ? (
         <Suspense fallback={null}>
           <ProtectedRuntimeInit />
         </Suspense>
       ) : null}
       <AppContent />
-    </>
+    </PermissionProvider>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   removeWhitelistEmail,
 } from '@/services/boardService';
 import { Card } from '@/components/ui';
+import { ROLES, normalizeRole } from '@/permissions/roles';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -26,24 +27,16 @@ function formatDate(value) {
 }
 
 function normalizeRoleValue(role) {
-  if (!role) return 'mitglied';
-  const normalized = String(role).trim().toLowerCase();
-  if (normalized === 'mitglied') return 'mitglied';
-  if (normalized === 'admin') return 'admin';
-  if (normalized === 'vorstand') return 'vorstand';
-  if (normalized === 'gast') return 'gast';
-  if (normalized === 'tester') return 'tester';
-  if (normalized === 'inactive' || normalized === 'inaktiv') return 'inactive';
-  return 'mitglied';
+  return normalizeRole(role, ROLES.MEMBER);
 }
 
 const BASE_ROLE_OPTIONS = [
-  { value: 'mitglied', label: 'Mitglied' },
-  { value: 'gast', label: 'Gast' },
-  { value: 'tester', label: 'Tester' },
-  { value: 'vorstand', label: 'Vorstand' },
+  { value: ROLES.MEMBER, label: 'Mitglied' },
+  { value: ROLES.GUEST, label: 'Gast' },
+  { value: ROLES.TESTER, label: 'Tester' },
+  { value: ROLES.BOARD, label: 'Vorstand' },
+  { value: ROLES.ADMIN, label: 'Admin' },
 ];
-const ADMIN_OPTION = { value: 'admin', label: 'Admin' };
 
 export default function AdminMembersManage() {
   const detailSectionRef = useRef(null);
@@ -67,20 +60,9 @@ export default function AdminMembersManage() {
   const [showMemberList, setShowMemberList] = useState(false);
   const [search, setSearch] = useState('');
 
-  const canAssignAdmin = useCallback((profile) => {
-    if (!profile?.name) return false;
-    return String(profile.name).trim().toLowerCase() === 'nicol schmidt';
-  }, []);
-
   const roleOptionsForProfile = useCallback(
-    (profile) => {
-      const options = [...BASE_ROLE_OPTIONS];
-      if (canAssignAdmin(profile) || normalizeRoleValue(profile?.role) === 'admin') {
-        options.push(ADMIN_OPTION);
-      }
-      return options;
-    },
-    [canAssignAdmin],
+    () => BASE_ROLE_OPTIONS,
+    [],
   );
 
   const refreshProfiles = useCallback(async () => {
@@ -183,13 +165,6 @@ export default function AdminMembersManage() {
     let nextRole = value;
     if (value === '') nextRole = null;
 
-    const targetProfile = profiles.find((profile) => profile.id === profileId);
-    if (nextRole === 'admin' && !canAssignAdmin(targetProfile)) {
-      setProfilesError('Admin-Rolle ist nur für Nicol Schmidt zulässig.');
-      setUpdatingRoleId(null);
-      return;
-    }
-
     try {
       await updateProfileRole(profileId, nextRole);
       await refreshProfiles();
@@ -238,14 +213,14 @@ export default function AdminMembersManage() {
     }
 
     if (action === 'inactive') {
-      if (currentRole === 'inactive') return;
-      await handleRoleChange(profile.id, 'inactive');
+      if (currentRole === ROLES.INACTIVE) return;
+      await handleRoleChange(profile.id, ROLES.INACTIVE);
       return;
     }
 
     if (action === 'active') {
-      if (currentRole === 'inactive' || profile.role == null) {
-        await handleRoleChange(profile.id, 'mitglied');
+      if (currentRole === ROLES.INACTIVE || profile.role == null) {
+        await handleRoleChange(profile.id, ROLES.MEMBER);
       }
       return;
     }

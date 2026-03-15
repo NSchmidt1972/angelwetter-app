@@ -1,10 +1,14 @@
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { usePermissions } from '@/permissions/usePermissions';
+import { ROLES } from '@/permissions/roles';
 
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { clubSlug } = useParams();
+  const { isSuperAdmin, hasAtLeastRole } = usePermissions();
   const path = location.pathname;
+  const canManagePermissions = isSuperAdmin || hasAtLeastRole(ROLES.ADMIN);
 
   const prefixWithClub = (target) => {
     if (!clubSlug) return target;
@@ -22,6 +26,12 @@ export default function AdminLayout() {
     // Vereins-Link sichtbar auf Hub oder Vereinsseite
     if (path === prefixWithClub('/admin') || path.startsWith(prefixWithClub('/admin/verein'))) {
       links.push({ path: prefixWithClub('/admin/verein'), label: 'Verein & App' });
+    }
+    if (
+      canManagePermissions
+      && (path === prefixWithClub('/admin') || path.startsWith(prefixWithClub('/admin/permissions')))
+    ) {
+      links.push({ path: prefixWithClub('/admin/permissions'), label: 'Berechtigungen' });
     }
     return links;
   })();

@@ -31,6 +31,15 @@ const STATIC_NON_CLUB_SEGMENTS = new Set([
   'forgot-password',
 ]);
 
+function dispatchClubContextChange(detail = {}) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('angelwetter:club-context-changed', { detail }));
+  } catch {
+    window.dispatchEvent(new Event('angelwetter:club-context-changed'));
+  }
+}
+
 function normalizeClubId(value) {
   if (!value || typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -131,13 +140,19 @@ export function getActiveClubId() {
 export function setActiveClubId(clubId) {
   const normalized = normalizeClubId(clubId);
   if (!normalized) return;
+  const previous = activeClubIdMemory;
+  if (previous === normalized) return;
   activeClubIdMemory = normalized;
   try {
-    window.localStorage.setItem('activeClubId', activeClubIdMemory);
+    const stored = window.localStorage.getItem('activeClubId');
+    if (stored !== activeClubIdMemory) {
+      window.localStorage.setItem('activeClubId', activeClubIdMemory);
+    }
   } catch {
     /* ignore */
   }
   debugLog('clubid:set-active', { clubId: normalized });
+  dispatchClubContextChange({ clubId: normalized, source: 'setActiveClubId' });
 }
 
 export function clearActiveClubId() {
@@ -149,6 +164,7 @@ export function clearActiveClubId() {
     /* ignore */
   }
   debugLog('clubid:cleared-active', {});
+  dispatchClubContextChange({ clubId: null, source: 'clearActiveClubId' });
 }
 
 export function getClubIdForSlug(slug) {
@@ -178,4 +194,5 @@ export function rememberClubSlugId(slug, clubId) {
     slug: normalizedSlug,
     clubId: normalizedClubId,
   });
+  dispatchClubContextChange({ clubId: normalizedClubId, slug: normalizedSlug, source: 'rememberClubSlugId' });
 }

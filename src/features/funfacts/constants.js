@@ -12,9 +12,11 @@ export const PREDATOR_LABELS = {
 export const MIN_EFFICIENCY_DAYS = 3;
 
 export const PLACE_ALIASES = [
-  [/lob+er+ich/i, 'Ferkensbruch'],
-  [/ferkens?bruch/i, 'Ferkensbruch'],
-  [/^\s*(null|undefined|-)\s*$/i, 'Ferkensbruch'],
+  [/lob+er+ich/i, 'Vereinsgewässer'],
+  [/ferkens?bruch/i, 'Vereinsgewässer'],
+  [/vereinsgew(ae|ä)sser/i, 'Vereinsgewässer'],
+  [/vereinssee/i, 'Vereinsgewässer'],
+  [/^\s*(null|undefined|-)\s*$/i, 'Vereinsgewässer'],
 ];
 
 export const WEATHER_KEYWORD_SCORES = [

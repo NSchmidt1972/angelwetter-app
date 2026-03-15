@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { formatDateOnly, formatDateTime, parseTimestamp } from '@/utils/dateUtils';
+import { isHomeWaterEntry } from '@/utils/location';
 import { navItemsFor } from '@/config/navItems';
 import { Card } from '@/components/ui';
 import PageViewsSection from '@/features/adminOverview/components/PageViewsSection';
@@ -31,7 +32,7 @@ import {
   normalizePath,
 } from '@/features/adminOverview/pageViewUtils';
 
-const PAGE_VIEW_EXCLUDED_ANGLER = 'nicol schmidt';
+const PAGE_VIEW_EXCLUDED_ANGLER = null;
 
 function isMissingPageViewRpcError(error) {
   const message = String(error?.message || '').toLowerCase();
@@ -122,18 +123,6 @@ function formatBuildLabel(buildInfo) {
 
 const ADMIN_OVERVIEW_FISH_SNAPSHOT_LIMIT = 2000;
 
-function isExternalCatchRow(row) {
-  const lat = row?.lat;
-  const lon = row?.lon;
-  const location = String(row?.location_name || '').toLowerCase();
-
-  if (lat == null || lon == null) return false;
-  if (row?.blank === true) return false;
-  if (!location.trim()) return false;
-  if (location.includes('lobberich') || location.includes('ferkensbruch')) return false;
-  return true;
-}
-
 function buildRecentBlanks(rows, sinceDate) {
   return (rows || []).filter((row) => {
     if (row?.blank !== true) return false;
@@ -146,10 +135,19 @@ function buildLatestCatch(rows) {
   return (rows || []).find((row) => row?.blank !== true) || null;
 }
 
-function buildExternalCatches(rows, limit = 20) {
+function parseClubCoords(row) {
+  const lat = Number(row?.weather_lat);
+  const lon = Number(row?.weather_lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+}
+
+function buildExternalCatches(rows, limit = 20, clubCoords = null) {
   const output = [];
   for (const row of rows || []) {
-    if (!isExternalCatchRow(row)) continue;
+    if (!row || row?.lat == null || row?.lon == null) continue;
+    if (row?.blank === true) continue;
+    if (isHomeWaterEntry(row, { clubCoords })) continue;
     output.push(row);
     if (output.length >= limit) break;
   }
@@ -211,8 +209,16 @@ function getPageViewRange(pageViewYearFilter, snapshotIso) {
   };
 }
 
-export default function AdminOverview() {
+export default function AdminOverview({
+  clubIdOverride = null,
+  title = '🔧 Adminbereich‑Übersicht',
+  showTelemetry = true,
+} = {}) {
   const currentYear = new Date().getFullYear();
+  const effectiveClubId = useMemo(() => {
+    if (clubIdOverride && typeof clubIdOverride === 'string') return clubIdOverride;
+    return getActiveClubId();
+  }, [clubIdOverride]);
   const currentYearFilter = String(currentYear);
   const [activeUsers, setActiveUsers] = useState([]);
   const [latestCatch, setLatestCatch] = useState(null);
@@ -249,7 +255,10 @@ export default function AdminOverview() {
       if (Array.isArray(item.children)) item.children.forEach(addItem);
     };
 
-    navItemsFor({ isAdmin: true, canAccessBoard: true }).forEach(addItem);
+    navItemsFor({
+      hasFeatureForRole: () => true,
+      hasAtLeastRole: () => true,
+    }).forEach(addItem);
 
     [
       ['/settings', 'Einstellungen'],
@@ -390,7 +399,7 @@ export default function AdminOverview() {
 
   useEffect(() => {
     let active = true;
-    const clubId = getActiveClubId();
+    const clubId = effectiveClubId;
     const sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const sinceIso = sinceDate.toISOString();
 
@@ -430,6 +439,14 @@ export default function AdminOverview() {
         .order('timestamp', { ascending: false })
         .limit(ADMIN_OVERVIEW_FISH_SNAPSHOT_LIMIT),
       'Fänge (Snapshot)',
+    );
+    const clubCoordsPromise = resolveQueryData(
+      supabase
+        .from('clubs')
+        .select('weather_lat, weather_lon')
+        .eq('id', clubId)
+        .maybeSingle(),
+      'Club-Koordinaten',
     );
 
     async function loadActiveUsers() {
@@ -532,8 +549,12 @@ export default function AdminOverview() {
     }
 
     async function loadFishOverview() {
-      const fishSnapshot = await fishSnapshotPromise;
+      const [fishSnapshot, clubCoordsRow] = await Promise.all([
+        fishSnapshotPromise,
+        clubCoordsPromise,
+      ]);
       if (!active) return;
+      const clubCoords = parseClubCoords(clubCoordsRow);
 
       const rows = Array.isArray(fishSnapshot) ? fishSnapshot : [];
       const latest = buildLatestCatch(rows);
@@ -542,25 +563,23 @@ export default function AdminOverview() {
 
       setRecentBlanks(buildRecentBlanks(rows, sinceDate));
 
-      let externals = buildExternalCatches(rows, 20);
+      let externals = buildExternalCatches(rows, 20, clubCoords);
       if (rows.length >= ADMIN_OVERVIEW_FISH_SNAPSHOT_LIMIT && externals.length < 20) {
         const externalFallback = await resolveQueryData(
           supabase
             .from('fishes')
-            .select('angler, fish, size, timestamp, lat, lon, location_name')
+            .select('angler, fish, size, timestamp, lat, lon, location_name, blank')
             .eq('club_id', clubId)
             .not('lat', 'is', null)
             .not('lon', 'is', null)
-            .not('blank', 'is', true)
-            .not('location_name', 'ilike', '%lobberich%')
-            .not('location_name', 'ilike', '%ferkensbruch%')
-            .not('location_name', 'is', null)
             .order('timestamp', { ascending: false })
-            .limit(20),
+            .limit(200),
           'Externe Fänge',
         );
         if (!active) return;
-        if (Array.isArray(externalFallback)) externals = externalFallback;
+        if (Array.isArray(externalFallback)) {
+          externals = buildExternalCatches(externalFallback, 20, clubCoords);
+        }
       }
 
       setExternalCatches(externals);
@@ -641,7 +660,7 @@ export default function AdminOverview() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [effectiveClubId]);
 
   useEffect(() => {
     let active = true;
@@ -650,7 +669,7 @@ export default function AdminOverview() {
       setPageViewLoading(true);
       setPageViewError('');
 
-      const clubId = getActiveClubId();
+      const clubId = effectiveClubId;
       const snapshotIso = new Date().toISOString();
 
       const { fromIso, toIso, upperBoundOp } = getPageViewRange(pageViewYearFilter, snapshotIso);
@@ -715,7 +734,7 @@ export default function AdminOverview() {
     return () => {
       active = false;
     };
-  }, [pageViewYearFilter]);
+  }, [effectiveClubId, pageViewYearFilter]);
 
   useEffect(() => {
     let active = true;
@@ -724,7 +743,7 @@ export default function AdminOverview() {
       setPageViewStatsLoading(true);
       setPageViewStatsError('');
 
-      const clubId = getActiveClubId();
+      const clubId = effectiveClubId;
       if (!clubId) {
         setPageViewDbYears(null);
         setPageViewDbMonthlyCounts(null);
@@ -789,7 +808,7 @@ export default function AdminOverview() {
     return () => {
       active = false;
     };
-  }, [pageViewYearFilter]);
+  }, [effectiveClubId, pageViewYearFilter]);
 
   useEffect(() => {
     if (pageViewYearFilter === PAGE_VIEW_YEAR_FILTER_ALL) return;
@@ -805,6 +824,13 @@ export default function AdminOverview() {
 
   useEffect(() => {
     let active = true;
+    if (!showTelemetry) {
+      setTelemetryLoading(false);
+      setTelemetryError('');
+      return () => {
+        active = false;
+      };
+    }
 
     async function loadTelemetryLogs() {
       setTelemetryLoading(true);
@@ -887,7 +913,7 @@ export default function AdminOverview() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [showTelemetry]);
 
   useEffect(() => {
     setPageViewUniqueOpenPath(null);
@@ -899,19 +925,21 @@ export default function AdminOverview() {
 
   return (
     <Card className="p-4 max-w-4xl mx-auto text-gray-800 dark:text-gray-100">
-      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">🔧 Adminbereich‑Übersicht</h2>
+      <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-6">{title}</h2>
 
-      <SensorLogsSection
-        telemetryLoading={telemetryLoading}
-        telemetryError={telemetryError}
-        battLatest={battLatest}
-        battCount={battCount}
-        gpsLatest={gpsLatest}
-        gpsCount={gpsCount}
-        temperatureLatest={temperatureLatest}
-        temperatureCount={temperatureCount}
-        formatDateTimeLabel={formatDateTimeLabel}
-      />
+      {showTelemetry ? (
+        <SensorLogsSection
+          telemetryLoading={telemetryLoading}
+          telemetryError={telemetryError}
+          battLatest={battLatest}
+          battCount={battCount}
+          gpsLatest={gpsLatest}
+          gpsCount={gpsCount}
+          temperatureLatest={temperatureLatest}
+          temperatureCount={temperatureCount}
+          formatDateTimeLabel={formatDateTimeLabel}
+        />
+      ) : null}
 
       <LatestCatchSection
         latestCatch={latestCatch}

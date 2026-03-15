@@ -18,7 +18,8 @@ import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 
 const CATCHES_TIMEOUT_MS = 12000;
 
-export function useCatches(anglerName, onlyMine) {
+export function useCatches(anglerName, onlyMine, options = {}) {
+  const clubCoords = options?.clubCoords ?? null;
   const resumeTick = useAppResumeTick({ enabled: true });
   const [catches, setCatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,9 +41,10 @@ export function useCatches(anglerName, onlyMine) {
         onlyMine: mineFlag,
         anglerName,
         filterSetting,
+        clubCoords,
       })
     );
-  }, [onlyMine, isTrusted, anglerName, filterSetting]);
+  }, [onlyMine, isTrusted, anglerName, filterSetting, clubCoords]);
 
   // initial cache warm
   useEffect(() => {

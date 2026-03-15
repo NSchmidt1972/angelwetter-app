@@ -11,6 +11,8 @@ import {
   subscribeCurrentUser,
   unsubscribeCurrentUser,
 } from '@/onesignal/onesignalService';
+import { usePermissions } from '@/permissions/usePermissions';
+import { FEATURES } from '@/permissions/features';
 
 const INITIAL_STATE = {
   sdk: null,
@@ -25,9 +27,27 @@ const INITIAL_STATE = {
 };
 
 export default function usePushStatus() {
+  const { loading: permissionsLoading, hasFeatureForRole } = usePermissions();
+  const pushFeatureEnabled = !permissionsLoading && hasFeatureForRole(FEATURES.PUSH);
   const [state, setState] = useState(INITIAL_STATE);
 
   useEffect(() => {
+    if (permissionsLoading) {
+      setState((prev) => ({ ...prev, loading: true, error: null }));
+      return undefined;
+    }
+
+    if (!pushFeatureEnabled) {
+      setState((prev) => ({
+        ...prev,
+        sdk: null,
+        supported: false,
+        loading: false,
+        error: 'Push ist für deinen Verein oder deine Rolle deaktiviert.',
+      }));
+      return undefined;
+    }
+
     let cancelled = false;
     let cleanup = null;
 
@@ -103,9 +123,18 @@ export default function usePushStatus() {
       cancelled = true;
       cleanup?.();
     };
-  }, []);
+  }, [permissionsLoading, pushFeatureEnabled]);
 
   const subscribe = async () => {
+    if (!pushFeatureEnabled) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        supported: false,
+        error: 'Push ist für deinen Verein oder deine Rolle deaktiviert.',
+      }));
+      return;
+    }
     if (!isOneSignalEnabledForRuntime()) {
       const reason = getOneSignalRuntimeBlockReason();
       if (reason === 'safari-backoff') {
@@ -178,6 +207,15 @@ export default function usePushStatus() {
   };
 
   const unsubscribe = async () => {
+    if (!pushFeatureEnabled) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        supported: false,
+        error: null,
+      }));
+      return;
+    }
     if (!isOneSignalEnabledForRuntime()) {
       const reason = getOneSignalRuntimeBlockReason();
       setState((prev) => ({

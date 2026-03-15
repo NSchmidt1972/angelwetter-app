@@ -8,9 +8,9 @@ export const baseSelect =
 export const FISH_SELECT = Object.freeze({
   CATCHES: baseSelect,
   VALIDATION:
-    'id, angler, fish, size, weight, timestamp, location_name, weather, photo_url, blank, is_marilou, count_in_stats, under_min_size, out_of_season',
-  TOP: 'id, angler, fish, size, timestamp, location_name, blank, is_marilou',
-  ANALYSIS: 'id, angler, fish, size, timestamp, location_name, blank, is_marilou, weather',
+    'id, angler, fish, size, weight, timestamp, location_name, lat, lon, weather, photo_url, blank, is_marilou, count_in_stats, under_min_size, out_of_season',
+  TOP: 'id, angler, fish, size, timestamp, location_name, lat, lon, blank, is_marilou',
+  ANALYSIS: 'id, angler, fish, size, timestamp, location_name, lat, lon, blank, is_marilou, weather',
   MAP: 'id, angler, fish, size, timestamp, lat, lon',
 });
 
@@ -33,15 +33,13 @@ export async function listFishes({ from, to, onlyMine, anglerName }) {
   return q;
 }
 
-export async function countFishes({ onlyMine, anglerName, fromIso, includeLobberich = true }) {
+export async function countFishes({ onlyMine, anglerName, fromIso }) {
   let q = fetchClubFishesQuery({ select: 'id', options: { count: 'exact', head: true } })
     .eq('blank', false)
     .neq('is_marilou', true);
 
   if (onlyMine) {
     q = q.eq('angler', anglerName);
-  } else if (includeLobberich) {
-    q = q.or('location_name.is.null,location_name.ilike.%lobberich%,share_public_non_home.eq.true');
   }
 
   if (fromIso) q = q.gte('timestamp', fromIso);

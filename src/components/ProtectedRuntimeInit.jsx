@@ -5,6 +5,8 @@ import { useAppResumeSync } from '@/hooks/useAppResumeSync';
 import { getActiveClubId } from '@/utils/clubId';
 import { debugLog } from '@/utils/runtimeDebug';
 import { shouldAutoInitOneSignalRuntime } from '@/onesignal/onesignalService';
+import { usePermissions } from '@/permissions/usePermissions';
+import { FEATURES } from '@/permissions/features';
 
 const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === '1';
 const PUSH_DISABLED = import.meta.env.VITE_DISABLE_PUSH === '1';
@@ -33,10 +35,18 @@ function isPushExcludedPath(pathname) {
 
 export default function ProtectedRuntimeInit() {
   const { user, profile } = useAuth();
+  const {
+    hasFeatureForRole,
+    loading: permissionsLoading,
+    membership,
+    currentClub,
+    isSuperAdmin,
+  } = usePermissions();
   const location = useLocation();
   const isRecoveryHash = location.hash.includes('type=recovery');
   const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
   const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
+  const hasClubAccess = Boolean(currentClub?.id) && (Boolean(membership) || isSuperAdmin);
 
   const shouldInitProtectedRuntime =
     !UX_TEST_MODE_ENABLED &&
@@ -45,9 +55,14 @@ export default function ProtectedRuntimeInit() {
     shouldInitProtectedRuntime &&
     !PUSH_DISABLED &&
     shouldAutoInitOneSignalRuntime() &&
+    !permissionsLoading &&
+    hasFeatureForRole(FEATURES.PUSH) &&
     !isPushExcludedPath(location.pathname);
   const shouldInitAnalytics = shouldInitProtectedRuntime;
-  const shouldPingUserActivity = shouldInitProtectedRuntime;
+  const shouldPingUserActivity =
+    shouldInitProtectedRuntime &&
+    !permissionsLoading &&
+    hasClubAccess;
 
   useAppResumeSync({ enabled: shouldInitProtectedRuntime });
 
@@ -69,7 +84,7 @@ export default function ProtectedRuntimeInit() {
           <SessionActivityPing
             userId={user?.id || null}
             profileClubId={profile?.club_id || null}
-            anglerName={user?.email || null}
+            anglerName={profile?.name || profile?.angler_name || null}
           />
         </Suspense>
       ) : null}

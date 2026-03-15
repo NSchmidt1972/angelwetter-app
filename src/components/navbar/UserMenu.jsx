@@ -11,8 +11,8 @@ const UserMenu = forwardRef(function UserMenu(
     displayName,
     showMenu,
     onToggleMenu,
-    onNavigateAdmin,
-    showAdminLink = false,
+    showSuperAdminLink = false,
+    onNavigateSuperAdmin,
     showDataFilter = false,
     dataFilterValue = 'recent',
     onToggleDataFilter,
@@ -71,13 +71,13 @@ const UserMenu = forwardRef(function UserMenu(
                 </p>
               </div>
             )}
-            {showAdminLink && (
+            {showSuperAdminLink && (
               <button
                 type="button"
-                onClick={onNavigateAdmin}
-                className="w-full rounded px-3 py-2 text-left text-sm font-semibold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-900/30"
+                onClick={onNavigateSuperAdmin}
+                className="w-full rounded px-3 py-2 text-left text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-200 dark:hover:bg-blue-900/30"
               >
-                🔧 Adminbereich
+                🛠 Superadmin
               </button>
             )}
           </div>

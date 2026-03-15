@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { lazy } from 'react';
+import { lazy, useEffect } from 'react';
+import { getSuperadminAppUrl } from '@/config/superadminApp';
 
 const UpdatePassword = lazy(() => import('@/pages/UpdatePassword'));
 const ResetDone = lazy(() => import('@/pages/ResetDone'));
@@ -39,6 +40,14 @@ function ClubAuthEntryRedirect() {
   return <Navigate to={`/${clubSlug}/auth`} replace />;
 }
 
+function ExternalRedirect({ to }) {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.location.replace(to);
+  }, [to]);
+  return <div className="p-6 text-center">Weiterleitung...</div>;
+}
+
 export default function PublicRoutes() {
   const isRecoveryLink = typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
 
@@ -70,6 +79,8 @@ export default function PublicRoutes() {
       <Route path="/reset-done" element={<ResetDone />} />
       <Route path="/auth-verified" element={<AuthVerified />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/superadmin" element={<ExternalRedirect to={getSuperadminAppUrl('/superadmin')} />} />
+      <Route path="/superadmin/*" element={<ExternalRedirect to={getSuperadminAppUrl('/superadmin')} />} />
 
       <Route path="/:clubSlug" element={<ClubAuthEntryRedirect />} />
       <Route path="/:clubSlug/auth" element={<AuthForm />} />

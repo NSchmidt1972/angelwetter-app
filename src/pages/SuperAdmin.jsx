@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/supabaseClient';
 import { Card } from '@/components/ui';
 
@@ -75,6 +76,14 @@ export default function SuperAdmin() {
     <Card className="p-6 space-y-4">
       <h1 className="text-2xl font-bold text-blue-700">Superadmin Übersicht</h1>
       <p className="text-gray-600">Clubs, Mitgliederzahlen, Fänge (club_id-basiert).</p>
+      <div>
+        <Link
+          to="/superadmin/clubs"
+          className="inline-flex rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+        >
+          Clubs verwalten
+        </Link>
+      </div>
       <div className="grid md:grid-cols-2 gap-4">
         {clubs.map((club) => {
           const cid = club.id;
@@ -82,7 +91,11 @@ export default function SuperAdmin() {
           const activeMembers = stats.activeMemberCount[cid] || 0;
           const fishTotal = stats.fishCount[cid] || 0;
           return (
-            <div key={cid} className="border rounded-lg p-4 shadow-sm bg-white">
+            <Link
+              key={cid}
+              to={`/superadmin/clubs/${cid}`}
+              className="block border rounded-lg p-4 shadow-sm bg-white transition hover:-translate-y-0.5 hover:shadow-md"
+            >
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-800">{club.name}</h2>
@@ -104,7 +117,7 @@ export default function SuperAdmin() {
                   <div className="text-lg font-semibold text-indigo-700">{fishTotal}</div>
                 </div>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>

@@ -1172,7 +1172,7 @@ export default function FunFactsCards({ data }) {
                 ))}
               </ul>
             ) : (
-              <p>Alle bleiben brav am Ferkensbruch 😉</p>
+              <p>Alle bleiben brav am Vereinsgewässer 😉</p>
             )}
           </Card>,
 

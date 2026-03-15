@@ -2,7 +2,7 @@
 // Central source of truth for region labels and fish lists.
 
 export const REGION_LABELS = {
-  ferkensbruch: "Ferkensbruch (ASV-Rotauge)",
+  ferkensbruch: "Vereinsgewässer",
   inland: "Binnen (Deutschland)",
   holland: "Niederlande (Binnen & Polder)",
   northsea_de: "Nordsee (DE)",

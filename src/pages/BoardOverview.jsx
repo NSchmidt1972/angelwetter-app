@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import ActivitySection from '@/features/boardOverview/components/ActivitySection';
 import MetricsSection from '@/features/boardOverview/components/MetricsSection';
 import FishTableSection from '@/features/boardOverview/components/FishTableSection';
@@ -15,7 +17,7 @@ import {
   fetchFishAggregates,
   fetchCrayfishCatches,
 } from '@/services/boardService';
-import { isFerkensbruchLocation } from '@/utils/location';
+import { isHomeWaterEntry } from '@/utils/location';
 import {
   ACTIVITY_RANGE_OPTIONS,
   buildSizeDistribution,
@@ -30,6 +32,7 @@ import {
   normalizeRoleValue,
 } from '@/features/boardOverview/utils';
 import { PUBLIC_FROM } from '@/constants/visibility';
+import { withTimeout } from '@/utils/async';
 
 export default function BoardOverview() {
   const currentYear = new Date().getFullYear();
@@ -48,7 +51,39 @@ export default function BoardOverview() {
   const [activeSeasonalFish, setActiveSeasonalFish] = useState([]);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [activityRange, setActivityRange] = useState('30d');
+  const [clubCoords, setClubCoords] = useState(null);
   const detailSectionRef = useRef(null);
+
+  const loadClubCoords = useCallback(async () => {
+    try {
+      const clubId = getActiveClubId();
+      if (!clubId) {
+        setClubCoords(null);
+        return;
+      }
+      const { data, error } = await withTimeout(
+        supabase
+          .from('clubs')
+          .select('weather_lat, weather_lon')
+          .eq('id', clubId)
+          .maybeSingle(),
+        10000,
+        'BoardOverview Club-Koordinaten timeout'
+      );
+      if (error) throw error;
+
+      const lat = Number(data?.weather_lat);
+      const lon = Number(data?.weather_lon);
+      setClubCoords(Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null);
+    } catch (error) {
+      setClubCoords(null);
+      console.warn('BoardOverview: Club-Koordinaten konnten nicht geladen werden.', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadClubCoords();
+  }, [loadClubCoords]);
 
   const availableYears = useMemo(() => {
     const years = new Set([currentYear]);
@@ -590,7 +625,7 @@ export default function BoardOverview() {
       // Analyse-Logik für Fang-/Schneidertage: keine Größenpflicht, kein count_in_stats-Filter
       const analysisCatchEntries = items.filter((entry) => {
         if (entry?.is_marilou === true) return false;
-        if (!isFerkensbruchLocation(entry?.location_name)) return false;
+        if (!isHomeWaterEntry(entry, { clubCoords })) return false;
 
         const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
         if (!Number.isFinite(ts) || ts < publicFromAnalysisTs) return false;
@@ -604,7 +639,7 @@ export default function BoardOverview() {
 
       const analysisBlankEntries = items.filter((entry) => {
         if (entry?.is_marilou === true) return false;
-        if (!isFerkensbruchLocation(entry?.location_name)) return false;
+        if (!isHomeWaterEntry(entry, { clubCoords })) return false;
 
         const ts = entry?.timestamp ? new Date(entry.timestamp).getTime() : null;
         if (!Number.isFinite(ts) || ts < publicFromAnalysisTs) return false;
@@ -619,7 +654,7 @@ export default function BoardOverview() {
     } finally {
       setFishStatsLoading(false);
     }
-  }, []);
+  }, [clubCoords]);
 
   const refreshCrayfish = useCallback(async () => {
     setCrayfishLoading(true);

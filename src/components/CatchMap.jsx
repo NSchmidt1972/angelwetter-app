@@ -8,21 +8,29 @@ import {
 import MarkerClusterGroup from 'react-leaflet-markercluster';
 import L from 'leaflet';
 import { useEffect, useState, useMemo } from 'react';
+import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 import { FISH_SELECT, fetchClubFishesQuery } from '@/services/fishes';
+import { HOME_WATER_RADIUS_KM } from '@/utils/location';
+import { getDistanceKm } from '@/utils/geo';
+import { withTimeout } from '@/utils/async';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
-const FERKENSBRUCH_CENTER = [51.31075, 6.25585];
-const FERKENSBRUCH_ZOOM = 16.3;
-const IS_FERKENSBRUCH_RADIUS = 0.01999;
+const DEFAULT_HOME_CENTER = [51.31075, 6.25585];
+const HOME_ZOOM = 16.3;
 
-function isFerkensbruch(lat, lon) {
-  const dx = lat - FERKENSBRUCH_CENTER[0];
-  const dy = lon - FERKENSBRUCH_CENTER[1];
-  return Math.hypot(dx, dy) < IS_FERKENSBRUCH_RADIUS;
+function isHomeWaterPoint(lat, lon, center) {
+  const parsedLat = Number(lat);
+  const parsedLon = Number(lon);
+  const centerLat = Number(center?.[0]);
+  const centerLon = Number(center?.[1]);
+  if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLon)) return false;
+  if (!Number.isFinite(centerLat) || !Number.isFinite(centerLon)) return false;
+  return getDistanceKm(parsedLat, parsedLon, centerLat, centerLon) <= HOME_WATER_RADIUS_KM;
 }
 
 function FitBounds({ bounds }) {
@@ -35,11 +43,11 @@ function FitBounds({ bounds }) {
   return null;
 }
 
-function FlyToFerkensbruch() {
+function FlyToHome({ center, zoom }) {
   const map = useMap();
   useEffect(() => {
-    map.flyTo(FERKENSBRUCH_CENTER, FERKENSBRUCH_ZOOM, { animate: true });
-  }, [map]);
+    map.flyTo(center, zoom, { animate: true });
+  }, [map, center, zoom]);
   return null;
 }
 
@@ -95,6 +103,7 @@ export default function CatchMap() {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [entries, setEntries] = useState([]);
   const [onlyMine, setOnlyMine] = useState(false);
+  const [homeCenter, setHomeCenter] = useState(DEFAULT_HOME_CENTER);
 
   const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState(now.getFullYear());
@@ -102,6 +111,45 @@ export default function CatchMap() {
 
   const [storedAnglerName] = useLocalStorageValue('anglerName', '');
   const anglerName = (storedAnglerName || '').trim().toLowerCase();
+
+  useEffect(() => {
+    let active = true;
+    async function loadHomeCenter() {
+      try {
+        const clubId = getActiveClubId();
+        if (!clubId) {
+          if (active) setHomeCenter(DEFAULT_HOME_CENTER);
+          return;
+        }
+        const { data, error } = await withTimeout(
+          supabase
+            .from('clubs')
+            .select('weather_lat, weather_lon')
+            .eq('id', clubId)
+            .maybeSingle(),
+          10000,
+          'CatchMap Club-Koordinaten timeout'
+        );
+        if (error) throw error;
+        const lat = Number(data?.weather_lat);
+        const lon = Number(data?.weather_lon);
+        if (!active) return;
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          setHomeCenter([lat, lon]);
+        } else {
+          setHomeCenter(DEFAULT_HOME_CENTER);
+        }
+      } catch (error) {
+        if (!active) return;
+        console.warn('CatchMap: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+        setHomeCenter(DEFAULT_HOME_CENTER);
+      }
+    }
+    void loadHomeCenter();
+    return () => {
+      active = false;
+    };
+  }, [resumeTick]);
 
   useEffect(() => {
     let active = true;
@@ -170,7 +218,7 @@ export default function CatchMap() {
   const legendFishList = useMemo(() => {
     const relevantEntries = onlyMine
       ? filteredEntries
-      : filteredEntries.filter((entry) => isFerkensbruch(entry.lat, entry.lon));
+      : filteredEntries.filter((entry) => isHomeWaterPoint(entry.lat, entry.lon, homeCenter));
 
     const map = new Map();
     relevantEntries.forEach((entry) => {
@@ -183,12 +231,12 @@ export default function CatchMap() {
       map.get(normalized).count += 1;
     });
     return Array.from(map.entries()).sort((a, b) => b[1].count - a[1].count);
-  }, [filteredEntries, onlyMine]);
+  }, [filteredEntries, homeCenter, onlyMine]);
 
   // 🔧 NEU: Bei "Nur meine" nur zoomen, wenn es mind. einen externen Punkt gibt
   const hasExternalPoint = useMemo(() =>
-    bounds.some(([lat, lon]) => !isFerkensbruch(lat, lon))
-  , [bounds]);
+    bounds.some(([lat, lon]) => !isHomeWaterPoint(lat, lon, homeCenter))
+  , [bounds, homeCenter]);
 
   return (
     <div className="w-full relative z-0 rounded-xl overflow-hidden shadow-md">
@@ -253,8 +301,8 @@ export default function CatchMap() {
       <div className="h-[70vh] mt-2">
         <MapContainer
           key={`${onlyMine ? 'onlyMine' : 'all'}-${year}-${month}`}
-          center={FERKENSBRUCH_CENTER}
-          zoom={FERKENSBRUCH_ZOOM}
+          center={homeCenter}
+          zoom={HOME_ZOOM}
           scrollWheelZoom={true}
           className="h-full w-full"
         >
@@ -269,7 +317,7 @@ export default function CatchMap() {
                   <FitBounds bounds={bounds} />
                 )
               )
-            : <FlyToFerkensbruch />
+            : <FlyToHome center={homeCenter} zoom={HOME_ZOOM} />
           }
 
           <MarkerClusterGroup>
@@ -278,7 +326,7 @@ export default function CatchMap() {
               .map(e => (
                 <Marker
                   key={e.id}
-                  position={isFerkensbruch(e.lat, e.lon) ? FERKENSBRUCH_CENTER : [e.lat, e.lon]}
+                  position={isHomeWaterPoint(e.lat, e.lon, homeCenter) ? homeCenter : [e.lat, e.lon]}
                   icon={getIconForFish(e.fish)}
                 >
                   <Popup>
@@ -286,8 +334,8 @@ export default function CatchMap() {
                       <strong>{e.angler}</strong><br />
                       🐟 {e.fish} ({e.size} cm)<br />
                       {new Date(e.timestamp).toLocaleString('de-DE')}
-                      {isFerkensbruch(e.lat, e.lon) && (
-                        <p className="text-xs text-gray-500 mt-1">📍 Position zentriert auf Ferkensbruch</p>
+                      {isHomeWaterPoint(e.lat, e.lon, homeCenter) && (
+                        <p className="text-xs text-gray-500 mt-1">📍 Position zentriert auf Vereinsgewässer</p>
                       )}
                     </div>
                   </Popup>

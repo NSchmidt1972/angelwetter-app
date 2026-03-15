@@ -1,6 +1,6 @@
 // src/hooks/useWeatherNow.js
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchWeather } from "../api/weather"; // deine Funktion
+import { fetchWeather } from "@/services/weatherService";
 
 function normalizeOneCall(data) {
   const c = data?.current ?? {};

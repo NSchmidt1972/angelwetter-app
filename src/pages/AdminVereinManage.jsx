@@ -9,29 +9,9 @@ const themes = [
   { key: 'forest', label: 'Wald', desc: 'Grün/Grau mit natürlichem Kontrast' },
 ];
 
-const modules = [
-  { key: 'forecast', label: 'Wetter/Forecast' },
-  { key: 'map', label: 'Karte' },
-  { key: 'leaderboard', label: 'Rangliste' },
-  { key: 'fun', label: 'Fun-Facts' },
-  { key: 'downloads', label: 'Downloads' },
-  { key: 'notifications', label: 'Push-Benachrichtigungen' },
-  { key: 'regulations', label: 'Regelwerk' },
-];
-
 export default function AdminVereinManage() {
   const [activeTheme, setActiveTheme] = useState('lake');
-  const [activeModules, setActiveModules] = useState(new Set(['forecast', 'map', 'leaderboard', 'downloads', 'regulations']));
   const activeClubId = useMemo(() => getActiveClubId(), []);
-
-  const toggleModule = (key) => {
-    setActiveModules((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
 
   return (
     <Card className="space-y-8">
@@ -39,7 +19,7 @@ export default function AdminVereinManage() {
         <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Vereinsadministration</p>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">Verein & App gestalten</h1>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          Vereinstitel, Logo und Theme festlegen. Module und Funktionen aktivieren/deaktivieren. (Platzhalter – ohne Speicherung)
+          Vereinstitel, Logo und Theme festlegen. Modulfreigaben werden zentral vom Admin gepflegt.
         </p>
         <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
           Aktiver Club: {activeClubId || '–'}
@@ -119,40 +99,6 @@ export default function AdminVereinManage() {
               </label>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="rounded-xl bg-white p-6 shadow-sm shadow-gray-200 dark:bg-gray-900 dark:shadow-black/20">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Module & Funktionen</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">Welche Bereiche in der App sichtbar sind.</p>
-          </div>
-          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-            {activeModules.size} aktiv
-          </span>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {modules.map((mod) => {
-            const enabled = activeModules.has(mod.key);
-            return (
-              <button
-                key={mod.key}
-                type="button"
-                onClick={() => toggleModule(mod.key)}
-                className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
-                  enabled
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-400 dark:bg-emerald-900/20 dark:text-emerald-100'
-                    : 'border-gray-200 bg-white text-gray-800 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200'
-                }`}
-              >
-                <span className="font-medium">{mod.label}</span>
-                <span className={`text-xs font-semibold ${enabled ? 'text-emerald-700 dark:text-emerald-200' : 'text-gray-500 dark:text-gray-400'}`}>
-                  {enabled ? 'AN' : 'AUS'}
-                </span>
-              </button>
-            );
-          })}
         </div>
       </section>
     </Card>

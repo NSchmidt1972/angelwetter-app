@@ -3,8 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useFormattedNamesMap } from '@/hooks/useFormattedNamesMap';
 import { useViewerContext } from '@/hooks/useViewerContext';
+import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
+import { withTimeout } from '@/utils/async';
 import PageContainer from '../components/PageContainer';
-import { formatLocationLabel, isFerkensbruchLocation } from '@/utils/location';
+import { formatLocationLabel, isHomeWaterEntry } from '@/utils/location';
 import { Card } from '@/components/ui';
 import { hasKnownFishName, isValuableFishEntry, normalizeFishName, parseFishSize } from '@/utils/fishValidation';
 import { isMarilouAngler, isVisibleByDate } from '@/utils/visibilityPolicy';
@@ -17,6 +20,7 @@ export default function TopFishes() {
   const [selectedFish, setSelectedFish] = useState(() => searchParams.get('fish') || '');
   const formattedNamesMap = useFormattedNamesMap();
   const [onlyMine, setOnlyMine] = useState(false);
+  const [clubCoords, setClubCoords] = useState(null);
   const lastSelectedRef = useRef(null);
 
   const {
@@ -26,6 +30,41 @@ export default function TopFishes() {
     isTrustedViewer,
     isMarilouViewer,
   } = useViewerContext();
+
+  useEffect(() => {
+    let active = true;
+    async function loadClubCoords() {
+      try {
+        const clubId = getActiveClubId();
+        if (!clubId) {
+          if (active) setClubCoords(null);
+          return;
+        }
+        const { data, error } = await withTimeout(
+          supabase
+            .from('clubs')
+            .select('weather_lat, weather_lon')
+            .eq('id', clubId)
+            .maybeSingle(),
+          10000,
+          'TopFishes Club-Koordinaten timeout'
+        );
+        if (error) throw error;
+        const lat = Number(data?.weather_lat);
+        const lon = Number(data?.weather_lon);
+        if (!active) return;
+        setClubCoords(Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null);
+      } catch (error) {
+        if (!active) return;
+        setClubCoords(null);
+        console.warn('TopFishes: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+      }
+    }
+    void loadClubCoords();
+    return () => {
+      active = false;
+    };
+  }, [resumeTick]);
 
   useEffect(() => {
     let active = true;
@@ -45,7 +84,7 @@ export default function TopFishes() {
           return (f.angler || '').trim() === anglerName;
         }
 
-        if (!isFerkensbruchLocation(f.location_name)) return false;
+        if (!isHomeWaterEntry(f, { clubCoords })) return false;
         if (!isValuableFishEntry(f)) return false;
 
         return isVisibleByDate(f?.timestamp, {
@@ -61,7 +100,7 @@ export default function TopFishes() {
     return () => {
       active = false;
     };
-  }, [filterSetting, onlyMine, anglerName, isMarilouViewer, isTrustedViewer, resumeTick]);
+  }, [clubCoords, filterSetting, onlyMine, anglerName, isMarilouViewer, isTrustedViewer, resumeTick]);
 
   useEffect(() => {
     const param = searchParams.get('fish') || '';
@@ -93,7 +132,7 @@ export default function TopFishes() {
     f.fish === selectedFish &&
     f.angler &&
     isValuableFishEntry(f) &&
-    (onlyMine || isFerkensbruchLocation(f.location_name))
+    (onlyMine || isHomeWaterEntry(f, { clubCoords }))
   );
 
   const selectedFishCount = selectedFishEntries.length;
@@ -210,7 +249,7 @@ export default function TopFishes() {
                 {top10.length === 0 && (
                   <tr>
                     <td colSpan={onlyMine ? 4 : 4} className="px-4 py-6 text-center text-gray-500">
-                      Ferkensbruch
+                      Keine wertungsfähigen Fänge
                     </td>
                   </tr>
                 )}

@@ -9,7 +9,7 @@ import { parseFloatLocale } from "@/utils/number";
 
 // Services
 import { processAndUploadImage } from "@/services/imageProcessing";
-import { loadWeatherForPosition } from "@/services/weather";
+import { loadWeatherForPosition } from "@/services/weatherService";
 import { saveBlankDay } from "@/services/blankService";
 import { saveCatchEntry } from "@/services/catchService";
 
@@ -30,9 +30,6 @@ import { useWeatherCache } from "@/hooks/useWeatherCache";
 import { supabase } from "@/supabaseClient";
 import { useAchievements } from "@/achievements/useAchievements";
 import { localRemember } from "@/achievements/localRemember";
-
-const FERKENSBRUCH_LAT = 51.3135;
-const FERKENSBRUCH_LON = 6.256;
 
 export default function FishCatchForm({
   showEffect,                // Achievement-Effekt triggern
@@ -66,7 +63,7 @@ export default function FishCatchForm({
   const { clubSlug } = useParams();
   const clubBasePath = clubSlug ? `/${clubSlug}` : '';
   const { position } = useGeoPosition();
-  const { updateWeather } = useWeatherCache();
+  const { weather: cachedWeather, updateWeather } = useWeatherCache();
 
   // Achievement-Layer aus dem Router-Kontext, falls Prop nicht gesetzt ist
   const outletContext = useOutletContext() ?? {};
@@ -97,6 +94,24 @@ export default function FishCatchForm({
   // Zwischenstand für den 2-stufigen Speichern-Flow („entnommen?“)
   const [pendingEntry, setPendingEntry] = useState(null);
 
+  const buildWeatherFallbackFromCache = () => {
+    const cached = cachedWeather?.data;
+    const current = cached?.current;
+    const firstWeather = Array.isArray(current?.weather) ? current.weather[0] : null;
+    const firstDay = Array.isArray(cached?.daily) ? cached.daily[0] : null;
+    if (!current) return {};
+    return {
+      temp: current.temp ?? null,
+      description: firstWeather?.description ?? "",
+      icon: firstWeather?.icon ?? "",
+      wind: current.wind_speed ?? null,
+      wind_deg: current.wind_deg ?? null,
+      humidity: current.humidity ?? null,
+      pressure: current.pressure ?? null,
+      moon_phase: firstDay?.moon_phase ?? null,
+    };
+  };
+
   // 1) Formular absenden → Daten sammeln, vorbereiten, Dialog „entnommen?“ anzeigen
   const handleSubmit = async () => {
     if (loadingCatch || loadingBlank || savingCatch) return;
@@ -109,12 +124,18 @@ export default function FishCatchForm({
 
     setLoadingCatch(true);
     try {
-      // Wetter laden (mit Fallback auf Ferkensbruch)
-      const currentWeather = await loadWeatherForPosition(
-        position,
-        { lat: FERKENSBRUCH_LAT, lon: FERKENSBRUCH_LON },
-        updateWeather
-      );
+      // Wetter laden (mit Club-See-Koordinaten als Fallback)
+      let currentWeather = {};
+      try {
+        currentWeather = await loadWeatherForPosition(
+          position,
+          null,
+          updateWeather
+        );
+      } catch (weatherError) {
+        console.warn("⚠️ Live-Wetter fehlgeschlagen, nutze Cache/leer:", weatherError?.message || weatherError);
+        currentWeather = buildWeatherFallbackFromCache();
+      }
 
       // Foto verarbeiten/hochladen (optional)
       const photoUrl = photoFile ? await processAndUploadImage(photoFile, anglerName) : "";

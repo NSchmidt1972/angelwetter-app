@@ -158,7 +158,7 @@ async function clickMenuTarget(page, target) {
 }
 
 async function mockExternalApisForMenuSweep(page) {
-  await page.route('**/api.openweathermap.org/data/3.0/onecall**', async (route) => {
+  await page.route('**/functions/v1/weatherProxy', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -178,6 +178,15 @@ async function mockExternalApisForMenuSweep(page) {
   });
 
   await page.route('**/functions/v1/**', async (route) => {
+    if (route.request().url().includes('/functions/v1/weatherProxy')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockedWeather),
+      });
+      return;
+    }
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

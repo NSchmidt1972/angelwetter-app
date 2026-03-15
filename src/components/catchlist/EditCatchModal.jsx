@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FISH_TYPES } from '../../constants';
+import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
+import { withTimeout } from '@/utils/async';
+import { HOME_WATER_LABEL } from '@/utils/location';
 
 const PRESET_LAT = 51.3110871;
 const PRESET_LON = 6.2568567;
-const FERKENSBRUCH_LABEL = 'Ferkensbruch';
+const FERKENSBRUCH_LABEL = HOME_WATER_LABEL;
 const LOBBERICH_DB_VALUE = 'Lobberich';
+const ASV_ROTAUGE_ID = '00000000-0000-0000-0000-000000000001';
 
 export default function EditCatchModal({ entry, onCancel, onSave }) {
   const [fish, setFish] = useState(entry.fish);
@@ -15,6 +20,62 @@ export default function EditCatchModal({ entry, onCancel, onSave }) {
   const [locationName, setLocationName] = useState(entry.location_name || '');
   const [lat, setLat] = useState(entry.lat ?? '');
   const [lon, setLon] = useState(entry.lon ?? '');
+  const [presetLat, setPresetLat] = useState(PRESET_LAT);
+  const [presetLon, setPresetLon] = useState(PRESET_LON);
+  const [presetLocationLabel, setPresetLocationLabel] = useState(FERKENSBRUCH_LABEL);
+  const [presetLocationValue, setPresetLocationValue] = useState(LOBBERICH_DB_VALUE);
+
+  useEffect(() => {
+    let active = true;
+    async function loadPresetFromClub() {
+      try {
+        const clubId = getActiveClubId();
+        const isRotauge = clubId === ASV_ROTAUGE_ID;
+        const fallbackLabel = isRotauge ? FERKENSBRUCH_LABEL : HOME_WATER_LABEL;
+        const fallbackValue = isRotauge ? LOBBERICH_DB_VALUE : HOME_WATER_LABEL;
+
+        if (!clubId) {
+          if (!active) return;
+          setPresetLat(PRESET_LAT);
+          setPresetLon(PRESET_LON);
+          setPresetLocationLabel(fallbackLabel);
+          setPresetLocationValue(fallbackValue);
+          return;
+        }
+
+        const { data, error } = await withTimeout(
+          supabase
+            .from('clubs')
+            .select('weather_lat, weather_lon')
+            .eq('id', clubId)
+            .maybeSingle(),
+          10000,
+          'EditCatchModal Club-Koordinaten timeout'
+        );
+        if (error) throw error;
+
+        const nextLat = Number(data?.weather_lat);
+        const nextLon = Number(data?.weather_lon);
+        if (!active) return;
+        setPresetLat(Number.isFinite(nextLat) ? nextLat : PRESET_LAT);
+        setPresetLon(Number.isFinite(nextLon) ? nextLon : PRESET_LON);
+        setPresetLocationLabel(fallbackLabel);
+        setPresetLocationValue(fallbackValue);
+      } catch (error) {
+        if (!active) return;
+        console.warn('EditCatchModal: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+        setPresetLat(PRESET_LAT);
+        setPresetLon(PRESET_LON);
+        setPresetLocationLabel(HOME_WATER_LABEL);
+        setPresetLocationValue(HOME_WATER_LABEL);
+      }
+    }
+
+    void loadPresetFromClub();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handlePhoto = e => {
     const f = e.target.files?.[0]; setFile(f);
@@ -24,7 +85,7 @@ export default function EditCatchModal({ entry, onCancel, onSave }) {
   const toDisplayLocation = (value) => {
     if (!value?.trim()) return '';
     const lower = value.trim().toLowerCase();
-    if (lower === 'lobberich') return FERKENSBRUCH_LABEL;
+    if (lower === 'lobberich') return HOME_WATER_LABEL;
     return value;
   };
 
@@ -34,17 +95,17 @@ export default function EditCatchModal({ entry, onCancel, onSave }) {
       setLocationName('');
       return;
     }
-    if (trimmed.toLowerCase() === FERKENSBRUCH_LABEL.toLowerCase()) {
-      setLocationName(LOBBERICH_DB_VALUE);
+    if (trimmed.toLowerCase() === presetLocationLabel.toLowerCase()) {
+      setLocationName(presetLocationValue);
       return;
     }
     setLocationName(nextValue);
   };
 
   const handlePresetLocation = () => {
-    setLat(PRESET_LAT);
-    setLon(PRESET_LON);
-    setLocationName(LOBBERICH_DB_VALUE);
+    setLat(presetLat);
+    setLon(presetLon);
+    setLocationName(presetLocationValue);
   };
 
   const parseCoordinate = value => {
@@ -92,7 +153,7 @@ export default function EditCatchModal({ entry, onCancel, onSave }) {
             <div className="flex items-center justify-between text-sm font-semibold text-gray-700 dark:text-gray-200">
               <span>Fangort</span>
               <button type="button" onClick={handlePresetLocation} className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400">
-                📍 Auf Ferkensbruch setzen
+                📍 Auf {presetLocationLabel} setzen
               </button>
             </div>
             <input

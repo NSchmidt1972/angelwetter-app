@@ -1,14 +1,52 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { createCatchPDF } from '@/utils/pdfExporter';
-import { isFerkensbruchLocation } from '@/utils/location';
+import { isHomeWaterEntry } from '@/utils/location';
 import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 import { Card } from '@/components/ui';
+import { withTimeout } from '@/utils/async';
 
 export default function DownloadsPage() {
   const [anglerName] = useLocalStorageValue('anglerName', 'Unbekannt');
   const [pdfYear, setPdfYear] = useState(new Date().getFullYear());
+  const [clubCoords, setClubCoords] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    async function loadClubCoords() {
+      try {
+        const clubId = getActiveClubId();
+        if (!clubId) {
+          if (active) setClubCoords(null);
+          return;
+        }
+        const { data, error } = await withTimeout(
+          supabase
+            .from('clubs')
+            .select('weather_lat, weather_lon')
+            .eq('id', clubId)
+            .maybeSingle(),
+          10000,
+          'Downloads Club-Koordinaten timeout'
+        );
+        if (error) throw error;
+
+        const lat = Number(data?.weather_lat);
+        const lon = Number(data?.weather_lon);
+        if (!active) return;
+        setClubCoords(Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null);
+      } catch (error) {
+        if (!active) return;
+        setClubCoords(null);
+        console.warn('Downloads: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+      }
+    }
+    void loadClubCoords();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -63,7 +101,7 @@ export default function DownloadsPage() {
     const clubId = getActiveClubId();
     const { data, error } = await supabase
       .from('fishes')
-      .select('fish, size, weight, timestamp, location_name')
+      .select('fish, size, weight, timestamp, location_name, lat, lon')
       .eq('club_id', clubId)
       .eq('angler', anglerName)
       .eq('taken', true)
@@ -76,8 +114,8 @@ export default function DownloadsPage() {
       return;
     }
 
-    const ferkensbruchOnly = (data || []).filter((entry) => isFerkensbruchLocation(entry?.location_name));
-    if (ferkensbruchOnly.length === 0) {
+    const homeWaterOnly = (data || []).filter((entry) => isHomeWaterEntry(entry, { clubCoords }));
+    if (homeWaterOnly.length === 0) {
       const shouldDownloadEmpty = window.confirm(
         'Du hast keine Fische entnommen. Willst du die PDF dennoch downloaden?'
       );
@@ -85,7 +123,7 @@ export default function DownloadsPage() {
     }
 
     try {
-      const pdfBytes = await createCatchPDF(anglerName, ferkensbruchOnly, pdfYear, {
+      const pdfBytes = await createCatchPDF(anglerName, homeWaterOnly, pdfYear, {
         allowEmpty: true,
       });
       downloadFile(pdfBytes, `entnahmeliste_${pdfYear}.pdf`, 'application/pdf');

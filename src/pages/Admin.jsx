@@ -3,11 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { fetchProfiles, fetchWhitelist, fetchFishAggregates } from '@/services/boardService';
 import { getActiveClubId } from '@/utils/clubId';
 import { Card } from '@/components/ui';
+import { usePermissions } from '@/permissions/usePermissions';
+import { getSuperadminAppUrl } from '@/config/superadminApp';
+import { ROLES } from '@/permissions/roles';
 
 export default function Admin() {
   const navigate = useNavigate();
   const { clubSlug } = useParams();
+  const { isSuperAdmin, hasAtLeastRole } = usePermissions();
   const clubBasePath = clubSlug ? `/${clubSlug}` : '';
+  const canManagePermissions = isSuperAdmin || hasAtLeastRole(ROLES.ADMIN);
 
   const [whitelistCount, setWhitelistCount] = useState(null);
   const [profilesCount, setProfilesCount] = useState(null);
@@ -86,6 +91,41 @@ export default function Admin() {
             <span className="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">Einstellungen</span>
           </div>
         </button>
+
+        {canManagePermissions ? (
+          <button
+            type="button"
+            onClick={() => navigate(`${clubBasePath}/admin/permissions`)}
+            className="rounded-xl bg-white p-6 text-left shadow-sm shadow-gray-200 transition hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-900 dark:shadow-black/20"
+          >
+            <p className="text-xs uppercase tracking-[0.2em] text-gray-500">BERECHTIGUNGEN</p>
+            <h2 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">Module & Rollenmatrix</h2>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              Features je Club aktivieren/deaktivieren und Freigaben pro Rolle steuern.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-sm text-gray-700 dark:text-gray-200">
+              <span className="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">club_features</span>
+              <span className="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">club_role_features</span>
+            </div>
+          </button>
+        ) : null}
+
+        {isSuperAdmin ? (
+          <button
+            type="button"
+            onClick={() => window.open(getSuperadminAppUrl('/superadmin/clubs'), '_blank', 'noopener,noreferrer')}
+            className="rounded-xl bg-white p-6 text-left shadow-sm shadow-gray-200 transition hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-900 dark:shadow-black/20"
+          >
+            <p className="text-xs uppercase tracking-[0.2em] text-gray-500">SUPERADMIN</p>
+            <h2 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">Mandanten verwalten</h2>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              Clubs anlegen, bearbeiten und tenantübergreifend administrieren.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-sm text-gray-700 dark:text-gray-200">
+              <span className="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">Owner-App</span>
+            </div>
+          </button>
+        ) : null}
       </section>
     </Card>
   );

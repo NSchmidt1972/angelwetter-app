@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useValidFishes } from '../../hooks/useValidFishes';
 import { localDayKey, monthKey } from '../../utils/dateUtils';
 import {
@@ -23,6 +23,10 @@ import {
 } from './constants';
 import { getWeatherDescription, normalizePlace, parseLocaleNumber } from './utils';
 import { PUBLIC_FROM as DEFAULT_PUBLIC_FROM, TRUSTED_ANGLERS } from '@/constants/visibility';
+import { HOME_WATER_LABEL, isHomeWaterEntry } from '@/utils/location';
+import { withTimeout } from '@/utils/async';
+import { getActiveClubId } from '@/utils/clubId';
+import { supabase } from '@/supabaseClient';
 
 const FEMALE_FIRSTNAMES = new Set(['laura', 'marilou', 'julia']);
 const WEEKDAY_LABELS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -46,6 +50,57 @@ export function useFunFactsData({
   selectedYear = new Date().getFullYear(),
 }) {
   const { fishes, validFishes, loading, loadError } = useValidFishes({ PUBLIC_FROM, vertraute });
+  const [clubCoords, setClubCoords] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadClubCoords = async () => {
+      const clubId = getActiveClubId();
+      if (!clubId) {
+        if (active) setClubCoords(null);
+        return;
+      }
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from('clubs')
+            .select('weather_lat, weather_lon')
+            .eq('id', clubId)
+            .maybeSingle(),
+          10000,
+          'FunFacts Club-Koordinaten timeout',
+        );
+        if (error) throw error;
+        const lat = Number(data?.weather_lat);
+        const lon = Number(data?.weather_lon);
+        if (!active) return;
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          setClubCoords({ lat, lon });
+        } else {
+          setClubCoords(null);
+        }
+      } catch (error) {
+        if (!active) return;
+        console.warn('[useFunFactsData] Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+        setClubCoords(null);
+      }
+    };
+
+    void loadClubCoords();
+
+    const canListen = typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+    if (canListen) {
+      window.addEventListener('angelwetter:club-context-changed', loadClubCoords);
+    }
+
+    return () => {
+      active = false;
+      if (canListen) {
+        window.removeEventListener('angelwetter:club-context-changed', loadClubCoords);
+      }
+    };
+  }, []);
 
   const yearFilter = normalizeSelectedYear(selectedYear);
 
@@ -76,14 +131,14 @@ export function useFunFactsData({
     [validFishes, yearFilter],
   );
 
-  const ferkensbruchFishes = useMemo(
-    () => yearFilteredValidFishes.filter((f) => normalizePlace(f) === 'Ferkensbruch'),
-    [yearFilteredValidFishes],
+  const homeWaterFishes = useMemo(
+    () => yearFilteredValidFishes.filter((f) => isHomeWaterEntry(f, { clubCoords })),
+    [yearFilteredValidFishes, clubCoords],
   );
 
-  const ferkensbruchAllFishes = useMemo(
-    () => yearFilteredFishes.filter((f) => normalizePlace(f) === 'Ferkensbruch'),
-    [yearFilteredFishes],
+  const homeWaterAllFishes = useMemo(
+    () => yearFilteredFishes.filter((f) => isHomeWaterEntry(f, { clubCoords })),
+    [yearFilteredFishes, clubCoords],
   );
 
   const buildStatsFishes = (list) => {
@@ -95,8 +150,8 @@ export function useFunFactsData({
   };
 
   const statsFishes = useMemo(
-    () => buildStatsFishes(ferkensbruchFishes),
-    [ferkensbruchFishes],
+    () => buildStatsFishes(homeWaterFishes),
+    [homeWaterFishes],
   );
 
   const statsFishesAllLocations = useMemo(
@@ -468,8 +523,6 @@ export function useFunFactsData({
     const monthData = new Map();
 
     statsFishes.forEach((f) => {
-      const place = normalizePlace(f);
-      if (place !== 'Ferkensbruch') return;
       if (f.under_min_size === true) return;
 
       const dt = new Date(f.timestamp);
@@ -586,7 +639,7 @@ export function useFunFactsData({
     statsFishesAllLocations.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
-      const place = normalizePlace(f);
+      const place = normalizePlace(f, { clubCoords });
       if (!place) return;
       (placesByAngler[who] ||= new Set()).add(place);
     });
@@ -594,8 +647,8 @@ export function useFunFactsData({
     const entries = Object.entries(placesByAngler)
       .map(([angler, set]) => {
         const places = [...set].sort();
-        const onlyFerkensbruch = places.length === 1 && places[0] === 'Ferkensbruch';
-        if (onlyFerkensbruch) return null;
+        const onlyHomeWater = places.length === 1 && places[0] === HOME_WATER_LABEL;
+        if (onlyHomeWater) return null;
         return { angler, places, count: places.length };
       })
       .filter(Boolean);
@@ -607,7 +660,7 @@ export function useFunFactsData({
     const ranking = [...entries].sort((a, b) => b.count - a.count || a.angler.localeCompare(b.angler));
 
     return { count: best, winners, ranking };
-  }, [statsFishesAllLocations]);
+  }, [statsFishesAllLocations, clubCoords]);
 
   const predatorKing = useMemo(() => {
     const totals = {};
@@ -640,7 +693,7 @@ export function useFunFactsData({
   }, [statsFishes]);
 
   const heaviestFish = useMemo(() => {
-    const withWeight = ferkensbruchAllFishes
+    const withWeight = homeWaterAllFishes
       .map((f) => ({ fish: f, weight: parseLocaleNumber(f?.weight) }))
       .filter(({ fish, weight }) => fish?.blank !== true && Number.isFinite(weight) && weight > 0);
     if (withWeight.length === 0) return null;
@@ -654,13 +707,13 @@ export function useFunFactsData({
       .filter(({ weight }) => weight === maxW)
       .map(({ fish }) => fish);
     return { weight: maxW, items };
-  }, [ferkensbruchAllFishes]);
+  }, [homeWaterAllFishes]);
 
   const mostEfficientAngler = useMemo(() => {
-    if (ferkensbruchAllFishes.length === 0) return { max: 0, winners: [], ranking: [] };
+    if (homeWaterAllFishes.length === 0) return { max: 0, winners: [], ranking: [] };
 
     const daysByAngler = {};
-    ferkensbruchAllFishes.forEach((f) => {
+    homeWaterAllFishes.forEach((f) => {
       const who = (f.angler || 'Unbekannt').trim();
       if (!who) return;
       (daysByAngler[who] ||= new Set()).add(localDayKey(new Date(f.timestamp)));
@@ -692,7 +745,7 @@ export function useFunFactsData({
     const max = entries[0].ratio;
     const winners = entries.filter((e) => Math.abs(e.ratio - max) < 1e-9);
     return { max, winners, ranking: entries };
-  }, [ferkensbruchAllFishes, statsFishes]);
+  }, [homeWaterAllFishes, statsFishes]);
 
   const mostRotaugen = useMemo(() => {
     const isRotauge = (name) => {
@@ -900,7 +953,7 @@ export function useFunFactsData({
 
   const topThreeSpecies = useMemo(() => {
     const counts = {};
-    ferkensbruchFishes.forEach((f) => {
+    homeWaterFishes.forEach((f) => {
       const s = (f.fish || '').trim();
       if (!s) return;
       counts[s] = (counts[s] || 0) + 1;
@@ -912,7 +965,7 @@ export function useFunFactsData({
     const items = entries.slice(0, 3);
     const max = items[0]?.count || 0;
     return { items, max, ranking: entries };
-  }, [ferkensbruchFishes]);
+  }, [homeWaterFishes]);
 
   const averageSizeByAngler = useMemo(() => {
     if (statsFishes.length === 0) return { top3: [], ranking: [] };
@@ -1205,7 +1258,7 @@ export function useFunFactsData({
   }, [statsFishes]);
 
   const grundelChampion = useMemo(() => {
-    const onlyGrundeln = ferkensbruchFishes.filter((f) => f.fish?.trim().toLowerCase() === 'grundel');
+    const onlyGrundeln = homeWaterFishes.filter((f) => f.fish?.trim().toLowerCase() === 'grundel');
     if (onlyGrundeln.length === 0) return null;
 
     const byAngler = {};
@@ -1219,15 +1272,16 @@ export function useFunFactsData({
       .sort((a, b) => b.count - a.count);
 
     return sorted[0];
-  }, [ferkensbruchFishes]);
+  }, [homeWaterFishes]);
 
   const foreignAnglers = useMemo(() => {
     if (yearFilteredValidFishes.length === 0) return { top3: [] };
 
     const byAngler = {};
     for (const f of yearFilteredValidFishes) {
-      const normalizedPlace = normalizePlace(f);
-      if (normalizedPlace === 'Ferkensbruch') continue;
+      if (isHomeWaterEntry(f, { clubCoords })) continue;
+
+      const normalizedPlace = normalizePlace(f, { clubCoords });
 
       const locRaw = (f.location_name || '').trim();
       const loc = locRaw || normalizedPlace;
@@ -1250,11 +1304,11 @@ export function useFunFactsData({
       .slice(0, 3);
 
     return { top3: ranking };
-  }, [yearFilteredValidFishes]);
+  }, [yearFilteredValidFishes, clubCoords]);
 
   const schneiderKoenig = useMemo(() => {
     const counts = {};
-    ferkensbruchAllFishes.forEach((f) => {
+    homeWaterAllFishes.forEach((f) => {
       if (f.blank) {
         const who = (f.angler || 'Unbekannt').trim();
         counts[who] = (counts[who] || 0) + 1;
@@ -1268,14 +1322,14 @@ export function useFunFactsData({
     const max = entries[0].count;
     const winners = entries.filter((e) => e.count === max);
     return { max, winners, ranking: entries };
-  }, [ferkensbruchAllFishes]);
+  }, [homeWaterAllFishes]);
 
   const worstBlankMonth = useMemo(() => {
-    if (ferkensbruchAllFishes.length === 0) return { max: 0, winners: [], ranking: [] };
+    if (homeWaterAllFishes.length === 0) return { max: 0, winners: [], ranking: [] };
 
     const byMonth = {};
     const seenSessions = new Set();
-    for (const f of ferkensbruchAllFishes) {
+    for (const f of homeWaterAllFishes) {
       if (!f.blank) continue;
       const dt = new Date(f.timestamp);
       if (Number.isNaN(dt.getTime())) continue;
@@ -1298,10 +1352,10 @@ export function useFunFactsData({
     const winners = entries.filter((e) => e.count === max);
     const ranking = entries;
     return { max, winners, ranking };
-  }, [ferkensbruchAllFishes]);
+  }, [homeWaterAllFishes]);
 
   const hottestCatch = useMemo(() => {
-    const withTemp = ferkensbruchFishes
+    const withTemp = homeWaterFishes
       .map((f) => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
       .filter((x) => x.t != null && !Number.isNaN(x.size) && x.size > 0);
 
@@ -1313,10 +1367,10 @@ export function useFunFactsData({
     const winners = atMaxT.filter((x) => Math.abs(x.size - maxSize) < 1e-9).map((x) => x.f);
 
     return { tempC: maxT, size: maxSize, items: winners };
-  }, [ferkensbruchFishes]);
+  }, [homeWaterFishes]);
 
   const frostCatch = useMemo(() => {
-    const withTemp = ferkensbruchFishes
+    const withTemp = homeWaterFishes
       .map((f) => ({ f, t: extractTempC(f), size: parseFloat(f.size) }))
       .filter((x) => x.t != null);
 
@@ -1337,12 +1391,12 @@ export function useFunFactsData({
       .map((x) => x.f);
 
     return { tempC: minT, items };
-  }, [ferkensbruchFishes]);
+  }, [homeWaterFishes]);
 
   const extremeWeatherCatch = useMemo(() => {
-    if (ferkensbruchFishes.length === 0) return null;
+    if (homeWaterFishes.length === 0) return null;
 
-    const entries = ferkensbruchFishes
+    const entries = homeWaterFishes
       .map((f) => {
         const parsed = parseWeather(f) || {};
         const { textLower = '', tempC = null, rainMm = null, windSpeed = null, windGust = null } = parsed;
@@ -1439,10 +1493,10 @@ export function useFunFactsData({
       ranking,
       winners,
     };
-  }, [ferkensbruchFishes]);
+  }, [homeWaterFishes]);
 
   const activitySummary = useMemo(() => {
-    if (ferkensbruchAllFishes.length === 0) {
+    if (homeWaterAllFishes.length === 0) {
       return {
         catchSessions: 0,
         blankSessions: 0,
@@ -1457,7 +1511,7 @@ export function useFunFactsData({
     const blankSessionsSet = new Set();
     let totalCatchCount = 0;
 
-    ferkensbruchAllFishes.forEach((entry) => {
+    homeWaterAllFishes.forEach((entry) => {
       const ts = entry?.timestamp ? new Date(entry.timestamp) : null;
       const timeOk = ts && !Number.isNaN(ts.getTime()) && (cutoff == null || ts.getTime() >= cutoff);
       if (!timeOk) return;
@@ -1491,7 +1545,7 @@ export function useFunFactsData({
       blankShare,
       avgCatchesPerCatchDay,
     };
-  }, [ferkensbruchAllFishes, PUBLIC_FROM]);
+  }, [homeWaterAllFishes, PUBLIC_FROM]);
 
   const avgPerAnglerDayByMonth = useMemo(() => {
     if (statsFishes.length === 0) {
@@ -1762,8 +1816,8 @@ export function useFunFactsData({
   return {
     fishes,
     validFishes,
-    ferkensbruchFishes,
-    ferkensbruchAllFishes,
+    homeWaterFishes,
+    homeWaterAllFishes,
     statsFishes,
     yearFilter,
     availableYears,

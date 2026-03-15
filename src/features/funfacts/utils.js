@@ -1,4 +1,5 @@
 import { PLACE_ALIASES } from './constants';
+import { HOME_WATER_LABEL, isHomeWaterEntry } from '@/utils/location';
 import {
   formatDateDE,
   formatDateTimeDE,
@@ -6,9 +7,10 @@ import {
   formatTimeDE,
 } from '../../utils/formatters';
 
-export function normalizePlace(fish) {
+export function normalizePlace(fish, { clubCoords = null, homeWaterLabel = HOME_WATER_LABEL } = {}) {
+  if (isHomeWaterEntry(fish, { clubCoords })) return homeWaterLabel;
   const raw = (fish?.location_name ?? '').toString().trim();
-  if (!raw) return 'Ferkensbruch';
+  if (!raw) return homeWaterLabel;
   for (const [regex, name] of PLACE_ALIASES) {
     if (regex.test(raw)) return name;
   }

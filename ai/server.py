@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from supabase import create_client
 import pandas as pd
 import numpy as np
@@ -10,6 +11,7 @@ import json
 import pytz
 import os
 import time
+import urllib.request
 from scipy.stats import linregress
 from typing import Optional
 
@@ -46,6 +48,14 @@ MAIN_MIN_SPECIES_POSITIVE_SAMPLES = 10
 WEATHER_LOG_CACHE_TTL_SECONDS = max(0, int(os.getenv("WEATHER_LOG_CACHE_TTL_SECONDS", "90")))
 FISH_STATS_CACHE_TTL_SECONDS = max(0, int(os.getenv("FISH_STATS_CACHE_TTL_SECONDS", "300")))
 MAX_WEATHER_LOG_CACHE_ENTRIES = max(1, int(os.getenv("MAX_WEATHER_LOG_CACHE_ENTRIES", "16")))
+OPS_ALERT_URL = os.getenv("OPS_ALERT_URL", "").strip()
+if not OPS_ALERT_URL and SUPABASE_URL:
+    OPS_ALERT_URL = f"{SUPABASE_URL.rstrip('/')}/functions/v1/opsAlert"
+OPS_ALERT_SECRET = os.getenv("OPS_ALERT_SECRET", "").strip()
+try:
+    OPS_ALERT_TIMEOUT_SECONDS = max(1.0, float(os.getenv("OPS_ALERT_TIMEOUT_SECONDS", "2.5")))
+except Exception:
+    OPS_ALERT_TIMEOUT_SECONDS = 2.5
 PRESSURE_PA_THRESHOLD = 2000.0
 PRESSURE_HPA_MIN = 850.0
 PRESSURE_HPA_MAX = 1100.0
@@ -251,6 +261,59 @@ class WeatherInput(BaseModel):
     dt: Optional[int] = None
     date: Optional[str] = None
     hour: Optional[int] = None
+
+def emit_ops_alert(
+    message: str,
+    severity: str = "error",
+    context: Optional[dict] = None,
+):
+    if not OPS_ALERT_URL:
+        return False
+
+    payload = {
+        "source": "ai",
+        "service": "ai-server",
+        "severity": str(severity or "error"),
+        "message": str(message or "AI alert"),
+        "release": API_MODEL_VERSION,
+        "context": context or {},
+    }
+    headers = {"Content-Type": "application/json"}
+    if OPS_ALERT_SECRET:
+        headers["x-ops-secret"] = OPS_ALERT_SECRET
+    if SUPABASE_KEY:
+        headers["Authorization"] = f"Bearer {SUPABASE_KEY}"
+        headers["apikey"] = SUPABASE_KEY
+
+    request = urllib.request.Request(
+        OPS_ALERT_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=OPS_ALERT_TIMEOUT_SECONDS):
+            return True
+    except Exception as error:
+        print("⚠️ opsAlert dispatch failed:", repr(error))
+        return False
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    emit_ops_alert(
+        "Unhandled AI endpoint exception",
+        severity="critical",
+        context={
+            "path": str(request.url.path),
+            "method": request.method,
+            "error_type": exc.__class__.__name__,
+            "error": str(exc),
+        },
+    )
+    return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Trendberechnung
@@ -768,6 +831,11 @@ def aggregate_main_probability_from_species(
 async def predict(input_data: WeatherInput):
     reload_models_if_changed()
     if not any(m is not None for m in fish_models_map.values()):
+        emit_ops_alert(
+            "No fish models loaded for /predict",
+            severity="critical",
+            context={"endpoint": "/predict"},
+        )
         return {"error": "Keine Fischmodelle geladen"}
 
     # Zeitfeatures aus Forecast-Zeitpunkt (falls vorhanden), sonst now.
@@ -877,6 +945,15 @@ async def predict(input_data: WeatherInput):
                     excluded_species_for_main[name] = f"positive_samples_le_{MAIN_MIN_SPECIES_POSITIVE_SAMPLES}"
             except Exception as e:
                 print(f"❌ Fehler bei {name}-Prognose:", repr(e))
+                emit_ops_alert(
+                    "Species prediction failed",
+                    severity="error",
+                    context={
+                        "endpoint": "/predict",
+                        "species": name,
+                        "error": repr(e),
+                    },
+                )
 
     main_model_source = f"species_max_no_fallback_samples_gt_{MAIN_MIN_SPECIES_POSITIVE_SAMPLES}"
     raw_main_probability = aggregate_main_probability_from_species(per_fish_type_for_main)

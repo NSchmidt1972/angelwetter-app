@@ -11,9 +11,16 @@ import {
   setOneSignalSafariBackoff,
   syncCurrentSubscription,
 } from '@/onesignal/onesignalService';
+import { usePermissions } from '@/permissions/usePermissions';
+import { FEATURES } from '@/permissions/features';
 
 export default function PushInit() {
+  const { loading: permissionsLoading, hasFeatureForRole } = usePermissions();
+
   useEffect(() => {
+    if (permissionsLoading) return undefined;
+    if (!hasFeatureForRole(FEATURES.PUSH)) return undefined;
+
     let disposed = false;
     const cleanupFns = [];
 
@@ -111,7 +118,7 @@ export default function PushInit() {
         }
       });
     };
-  }, []);
+  }, [permissionsLoading, hasFeatureForRole]);
 
   return null;
 }

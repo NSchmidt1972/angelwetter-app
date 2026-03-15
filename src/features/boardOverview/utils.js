@@ -1,3 +1,5 @@
+import { ROLES, normalizeRole } from '@/permissions/roles';
+
 const rangeBucket = (key, label, min, max, ageLabel = '') => ({ key, label, min, max, ageLabel });
 
 const SIZE_BUCKETS = {
@@ -136,15 +138,7 @@ export function buildSizeDistribution(entries = [], fishName = '') {
 }
 
 export function normalizeRoleValue(role) {
-  if (!role) return 'mitglied';
-  const normalized = String(role).trim().toLowerCase();
-  if (normalized === 'mitglied') return 'mitglied';
-  if (normalized === 'admin') return 'admin';
-  if (normalized === 'vorstand') return 'vorstand';
-  if (normalized === 'gast') return 'gast';
-  if (normalized === 'tester') return 'tester';
-  if (normalized === 'inactive' || normalized === 'inaktiv') return 'inactive';
-  return 'mitglied';
+  return normalizeRole(role, ROLES.MEMBER);
 }
 
 export function formatDate(value) {

@@ -1,13 +1,13 @@
 // src/utils/filters.js
 import { isVisibleByDate } from '@/utils/visibilityPolicy';
-import { isFerkensbruchLocation } from '@/utils/location';
+import { isHomeWaterEntry } from '@/utils/location';
 
-export function isVisibleToUser(entry, { isTrusted, onlyMine, anglerName, filterSetting }) {
+export function isVisibleToUser(entry, { isTrusted, onlyMine, anglerName, filterSetting, clubCoords = null }) {
   const istEigenerFang = entry.angler === anglerName;
   if (!isVisibleByDate(entry?.timestamp, { isTrusted, filterSetting })) return false;
 
-  const ortIstLobberich = isFerkensbruchLocation(entry.location_name);
-  const externFreigegeben = !ortIstLobberich && entry.share_public_non_home === true;
+  const istHeimgewaesser = isHomeWaterEntry(entry, { clubCoords });
+  const externFreigegeben = !istHeimgewaesser && entry.share_public_non_home === true;
 
-  return onlyMine ? istEigenerFang : ortIstLobberich || externFreigegeben;
+  return onlyMine ? istEigenerFang : istHeimgewaesser || externFreigegeben;
 }

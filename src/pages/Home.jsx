@@ -3,11 +3,12 @@ import { useEffect, useState } from 'react';
 import WeatherNow from '@/components/weather/WeatherNow';
 import { useWeatherCache } from '@/hooks/useWeatherCache';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
-import { useUserProfile } from '@/AuthContext';
 import { Card } from '@/components/ui';
 import { supabase } from '@/supabaseClient';
 import { withTimeout } from '@/utils/async';
 import usePageMeta from '@/hooks/usePageMeta';
+import { usePermissions } from '@/permissions/usePermissions';
+import { ROLES } from '@/permissions/roles';
 
 export default function Home() {
   usePageMeta({
@@ -17,20 +18,19 @@ export default function Home() {
 
   const { weather, loading, error, refresh } = useWeatherCache();
   const resumeTick = useAppResumeTick({ enabled: true });
-  const { profile } = useUserProfile();
+  const { hasAtLeastRole } = usePermissions();
   const [waterTemperature, setWaterTemperature] = useState(null);
   const [waterTemperatureHistory, setWaterTemperatureHistory] = useState([]);
   const [waterTemperatureLoading, setWaterTemperatureLoading] = useState(true);
   const weatherData = weather;
   const errorMessage = error && !weatherData ? '⚠️ Wetterdaten konnten nicht geladen werden.' : null;
-  const role = profile?.role ? String(profile.role).trim().toLowerCase() : null;
-  const isAdmin = role === 'admin';
+  const canSeeWaterTemperature = hasAtLeastRole(ROLES.ADMIN);
 
   useEffect(() => {
     let active = true;
 
     async function loadWaterTemperature() {
-      if (!isAdmin) {
+      if (!canSeeWaterTemperature) {
         setWaterTemperature(null);
         setWaterTemperatureHistory([]);
         setWaterTemperatureLoading(false);
@@ -70,7 +70,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [weatherData?.savedAt, isAdmin, resumeTick]);
+  }, [weatherData?.savedAt, canSeeWaterTemperature, resumeTick]);
 
   return (
     <Card className="p-4 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans">
@@ -83,7 +83,7 @@ export default function Home() {
           waterTemperature={waterTemperature}
           waterTemperatureHistory={waterTemperatureHistory}
           waterTemperatureLoading={waterTemperatureLoading}
-          showWaterTemperature={isAdmin}
+          showWaterTemperature={canSeeWaterTemperature}
         />
       )}
     </Card>

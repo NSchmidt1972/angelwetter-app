@@ -1,3 +1,5 @@
+import { ROLES, normalizeRole } from '@/permissions/roles';
+
 export default function MembersSection({
   showMemberList,
   onToggleMemberList,
@@ -86,12 +88,12 @@ export default function MembersSection({
                   </tr>
                 ) : (
                   filteredProfiles.map((profile) => {
+                    const currentRole = normalizeRole(profile?.role, ROLES.MEMBER);
                     const selectValue =
-                      (profile?.role ? String(profile.role).trim().toLowerCase() : '') === 'inactive'
-                        ? 'mitglied'
-                        : profile?.role || 'mitglied';
-                    const isInactive =
-                      (profile?.role ? String(profile.role).trim().toLowerCase() : '') === 'inactive';
+                      currentRole === ROLES.INACTIVE
+                        ? ROLES.MEMBER
+                        : currentRole;
+                    const isInactive = currentRole === ROLES.INACTIVE;
                     return (
                       <tr key={profile.id} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
                         <td className="px-4 py-2 text-gray-800 dark:text-gray-200">

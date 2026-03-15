@@ -8,7 +8,7 @@ export default function ExternalCatchesSection({
   metaTextClass,
 }) {
   return (
-    <OverviewSection title="🌍 Externe Fänge (außer Lobberich)">
+    <OverviewSection title="🌍 Externe Fänge (außer Vereinsgewässer)">
       {externalCatches.length > 0 ? (
         <div className="max-h-60 overflow-y-auto">
           <ul className={listItemClass}>

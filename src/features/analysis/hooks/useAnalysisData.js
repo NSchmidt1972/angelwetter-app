@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { fetchWeather } from '@/api/weather';
+import { supabase } from '@/supabaseClient';
+import { getActiveClubId } from '@/utils/clubId';
+import { fetchWeather } from '@/services/weatherService';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 import {
@@ -10,8 +12,10 @@ import {
   windDirection,
 } from '@/features/analysis/utils';
 import { isMarilouAngler, isTrustedAngler, isVisibleByDate } from '@/utils/visibilityPolicy';
+import { isHomeWaterEntry } from '@/utils/location';
 import { isValuableFishEntry } from '@/utils/fishValidation';
 import { FISH_SELECT, fetchClubFishesQuery } from '@/services/fishes';
+import { withTimeout } from '@/utils/async';
 
 function isFishInYear(fishEntry, year) {
   const ts = fishEntry?.timestamp ? new Date(fishEntry.timestamp) : null;
@@ -33,6 +37,31 @@ export default function useAnalysisData({ anglerName }) {
     let isActive = true;
 
     async function loadData() {
+      let clubCoords = null;
+      try {
+        const clubId = getActiveClubId();
+        if (clubId) {
+          const { data: clubRow, error: clubError } = await withTimeout(
+            supabase
+              .from('clubs')
+              .select('weather_lat, weather_lon')
+              .eq('id', clubId)
+              .maybeSingle(),
+            10000,
+            'Analysis Club-Koordinaten timeout'
+          );
+          if (!clubError) {
+            const lat = Number(clubRow?.weather_lat);
+            const lon = Number(clubRow?.weather_lon);
+            if (Number.isFinite(lat) && Number.isFinite(lon)) {
+              clubCoords = { lat, lon };
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Analysis: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+      }
+
       const { data, error } = await fetchClubFishesQuery({ select: FISH_SELECT.ANALYSIS });
       if (error) {
         console.error('Fehler beim Laden der Fänge:', error);
@@ -49,20 +78,25 @@ export default function useAnalysisData({ anglerName }) {
         if (!isVisibleByDate(fishEntry?.timestamp, { isTrusted: istVertrauter, filterSetting })) return false;
 
         const istEigenerFang = fishEntry.angler === anglerName;
-        const ort = fishEntry.location_name?.toLowerCase().trim() ?? '';
-        const ortIstFerkensbruch = fishEntry.location_name == null || ort.includes('lobberich');
+        const istHeimgewaesser = isHomeWaterEntry(fishEntry, { clubCoords });
 
-        return onlyMine ? istEigenerFang : ortIstFerkensbruch;
+        return onlyMine ? istEigenerFang : istHeimgewaesser;
       });
 
       if (!isActive) return;
       setFishes(filtered);
     }
 
-    fetchWeather().then((weather) => {
-      if (!isActive) return;
-      setWeatherNow(weather);
-    });
+    fetchWeather()
+      .then((weather) => {
+        if (!isActive) return;
+        setWeatherNow(weather);
+      })
+      .catch((error) => {
+        if (!isActive) return;
+        console.warn('Wetter konnte nicht geladen werden:', error?.message || error);
+        setWeatherNow(null);
+      });
     loadData();
 
     return () => {
