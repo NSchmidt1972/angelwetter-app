@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [clubContextTick, setClubContextTick] = useState(0);
 
   const userId = user?.id ?? null;
   const authStillLoading = user === undefined;
@@ -122,6 +123,13 @@ export const AuthProvider = ({ children }) => {
   }, [resumeTick, userId]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => setClubContextTick((prev) => prev + 1);
+    window.addEventListener('angelwetter:club-context-changed', handler);
+    return () => window.removeEventListener('angelwetter:club-context-changed', handler);
+  }, []);
+
+  useEffect(() => {
     let active = true;
 
     const loadProfile = async () => {
@@ -148,6 +156,7 @@ export const AuthProvider = ({ children }) => {
           userId,
           clubId,
           resumeTick,
+          clubContextTick,
         });
         const { data, error } = await withTimeout(
           supabase
@@ -201,7 +210,7 @@ export const AuthProvider = ({ children }) => {
 
     loadProfile();
     return () => { active = false; };
-  }, [authStillLoading, userId, resumeTick]);
+  }, [authStillLoading, userId, resumeTick, clubContextTick]);
 
   const value = useMemo(
     () => ({ user, setUser, loading, profile, profileLoading }),

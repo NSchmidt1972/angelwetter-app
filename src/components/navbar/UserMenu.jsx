@@ -9,7 +9,7 @@ const UserMenu = forwardRef(function UserMenu(
     dark,
     onToggleDark,
     displayName,
-    clubLogoSrc = '/logo.png',
+    clubLogoSrc = '',
     showMenu,
     onToggleMenu,
     showDataFilter = false,
@@ -37,19 +37,23 @@ const UserMenu = forwardRef(function UserMenu(
         aria-haspopup="menu"
         aria-controls="navbar-user-menu"
       >
-        <img
-          src={clubLogoSrc}
-          alt=""
+        <span
+          className="h-5 w-5 overflow-hidden rounded-full border border-gray-200 bg-white dark:border-gray-600 dark:bg-gray-700"
           aria-hidden="true"
-          className="h-5 w-5 rounded-full object-cover"
-          loading="lazy"
-          onError={(event) => {
-            const img = event.currentTarget;
-            if (img.dataset.logoFallbackApplied === '1') return;
-            img.dataset.logoFallbackApplied = '1';
-            img.src = '/logo.png';
-          }}
-        />
+        >
+          {clubLogoSrc ? (
+            <img
+              src={clubLogoSrc}
+              alt=""
+              aria-hidden="true"
+              className="h-full w-full object-cover"
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : null}
+        </span>
         <span className="font-medium">{displayName}</span>
       </button>
 

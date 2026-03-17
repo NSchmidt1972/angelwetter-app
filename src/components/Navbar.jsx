@@ -158,7 +158,7 @@ export default function Navbar({ name }) {
   const showDataFilter =
     hasFeatureForRole(FEATURES.ADMIN_TOOLS) &&
     hasAtLeastRole(ROLES.BOARD);
-  const clubLogoSrc = currentClub?.logoUrl || '/logo.png';
+  const clubLogoSrc = String(currentClub?.logoUrl || '').trim();
 
   return (
     <>

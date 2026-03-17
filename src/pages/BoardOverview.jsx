@@ -8,8 +8,8 @@ import YearSelectorSection from '@/features/boardOverview/components/YearSelecto
 import { MonthlyCatchSection, SessionSection } from '@/features/boardOverview/components/FishTrendsSection';
 import SeasonalSection from '@/features/boardOverview/components/SeasonalSection';
 import CrayfishSection from '@/features/boardOverview/components/CrayfishSection';
-import AdminMembersManage from '@/pages/AdminMembersManage';
 import { Card } from '@/components/ui';
+import BoardSubmenu from '@/components/BoardSubmenu';
 import { hasKnownFishName, normalizeFishName } from '@/utils/fishValidation';
 import {
   fetchProfiles,
@@ -693,9 +693,11 @@ export default function BoardOverview() {
 
   return (
     <Card className="space-y-8">
-      <MetricsSection stats={stats} formatNumber={formatNumber} />
+      <div className="flex justify-end">
+        <BoardSubmenu activeKey="stats" />
+      </div>
 
-      <AdminMembersManage />
+      <MetricsSection stats={stats} formatNumber={formatNumber} />
 
       <YearSelectorSection
         yearOptions={yearOptions}

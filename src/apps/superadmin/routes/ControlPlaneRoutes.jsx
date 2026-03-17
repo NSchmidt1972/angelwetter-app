@@ -33,12 +33,14 @@ function RequireSuperAdmin({ children }) {
 export default function ControlPlaneRoutes() {
   return (
     <RequireSuperAdmin>
-      <Routes>
-        <Route index element={<OverviewPage />} />
-        <Route path="clubs" element={<ClubsPage />} />
-        <Route path="clubs/:clubId" element={<ClubDetailPage />} />
-        <Route path="*" element={<Navigate to="/superadmin" replace />} />
-      </Routes>
+      <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
+        <Routes>
+          <Route index element={<OverviewPage />} />
+          <Route path="clubs" element={<ClubsPage />} />
+          <Route path="clubs/:clubId" element={<ClubDetailPage />} />
+          <Route path="*" element={<Navigate to="/superadmin" replace />} />
+        </Routes>
+      </div>
     </RequireSuperAdmin>
   );
 }

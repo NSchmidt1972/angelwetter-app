@@ -88,14 +88,14 @@ export default function OverviewPage() {
   }, [memberships, fishes]);
 
   if (loading) {
-    return <Card className="p-6">Lade Superadmin-Daten…</Card>;
+    return <Card className="p-4 sm:p-6">Lade Superadmin-Daten…</Card>;
   }
   if (error) {
-    return <Card className="p-6 text-red-600">Fehler: {error}</Card>;
+    return <Card className="p-4 text-red-600 sm:p-6">Fehler: {error}</Card>;
   }
 
   return (
-    <Card className="p-6 space-y-4">
+    <Card className="space-y-4 p-4 sm:p-6">
       <h1 className="text-2xl font-bold text-blue-700">Superadmin Übersicht</h1>
       <BuildUpdatePanel />
       <p className="text-gray-600">Clubs, Mitgliederzahlen, Fänge (club_id-basiert).</p>
@@ -110,6 +110,7 @@ export default function OverviewPage() {
       <div className="grid md:grid-cols-2 gap-4">
         {clubs.map((club) => {
           const cid = club.id;
+          const logoUrl = String(club.logo_url || '').trim();
           const totalMembers = stats.memberCount[cid] || 0;
           const activeMembers = stats.activeMemberCount[cid] || 0;
           const fishTotal = stats.fishCount[cid] || 0;
@@ -117,28 +118,29 @@ export default function OverviewPage() {
             <Link
               key={cid}
               to={`/superadmin/clubs/${cid}`}
-              className="block border rounded-lg p-4 shadow-sm bg-white transition hover:-translate-y-0.5 hover:shadow-md"
+              className="block min-w-0 rounded-lg border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              <div className="flex items-center justify-between mb-2">
+              <div className="mb-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
-                  <img
-                    src={club.logo_url || '/logo.png'}
-                    alt={`${club.name || 'Club'} Logo`}
-                    className="h-10 w-10 rounded-full border border-gray-200 object-cover"
-                    loading="lazy"
-                    onError={(event) => {
-                      const img = event.currentTarget;
-                      if (img.dataset.logoFallbackApplied === '1') return;
-                      img.dataset.logoFallbackApplied = '1';
-                      img.src = '/logo.png';
-                    }}
-                  />
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-white">
+                    {logoUrl ? (
+                      <img
+                        src={logoUrl}
+                        alt={`${club.name || 'Club'} Logo`}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        onError={(event) => {
+                          event.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : null}
+                  </div>
                   <div className="min-w-0">
-                    <h2 className="truncate text-lg font-semibold text-gray-800">{club.name}</h2>
-                    <div className="truncate text-sm text-gray-500">Slug: {club.slug} | Host: {club.host || '—'}</div>
+                    <h2 className="break-words text-lg font-semibold text-gray-800">{club.name}</h2>
+                    <div className="break-all text-sm text-gray-500 sm:truncate">Slug: {club.slug} | Host: {club.host || '—'}</div>
                   </div>
                 </div>
-                <div className="text-xs text-gray-500">{cid}</div>
+                <div className="break-all text-[11px] leading-tight text-gray-500 sm:text-right sm:text-xs">{cid}</div>
               </div>
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <div className="bg-blue-50 border border-blue-100 rounded p-2 text-center">

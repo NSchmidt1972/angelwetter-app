@@ -45,6 +45,7 @@ export default function ClubDetailPage() {
     role: ROLES.BOARD,
     assignRoleIfUserExists: true,
   });
+  const [showClubWhitelist, setShowClubWhitelist] = useState(false);
   const [showClubAnalysis, setShowClubAnalysis] = useState(false);
 
   const rows = useMemo(
@@ -393,24 +394,28 @@ export default function ClubDetailPage() {
     }
   };
 
-  if (loading) return <Card className="p-6">Club-Details werden geladen...</Card>;
-  if (!club) return <Card className="p-6 text-red-600">Club nicht gefunden.</Card>;
+  if (loading) return <Card className="p-4 sm:p-6">Club-Details werden geladen...</Card>;
+  if (!club) return <Card className="p-4 text-red-600 sm:p-6">Club nicht gefunden.</Card>;
   const logoPreviewUrl = String(club.logo_url || '').trim();
   const effectiveLogoPreviewUrl = logoFilePreviewUrl || logoPreviewUrl;
+  const hasEffectiveLogoPreview = Boolean(effectiveLogoPreviewUrl);
 
   return (
-    <Card className="space-y-8 p-6">
+    <Card className="space-y-8 p-4 sm:p-6">
       <header className="space-y-2">
         <Link to="/superadmin/clubs" className="text-sm text-blue-600 hover:underline">
           ← Zurück zu Clubs
         </Link>
         <h1 className="text-2xl font-bold text-blue-700 dark:text-blue-300">{club.name}</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          ID: {club.id} | Tenant-Link:{' '}
-          <Link to={`/${club.slug}/vorstand`} className="text-blue-600 hover:underline">
-            /{club.slug}/vorstand
-          </Link>
-        </p>
+        <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
+          <p className="break-all">ID: {club.id}</p>
+          <p className="break-all">
+            Tenant-Link:{' '}
+            <Link to={`/${club.slug}/vorstand`} className="break-all text-blue-600 hover:underline">
+              /{club.slug}/vorstand
+            </Link>
+          </p>
+        </div>
       </header>
 
       {error ? (
@@ -491,7 +496,7 @@ export default function ClubDetailPage() {
                 Auswahl entfernen
               </button>
             ) : null}
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="break-all text-xs text-gray-500 dark:text-gray-400">
               {supportsClubLogoUrl
                 ? (logoFile
                   ? `${logoFile.name} ausgewählt. Upload beim Speichern.`
@@ -500,22 +505,23 @@ export default function ClubDetailPage() {
             </span>
           </div>
           <div className="mt-2 flex items-center gap-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/60">
-            <img
-              src={effectiveLogoPreviewUrl || '/logo.png'}
-              alt="Logo-Vorschau"
-              className="h-8 w-8 rounded-full object-cover"
-              loading="lazy"
-              onError={(event) => {
-                const img = event.currentTarget;
-                if (img.dataset.logoFallbackApplied === '1') return;
-                img.dataset.logoFallbackApplied = '1';
-                img.src = '/logo.png';
-              }}
-            />
+            <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-white dark:border-gray-600 dark:bg-gray-900">
+              {hasEffectiveLogoPreview ? (
+                <img
+                  src={effectiveLogoPreviewUrl}
+                  alt="Logo-Vorschau"
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : null}
+            </div>
             <div className="min-w-0">
               <p className="text-xs font-medium text-gray-700 dark:text-gray-200">Logo-Vorschau</p>
               <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                {logoFile ? 'Lokale Vorschau (noch nicht gespeichert)' : (logoPreviewUrl || 'Fallback: /logo.png')}
+                {logoFile ? 'Lokale Vorschau (noch nicht gespeichert)' : (logoPreviewUrl || 'Kein Logo hinterlegt')}
               </p>
             </div>
           </div>
@@ -587,7 +593,7 @@ export default function ClubDetailPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Rollenmatrix</h2>
-        <div className="overflow-x-auto">
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-100 dark:bg-gray-800">
               <tr>
@@ -624,95 +630,112 @@ export default function ClubDetailPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Initiale Freischaltung (Whitelist + Rolle)</h2>
-        <form onSubmit={addWhitelistEntry} className="grid gap-3 md:grid-cols-3">
-          <label className="text-sm md:col-span-2">
-            E-Mail
-            <input
-              type="email"
-              value={whitelistForm.email}
-              onChange={(event) => setWhitelistForm((prev) => ({ ...prev, email: event.target.value }))}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-              placeholder="vorstand@verein.de"
-              required
-            />
-            <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-              Diese E-Mail darf sich für den Verein anmelden.
-            </span>
-          </label>
-          <label className="text-sm">
-            Rolle (optional direkt setzen)
-            <select
-              value={whitelistForm.role}
-              onChange={(event) => setWhitelistForm((prev) => ({ ...prev, role: event.target.value }))}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-            >
-              {ROLE_OPTIONS.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm md:col-span-2">
-            <input
-              type="checkbox"
-              checked={Boolean(whitelistForm.assignRoleIfUserExists)}
-              onChange={(event) =>
-                setWhitelistForm((prev) => ({ ...prev, assignRoleIfUserExists: event.target.checked }))
-              }
-            />
-            Wenn Account schon existiert, Rolle sofort setzen
-          </label>
-          <div className="md:col-span-3">
-            <button
-              type="submit"
-              disabled={whitelistBusy}
-              className="rounded bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
-            >
-              {whitelistBusy ? 'Speichert...' : 'Whitelist speichern'}
-            </button>
-          </div>
-        </form>
-        <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-700">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-100 dark:bg-gray-800">
-              <tr>
-                <th className="px-3 py-2 text-left">E-Mail</th>
-                <th className="px-3 py-2 text-left">Rolle</th>
-                <th className="px-3 py-2 text-left">Freigeschaltet am</th>
-                <th className="px-3 py-2 text-right">Aktion</th>
-              </tr>
-            </thead>
-            <tbody>
-              {whitelist.length === 0 ? (
-                <tr className="border-t border-gray-200 dark:border-gray-700">
-                  <td colSpan={4} className="px-3 py-3 text-gray-500 dark:text-gray-400">
-                    Keine Whitelist-Einträge vorhanden.
-                  </td>
-                </tr>
-              ) : (
-                whitelist.map((entry) => (
-                  <tr key={entry.id} className="border-t border-gray-200 dark:border-gray-700">
-                    <td className="px-3 py-2 font-mono">{entry.email}</td>
-                    <td className="px-3 py-2">{entry.role || ROLES.MEMBER}</td>
-                    <td className="px-3 py-2">{entry.created_at ? formatDateTime(entry.created_at) : '—'}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        disabled={whitelistBusy}
-                        onClick={() => removeWhitelistEntry(entry.id)}
-                        className="rounded border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-800/50 dark:text-red-300 dark:hover:bg-red-900/20"
-                      >
-                        Entfernen
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Initiale Freischaltung (Whitelist + Rolle)</h2>
+          <button
+            type="button"
+            onClick={() => setShowClubWhitelist((prev) => !prev)}
+            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+          >
+            {showClubWhitelist ? 'Whitelist ausblenden' : 'Whitelist einblenden'}
+          </button>
         </div>
+        {showClubWhitelist ? (
+          <>
+            <form onSubmit={addWhitelistEntry} className="grid gap-3 md:grid-cols-3">
+              <label className="text-sm md:col-span-2">
+                E-Mail
+                <input
+                  type="email"
+                  value={whitelistForm.email}
+                  onChange={(event) => setWhitelistForm((prev) => ({ ...prev, email: event.target.value }))}
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                  placeholder="vorstand@verein.de"
+                  required
+                />
+                <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                  Diese E-Mail darf sich für den Verein anmelden.
+                </span>
+              </label>
+              <label className="text-sm">
+                Rolle (optional direkt setzen)
+                <select
+                  value={whitelistForm.role}
+                  onChange={(event) => setWhitelistForm((prev) => ({ ...prev, role: event.target.value }))}
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                >
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={Boolean(whitelistForm.assignRoleIfUserExists)}
+                  onChange={(event) =>
+                    setWhitelistForm((prev) => ({ ...prev, assignRoleIfUserExists: event.target.checked }))
+                  }
+                />
+                Wenn Account schon existiert, Rolle sofort setzen
+              </label>
+              <div className="md:col-span-3">
+                <button
+                  type="submit"
+                  disabled={whitelistBusy}
+                  className="rounded bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                >
+                  {whitelistBusy ? 'Speichert...' : 'Whitelist speichern'}
+                </button>
+              </div>
+            </form>
+            <div className="-mx-4 overflow-x-auto rounded border border-gray-200 px-4 sm:mx-0 sm:px-0 dark:border-gray-700">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-100 dark:bg-gray-800">
+                  <tr>
+                    <th className="px-3 py-2 text-left">E-Mail</th>
+                    <th className="px-3 py-2 text-left">Rolle</th>
+                    <th className="px-3 py-2 text-left">Freigeschaltet am</th>
+                    <th className="px-3 py-2 text-right">Aktion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {whitelist.length === 0 ? (
+                    <tr className="border-t border-gray-200 dark:border-gray-700">
+                      <td colSpan={4} className="px-3 py-3 text-gray-500 dark:text-gray-400">
+                        Keine Whitelist-Einträge vorhanden.
+                      </td>
+                    </tr>
+                  ) : (
+                    whitelist.map((entry) => (
+                      <tr key={entry.id} className="border-t border-gray-200 dark:border-gray-700">
+                        <td className="break-all px-3 py-2 font-mono">{entry.email}</td>
+                        <td className="px-3 py-2">{entry.role || ROLES.MEMBER}</td>
+                        <td className="px-3 py-2">{entry.created_at ? formatDateTime(entry.created_at) : '—'}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            disabled={whitelistBusy}
+                            onClick={() => removeWhitelistEntry(entry.id)}
+                            className="rounded border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-800/50 dark:text-red-300 dark:hover:bg-red-900/20"
+                          >
+                            Entfernen
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Zeigt die initiale Freischaltung per Whitelist inklusive Rollenvergabe.
+          </p>
+        )}
       </section>
 
       <section className="space-y-3">

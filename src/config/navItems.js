@@ -1,5 +1,5 @@
-import { FEATURES } from '@/permissions/features';
-import { ROLES } from '@/permissions/roles';
+import { FEATURES } from '../permissions/features';
+import { ROLES } from '../permissions/roles';
 
 export const baseNav = [
   { label: 'Wetter', path: '/dashboard', featureKey: FEATURES.WEATHER },
@@ -55,4 +55,3 @@ export function navItemsFor({ hasFeatureForRole, hasAtLeastRole } = {}) {
 
   return items;
 }
-

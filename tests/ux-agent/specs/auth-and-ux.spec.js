@@ -2,6 +2,7 @@ import process from 'node:process';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { navItemsFor } from '../../../src/config/navItems';
+import { FEATURE_KEYS } from '../../../src/permissions/features';
 
 const clubSlug = process.env.UX_CLUB_SLUG || 'asv-rotauge';
 const authPath = `/${clubSlug}/auth`;
@@ -33,6 +34,7 @@ const mockUser = {
 };
 const menuPathToUxPath = {
   '/': '/__ux/menu/dashboard',
+  '/dashboard': '/__ux/menu/dashboard',
   '/new-catch': '/__ux/menu/new-catch',
   '/crayfish': '/__ux/menu/crayfish',
   '/catches': '/__ux/menu/catches',
@@ -158,6 +160,18 @@ async function clickMenuTarget(page, target) {
 }
 
 async function mockExternalApisForMenuSweep(page) {
+  const enabledFeatureRows = FEATURE_KEYS.map((featureKey) => ({
+    club_id: mockedClub.id,
+    feature_key: featureKey,
+    enabled: true,
+  }));
+  const enabledRoleFeatureRows = FEATURE_KEYS.map((featureKey) => ({
+    club_id: mockedClub.id,
+    role: 'admin',
+    feature_key: featureKey,
+    enabled: true,
+  }));
+
   await page.route('**/functions/v1/weatherProxy', async (route) => {
     await route.fulfill({
       status: 200,
@@ -226,6 +240,50 @@ async function mockExternalApisForMenuSweep(page) {
         status: method === 'POST' ? 201 : 200,
         contentType: 'application/json',
         body: wantsObject ? JSON.stringify(profile) : JSON.stringify([profile]),
+      });
+      return;
+    }
+
+    if (url.includes('/rest/v1/memberships')) {
+      const membership = {
+        user_id: mockUser.id,
+        club_id: mockedClub.id,
+        role: 'admin',
+        is_active: true,
+        clubs: {
+          id: mockedClub.id,
+          slug: mockedClub.slug,
+          name: 'ASV Rotauge',
+          logo_url: null,
+          is_active: true,
+        },
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: wantsObject ? JSON.stringify(membership) : JSON.stringify([membership]),
+      });
+      return;
+    }
+
+    if (url.includes('/rest/v1/club_features')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: wantsObject
+          ? JSON.stringify(enabledFeatureRows[0] || null)
+          : JSON.stringify(enabledFeatureRows),
+      });
+      return;
+    }
+
+    if (url.includes('/rest/v1/club_role_features')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: wantsObject
+          ? JSON.stringify(enabledRoleFeatureRows[0] || null)
+          : JSON.stringify(enabledRoleFeatureRows),
       });
       return;
     }

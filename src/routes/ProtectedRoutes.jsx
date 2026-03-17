@@ -45,6 +45,8 @@ const Calendar = lazy(() => import('@/pages/Calendar'));
 const MapView = lazy(() => import('@/pages/MapView'));
 const Regulations = lazy(() => import('@/pages/Regulations'));
 const BoardOverview = lazy(() => import('@/pages/BoardOverview'));
+const BoardSettings = lazy(() => import('@/pages/BoardSettings'));
+const BoardRules = lazy(() => import('@/pages/BoardRules'));
 const DownloadsPage = lazy(() => import('@/pages/DownloadsPage'));
 
 const SettingsPage = safeLazy(() => import('@/pages/SettingsPage'), 'SettingsPage');
@@ -257,11 +259,15 @@ export default function ProtectedRoutes({ anglerName }) {
       <Route path="/admin/permissions" element={<LegacyTenantRedirect to="/vorstand" />} />
       <Route path="/admin2" element={<LegacyTenantRedirect to="/admin2" />} />
       <Route path="/vorstand" element={<LegacyTenantRedirect to="/vorstand" />} />
+      <Route path="/vorstand/einstellungen" element={<LegacyTenantRedirect to="/vorstand/einstellungen" />} />
+      <Route path="/vorstand/regeln" element={<LegacyTenantRedirect to="/vorstand/regeln" />} />
+      <Route path="/catches" element={<LegacyTenantRedirect to="/catches" />} />
 
       <Route path="/update-password" element={<UpdatePassword />} />
       <Route path="/reset-done" element={<ResetDone />} />
       <Route path="/auth-verified" element={<AuthVerified />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/:clubSlug/forgot-password" element={<ForgotPassword />} />
 
       <Route path="/:clubSlug/*" element={<ClubGuard />}>
         <Route element={<RequireClubAccess />}>
@@ -375,6 +381,22 @@ export default function ProtectedRoutes({ anglerName }) {
               element={
                 <ManagementGate>
                   <BoardOverview />
+                </ManagementGate>
+              }
+            />
+            <Route
+              path="vorstand/einstellungen"
+              element={
+                <ManagementGate>
+                  <BoardSettings />
+                </ManagementGate>
+              }
+            />
+            <Route
+              path="vorstand/regeln"
+              element={
+                <ManagementGate>
+                  <BoardRules />
                 </ManagementGate>
               }
             />

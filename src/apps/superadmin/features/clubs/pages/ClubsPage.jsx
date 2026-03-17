@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui';
 import { supabase } from '@/supabaseClient';
@@ -9,7 +9,6 @@ import {
   isMissingClubLogoUrlError,
   isMissingClubWeatherCoordsError,
   isMissingFunctionError,
-  normalizeClubWithSchemaSupport,
   parseWeatherCoords,
   sanitizeSlug,
 } from '@/apps/superadmin/features/clubs/utils/clubSchemaCompat';
@@ -77,7 +76,6 @@ export default function ClubsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [clubs, setClubs] = useState([]);
   const [supportsClubIsActive, setSupportsClubIsActive] = useState(true);
   const [supportsClubWeatherCoords, setSupportsClubWeatherCoords] = useState(true);
   const [supportsClubLogoUrl, setSupportsClubLogoUrl] = useState(true);
@@ -91,24 +89,16 @@ export default function ClubsPage() {
     weather_lon: '',
   });
 
-  const sortedClubs = useMemo(
-    () => [...clubs].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
-    [clubs],
-  );
-
-  const loadClubs = async () => {
+  const loadSchemaSupport = async () => {
     setLoading(true);
     setError('');
     try {
-      let loaded = null;
+      let loadedVariant = null;
       let lastError = null;
       for (const variant of CLUB_SELECT_VARIANTS) {
-        const result = await supabase.from('clubs').select(variant.select).order('name', { ascending: true });
+        const result = await supabase.from('clubs').select(variant.select).limit(1);
         if (!result.error) {
-          loaded = {
-            ...variant,
-            data: Array.isArray(result.data) ? result.data : [],
-          };
+          loadedVariant = variant;
           break;
         }
         const tolerable =
@@ -119,23 +109,20 @@ export default function ClubsPage() {
         lastError = result.error;
       }
 
-      if (!loaded) throw lastError || new Error('Clubs konnten nicht geladen werden.');
+      if (!loadedVariant) throw lastError || new Error('Schema-Informationen konnten nicht geladen werden.');
 
-      setSupportsClubIsActive(loaded.hasIsActive);
-      setSupportsClubWeatherCoords(loaded.hasWeatherCoords);
-      setSupportsClubLogoUrl(loaded.hasLogoUrl);
-      setClubs(
-        loaded.data.map((row) => normalizeClubWithSchemaSupport(row, loaded)),
-      );
+      setSupportsClubIsActive(loadedVariant.hasIsActive);
+      setSupportsClubWeatherCoords(loadedVariant.hasWeatherCoords);
+      setSupportsClubLogoUrl(loadedVariant.hasLogoUrl);
     } catch (err) {
-      setError(err?.message || 'Clubs konnten nicht geladen werden.');
+      setError(err?.message || 'Schema-Informationen konnten nicht geladen werden.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadClubs();
+    void loadSchemaSupport();
   }, []);
 
   const handleCreateClub = async (event) => {
@@ -243,7 +230,7 @@ export default function ClubsPage() {
 
       setForm({ slug: '', name: '', host: '', is_active: true, weather_lat: '', weather_lon: '' });
       setLogoFile(null);
-      await loadClubs();
+      await loadSchemaSupport();
       if (clubId) navigate(`/superadmin/clubs/${clubId}`);
     } catch (err) {
       setError(err?.message || 'Club konnte nicht angelegt werden.');
@@ -252,13 +239,16 @@ export default function ClubsPage() {
     }
   };
 
-  if (loading) return <Card className="p-6">Clubs werden geladen...</Card>;
+  if (loading) return <Card className="p-4 sm:p-6">Clubs werden geladen...</Card>;
 
   return (
-    <Card className="space-y-8 p-6">
+    <Card className="space-y-8 p-4 sm:p-6">
       <header className="space-y-2">
+        <Link to="/superadmin" className="text-sm text-blue-600 hover:underline">
+          ← Zurück zur Übersicht
+        </Link>
         <h1 className="text-2xl font-bold text-blue-700 dark:text-blue-300">Superadmin: Clubs</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-300">Mandanten anlegen und verwalten.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-300">Neuen Verein anlegen.</p>
       </header>
 
       {error ? (
@@ -272,7 +262,7 @@ export default function ClubsPage() {
         </div>
       ) : null}
 
-      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+      <section className="rounded-lg border border-gray-200 p-3 sm:p-4 dark:border-gray-700">
         <h2 className="mb-3 text-lg font-semibold">Neuen Club anlegen</h2>
         <form className="grid gap-3 md:grid-cols-2" onSubmit={handleCreateClub}>
           <label className="text-sm">
@@ -303,7 +293,7 @@ export default function ClubsPage() {
               onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 hover:file:bg-blue-100 dark:border-gray-700 dark:bg-gray-900 dark:file:bg-gray-700 dark:file:text-gray-100"
             />
-            <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+            <span className="mt-1 block break-all text-xs text-gray-500 dark:text-gray-400">
               {logoFile ? `Ausgewählt: ${logoFile.name}` : 'Wird beim Anlegen direkt hochgeladen.'}
             </span>
           </label>
@@ -360,40 +350,6 @@ export default function ClubsPage() {
             </button>
           </div>
         </form>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Bestehende Clubs</h2>
-        <div className="space-y-2">
-          {sortedClubs.map((club) => (
-            <Link
-              key={club.id}
-              to={`/superadmin/clubs/${club.id}`}
-              className="block rounded border border-gray-200 bg-white px-4 py-3 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="font-semibold text-gray-900 dark:text-gray-100">{club.name}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    slug: {club.slug} | host: {club.host || '—'} | see:{' '}
-                    {club.weather_lat != null && club.weather_lon != null
-                      ? `${club.weather_lat}, ${club.weather_lon}`
-                      : '—'}
-                  </div>
-                </div>
-                <span
-                  className={`rounded px-2 py-1 text-xs font-semibold ${
-                    club.is_active
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-200'
-                      : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
-                  }`}
-                >
-                  {club.is_active ? 'aktiv' : 'inaktiv'}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
       </section>
     </Card>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { Card } from '@/components/ui';
 
@@ -10,6 +10,14 @@ export default function UpdatePassword() {
   const [error, setError] = useState(null);
   const [ready, setReady] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search || '');
+  const rawClub = (searchParams.get('club') || '').trim();
+  const safeClubSlug = /^[a-z0-9-]+$/i.test(rawClub) ? rawClub : '';
+  const authTarget = safeClubSlug ? `/${safeClubSlug}/auth` : '/auth';
+  const forgotTarget = safeClubSlug
+    ? `/${safeClubSlug}/forgot-password`
+    : '/forgot-password';
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -68,7 +76,7 @@ export default function UpdatePassword() {
       setDone(true);
       setTimeout(async () => {
         await supabase.auth.signOut();
-        navigate('/auth');
+        navigate(authTarget);
       }, 2000);
     }
   };
@@ -86,7 +94,7 @@ export default function UpdatePassword() {
       <Card className="p-6 text-center">
         <h2 className="text-xl font-semibold text-red-700">❌ Fehler</h2>
         <p className="text-gray-700 mt-2">{error}</p>
-        <a href="/forgot-password" className="text-blue-600 hover:underline block mt-4">
+        <a href={forgotTarget} className="text-blue-600 hover:underline block mt-4">
           🔁 Neuen Link anfordern
         </a>
       </Card>

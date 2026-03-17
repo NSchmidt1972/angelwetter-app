@@ -65,11 +65,13 @@ export default function PublicRoutes() {
       )}
       <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
       <Route path="/auth" element={<Navigate to="/asv-rotauge/auth" replace />} />
+      <Route path="/catches" element={<Navigate to="/asv-rotauge/auth" replace />} />
 
       <Route path="/update-password" element={<UpdatePassword />} />
       <Route path="/reset-done" element={<ResetDone />} />
       <Route path="/auth-verified" element={<AuthVerified />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/:clubSlug/forgot-password" element={<ForgotPassword />} />
 
       <Route path="/:clubSlug" element={<ClubAuthEntryRedirect />} />
       <Route path="/:clubSlug/auth" element={<AuthForm />} />

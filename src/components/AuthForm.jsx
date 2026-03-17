@@ -40,6 +40,24 @@ export default function AuthForm() {
   const runWithAuthTimeout = (promise, timeoutLabel) =>
     withTimeout(promise, AUTH_REQUEST_TIMEOUT_MS, timeoutLabel);
 
+  const getSafeClubSlug = () => (
+    typeof clubSlug === 'string' && /^[a-z0-9-]+$/i.test(clubSlug) ? clubSlug : null
+  );
+
+  const buildPasswordResetRedirect = () => {
+    const safeClubSlug = getSafeClubSlug();
+    const query = safeClubSlug ? `?club=${encodeURIComponent(safeClubSlug)}` : '';
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/update-password${query}`;
+    }
+    return 'https://app.asv-rotauge.de/update-password';
+  };
+
+  const buildResetDoneTarget = () => {
+    const safeClubSlug = getSafeClubSlug();
+    return safeClubSlug ? `/reset-done?club=${encodeURIComponent(safeClubSlug)}` : '/reset-done';
+  };
+
   const resolveClubId = async () => {
     const activeSlug = clubSlug || null;
     if (!activeSlug) return getActiveClubId();
@@ -159,7 +177,27 @@ export default function AuthForm() {
       return { ok: true };
     }
 
-    // Onboarding-Fall: Mitgliedschaft existiert noch nicht -> Whitelist erforderlich.
+    // Onboarding nur beim ersten Verein: falls bereits in irgendeinem Verein Mitglied,
+    // muss die neue Membership durch Vorstand/Superadmin gesetzt werden.
+    const { count: existingMembershipCount, error: existingMembershipError } = await runWithAuthTimeout(
+      supabase
+        .from('memberships')
+        .select('user_id', { count: 'exact', head: true })
+        .eq('user_id', userId),
+      'Membership-Bestand timeout'
+    );
+    if (existingMembershipError) {
+      return { ok: false, errorMessage: 'Mitgliedschaftsbestand konnte nicht geprüft werden.' };
+    }
+    if ((existingMembershipCount ?? 0) > 0) {
+      return {
+        ok: false,
+        errorMessage:
+          'Für diesen Verein bist du noch nicht freigeschaltet. Bitte Vorstand/Superadmin um Freigabe bitten.',
+      };
+    }
+
+    // Erster Vereins-Onboarding-Fall: Mitgliedschaft existiert noch nicht -> Whitelist erforderlich.
     const whitelistResult = await checkEmailWhitelisted({
       emailToCheck: emailForWhitelistCheck,
       clubId,
@@ -236,7 +274,26 @@ export default function AuthForm() {
         if (error.message === 'Email not confirmed') {
           setError('Bitte bestätige deine E-Mail-Adresse (Link wurde per Mail gesendet).');
         } else if (error.message === 'Invalid login credentials') {
-          setError('Ungültige Anmeldedaten. Bitte überprüfe E-Mail und Passwort. (Vielleicht noch nicht registriert?)');
+          const resolvedClubId = await resolveClubId();
+          if (!resolvedClubId) {
+            setError('Ungültige Anmeldedaten. Bitte überprüfe E-Mail und Passwort.');
+          } else {
+            const whitelistResult = await checkEmailWhitelisted({
+              emailToCheck: cleanEmail,
+              clubId: resolvedClubId,
+              allowCheckFailure: true,
+            });
+
+            if (!whitelistResult.ok) {
+              setError('Diese E-Mail ist für diesen Verein nicht freigeschaltet.');
+            } else {
+              setError(
+                'Anmeldung fehlgeschlagen: Entweder Passwort falsch oder noch kein Konto vorhanden. ' +
+                'Wenn du neu bist: zuerst registrieren und E-Mail bestätigen. ' +
+                'Falls bereits registriert: Passwort zurücksetzen.'
+              );
+            }
+          }
         } else {
           setError(error.message);
         }
@@ -330,7 +387,29 @@ export default function AuthForm() {
       );
 
       if (signUpError) {
-        setError(signUpError.message);
+        const signUpMessage = String(signUpError?.message || '').toLowerCase();
+        if (signUpMessage.includes('already registered')) {
+          const { error: resetError } = await runWithAuthTimeout(
+            supabase.auth.resetPasswordForEmail(cleanEmail, {
+              redirectTo: buildPasswordResetRedirect(),
+            }),
+            'Passwort-Reset timeout'
+          );
+
+          if (resetError) {
+            setError(
+              'Diese E-Mail hat bereits ein Konto. Bitte einloggen oder "Passwort vergessen?" nutzen. ' +
+              `Reset-Link konnte nicht automatisch versendet werden (${resetError.message}).`
+            );
+          } else {
+            setError(
+              'Diese E-Mail hat bereits ein Konto. Wir haben dir einen Link zum Passwort-Setzen gesendet. ' +
+              'Bitte Mail öffnen, Passwort setzen und danach einloggen.'
+            );
+          }
+        } else {
+          setError(signUpError.message);
+        }
         return;
       }
       if (!signUpData?.user?.id) {
@@ -397,30 +476,30 @@ export default function AuthForm() {
 
       {/* NEU: Passwort vergessen */}
       {mode === 'login' && (
-  <div className="text-right">
-    <button
-      type="button"
-      onClick={async () => {
-        const cleanEmail = email.trim().toLowerCase();
-        if (!cleanEmail) {
-          alert("Bitte zuerst E-Mail-Adresse eingeben.");
-          return;
-        }
-        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo: 'https://app.asv-rotauge.de/update-password'
-        });
-        if (error) {
-          alert("Fehler beim Zurücksetzen: " + error.message);
-        } else {
-          navigate('/reset-done'); // 🆕 leitet weiter zur Info-Seite
-        }
-      }}
-      className="text-sm text-blue-600 hover:underline"
-    >
-      Passwort vergessen?
-    </button>
-  </div>
-)}
+        <div className="text-right">
+          <button
+            type="button"
+            onClick={async () => {
+              const cleanEmail = email.trim().toLowerCase();
+              if (!cleanEmail) {
+                alert('Bitte zuerst E-Mail-Adresse eingeben.');
+                return;
+              }
+              const { error: resetError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+                redirectTo: buildPasswordResetRedirect(),
+              });
+              if (resetError) {
+                alert(`Fehler beim Zurücksetzen: ${resetError.message}`);
+              } else {
+                navigate(buildResetDoneTarget());
+              }
+            }}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Passwort vergessen?
+          </button>
+        </div>
+      )}
 
 
       {mode === 'register' && (
@@ -443,6 +522,13 @@ export default function AuthForm() {
       )}
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      {mode === 'login' && (
+        <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          Hinweis Vereinswechsel: Wenn diese E-Mail bereits in einem anderen Verein aktiv ist,
+          muss der neue Verein dich zuerst freischalten (Membership durch Vorstand/Superadmin).
+        </p>
+      )}
 
       <button
         type="submit"

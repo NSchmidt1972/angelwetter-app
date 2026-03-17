@@ -17,6 +17,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
 });
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CLUB_SLUG_REGEX = /^[a-z0-9-]+$/i;
 const ROLE_LEVEL = {
   gast: 10,
   mitglied: 20,
@@ -105,6 +106,13 @@ function artikel(fish) {
     Zander: "einen"
   };
   return dict[fish] ?? "einen";
+}
+
+function normalizeClubSlug(value: unknown): string | null {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (!CLUB_SLUG_REGEX.test(raw)) return null;
+  return raw;
 }
 
 async function sendOpsAlert(message, meta = {}) {
@@ -200,6 +208,7 @@ serve(async (req) => {
     const sizeNum = sizeValue != null ? Number(sizeValue) || null : null;
     const clubIdRaw = payload.club_id ?? record.club_id ?? null;
     const clubId = typeof clubIdRaw === "string" ? clubIdRaw.trim() : null;
+    let clubSlug = normalizeClubSlug(payload.club_slug ?? record.club_slug ?? null);
     let excludeUserId = record.user_id ? String(record.user_id) : null;
 
     if (!angler || !fish || !clubId) {
@@ -213,6 +222,18 @@ serve(async (req) => {
       return json(400, {
         error: "Invalid club_id"
       });
+    }
+
+    if (!clubSlug) {
+      const { data: clubRow, error: clubErr } = await supabase
+        .from("clubs")
+        .select("slug")
+        .eq("id", clubId)
+        .maybeSingle();
+      if (clubErr) {
+        console.warn("[send-push-notification] club slug lookup failed:", clubErr);
+      }
+      clubSlug = normalizeClubSlug(clubRow?.slug);
     }
 
     const { data: membership, error: membershipErr } = await supabase
@@ -382,6 +403,7 @@ serve(async (req) => {
     const art = artikel(fish);
     const sizeStr = sizeNum ? `${sizeNum} cm` : "";
     const content = `${angler} hat ${art} ${fish}${sizeStr ? " von " + sizeStr : ""} gefangen!`;
+    const pushTargetUrl = `https://app.asv-rotauge.de/${clubSlug || "asv-rotauge"}/catches`;
 
     const onesignalPayload = {
       app_id: ONESIGNAL_APP_ID,
@@ -394,12 +416,14 @@ serve(async (req) => {
         de: content,
         en: content
       },
-      url: "https://app.asv-rotauge.de/catches",
+      url: pushTargetUrl,
       data: {
         type: "catch",
         angler,
         fish,
-        size: sizeNum
+        size: sizeNum,
+        club_id: clubId,
+        club_slug: clubSlug
       }
     };
 

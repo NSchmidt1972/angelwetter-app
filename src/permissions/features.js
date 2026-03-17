@@ -1,4 +1,4 @@
-import { ROLES } from '@/permissions/roles';
+import { ROLES } from './roles';
 
 export const FEATURES = Object.freeze({
   FORECAST: 'forecast',

@@ -1,8 +1,10 @@
 import { ROLES, normalizeRole } from '@/permissions/roles';
 
 export default function MembersSection({
+  sectionId,
   showMemberList,
   onToggleMemberList,
+  showToggle = true,
   search,
   onChangeSearch,
   profilesError,
@@ -16,8 +18,10 @@ export default function MembersSection({
   roleOptionsForProfile,
   formatDate,
 }) {
+  const isOpen = showToggle ? showMemberList : true;
+
   return (
-    <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <section id={sectionId} className="scroll-mt-24 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Mitglieder & Rollen</h2>
@@ -25,21 +29,23 @@ export default function MembersSection({
             Weise Vorstand- oder Admin-Rechte zu. Änderungen wirken sofort.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onToggleMemberList}
-          aria-expanded={showMemberList}
-          className={`rounded px-4 py-2 text-sm font-semibold transition ${
-            showMemberList
-              ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          {showMemberList ? 'Liste verbergen' : 'Liste anzeigen'}
-        </button>
+        {showToggle ? (
+          <button
+            type="button"
+            onClick={onToggleMemberList}
+            aria-expanded={showMemberList}
+            className={`rounded px-4 py-2 text-sm font-semibold transition ${
+              showMemberList
+                ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {showMemberList ? 'Liste verbergen' : 'Liste anzeigen'}
+          </button>
+        ) : null}
       </div>
 
-      {showMemberList && (
+      {isOpen && (
         <>
           <div className="mt-4 flex justify-end">
             <input

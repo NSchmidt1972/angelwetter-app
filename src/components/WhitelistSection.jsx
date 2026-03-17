@@ -1,6 +1,8 @@
 export default function WhitelistSection({
+  sectionId,
   showWhitelist,
   onToggleWhitelist,
+  showToggle = true,
   newEmail,
   onChangeNewEmail,
   addingEmail,
@@ -24,8 +26,10 @@ export default function WhitelistSection({
     window.location.href = mailtoHref;
   };
 
+  const isOpen = showToggle ? showWhitelist : true;
+
   return (
-    <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <section id={sectionId} className="scroll-mt-24 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Whitelist verwalten</h2>
@@ -46,22 +50,24 @@ export default function WhitelistSection({
           >
             E-Mail an alle
           </button>
-          <button
-            type="button"
-            onClick={onToggleWhitelist}
-            aria-expanded={showWhitelist}
-            className={`rounded px-4 py-2 text-sm font-semibold transition ${
-              showWhitelist
-                ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            {showWhitelist ? 'Liste verbergen' : 'Liste anzeigen'}
-          </button>
+          {showToggle ? (
+            <button
+              type="button"
+              onClick={onToggleWhitelist}
+              aria-expanded={showWhitelist}
+              className={`rounded px-4 py-2 text-sm font-semibold transition ${
+                showWhitelist
+                  ? 'border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-200 dark:hover:bg-blue-900/30'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+            >
+              {showWhitelist ? 'Liste verbergen' : 'Liste anzeigen'}
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {showWhitelist && (
+      {isOpen && (
         <>
           <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={onAddEmail}>
             <input

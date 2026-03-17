@@ -46,6 +46,7 @@ function isPublicRoutePath(pathname) {
   if (STATIC_PUBLIC_PATHS.has(pathname)) return true;
 
   const segments = pathname.split('/').filter(Boolean);
+  if (segments[0] === '__ux') return true;
   if (segments.length === 1) return true; // /:clubSlug
   return isClubAuthPath(pathname);
 }
@@ -116,6 +117,16 @@ function scheduleLater(callback, delay = 400) {
   return () => window.clearTimeout(id);
 }
 
+function deriveFallbackNameForUser(user) {
+  const metadataName = String(user?.user_metadata?.name || '').trim();
+  if (metadataName) return metadataName;
+
+  const email = String(user?.email || '').trim().toLowerCase();
+  if (!email) return null;
+  const localPart = email.split('@')[0] || email;
+  return localPart || null;
+}
+
 function AppContent() {
   const { user, loading: authLoading, profile, profileLoading } = useAuth();
   const {
@@ -143,9 +154,11 @@ function AppContent() {
   const isRecoveryHash = location.hash.includes('type=recovery');
   const isPasswordResetFlow = location.pathname === '/update-password' || isRecoveryHash;
   const isLoggedIn = Boolean(user) && !isPasswordResetFlow;
+  const hasResolvedInitialAuth = user !== undefined && !authLoading;
   const hasClubAccess = Boolean(currentClub?.id) && (Boolean(membership) || isSuperAdmin);
   const isPublicLightweightRoute = !isLoggedIn && isPublicRoutePath(location.pathname);
   const isClubScopedRoute = isClubScopedPath(location.pathname);
+  const isUxRoute = location.pathname.split('/').filter(Boolean)[0] === '__ux';
 
   // Splash kurz anzeigen
   useEffect(() => {
@@ -257,6 +270,7 @@ function AppContent() {
 
     const cached = readProfileCache();
     const hasValidCache = cached && cached.userId === user.id && cached.name;
+    const fallbackName = deriveFallbackNameForUser(user);
     if (!hasValidCache) {
       setNameLoading(true);
       setAnglerName(null);
@@ -266,6 +280,17 @@ function AppContent() {
     }
 
     if (!profileLoading) {
+      if (!hasValidCache && fallbackName) {
+        const fullName = fallbackName;
+        const [first] = fullName.split(' ');
+        writeProfileCache({
+          userId: user.id,
+          name: fullName,
+          shortName: first || fullName,
+          role: profile?.role ? String(profile.role).trim() : null,
+        });
+        setAnglerName(fullName);
+      }
       setNameLoading(false);
     }
 
@@ -297,11 +322,21 @@ function AppContent() {
     setActiveClubId(profileClubId);
   }, [profile?.club_id, location.pathname]);
 
+  const shouldGatePublicRouteDuringInitialAuth =
+    isPublicLightweightRoute &&
+    !hasResolvedInitialAuth &&
+    !initialBootDone;
+
   const shouldShowSplash =
     !UX_TEST_MODE_ENABLED &&
-    !isPublicLightweightRoute &&
-    !(isLoggedIn && isClubScopedRoute) &&
-    !initialBootDone;
+    !initialBootDone &&
+    (
+      shouldGatePublicRouteDuringInitialAuth
+      || (
+        !isPublicLightweightRoute &&
+        !(isLoggedIn && isClubScopedRoute)
+      )
+    );
 
   if (shouldShowSplash) {
     return (
@@ -338,12 +373,13 @@ function AppContent() {
       anglerName={anglerName}
     />
   );
+  const shouldWrapWithWeatherProvider = isUxRoute || (!isPublicLightweightRoute && hasClubAccess);
 
   return (
     <>
       {pageViewTracker}
       <Suspense fallback={<div className="p-6 text-center">⏳ Lädt...</div>}>
-        {isPublicLightweightRoute || !hasClubAccess ? routes : <ProtectedWeatherProvider>{routes}</ProtectedWeatherProvider>}
+        {shouldWrapWithWeatherProvider ? <ProtectedWeatherProvider>{routes}</ProtectedWeatherProvider> : routes}
       </Suspense>
     </>
   );

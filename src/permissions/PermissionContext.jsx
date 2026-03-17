@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
@@ -126,8 +126,15 @@ async function fetchMembershipRowsForUser(userId) {
   return { rows: [], hasLogoUrl: false };
 }
 
-async function tryProvisionMembershipForUser({ userId, userEmail, fallbackName, clubId }) {
+async function tryProvisionMembershipForUser({
+  userId,
+  userEmail,
+  fallbackName,
+  clubId,
+  allowSelfProvision = false,
+}) {
   const email = String(userEmail || '').trim().toLowerCase();
+  if (!allowSelfProvision) return false;
   if (!userId || !clubId || !email) return false;
 
   const { data: whitelisted, error: whitelistError } = await supabase.rpc('is_email_whitelisted', {
@@ -192,6 +199,18 @@ export function PermissionProvider({ children }) {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [reloadToken, setReloadToken] = useState(0);
   const [clubContextTick, setClubContextTick] = useState(0);
+  const hasResolvedPermissionsRef = useRef(false);
+  const lastLoadTriggerRef = useRef({
+    userId: null,
+    userEmail: null,
+    userName: null,
+    profileName: null,
+    profileRole: null,
+    clubSlugFromPath: null,
+    reloadToken: 0,
+    clubContextTick: 0,
+    resumeTick: 0,
+  });
   const [state, setState] = useState(() => ({
     loading: true,
     error: null,
@@ -220,6 +239,30 @@ export function PermissionProvider({ children }) {
 
   useEffect(() => {
     let active = true;
+    const currentTrigger = {
+      userId: user?.id ?? null,
+      userEmail: user?.email ?? null,
+      userName: user?.user_metadata?.name ?? null,
+      profileName: profile?.name ?? null,
+      profileRole: profile?.role ?? null,
+      clubSlugFromPath: clubSlugFromPath ?? null,
+      reloadToken,
+      clubContextTick,
+      resumeTick,
+    };
+    const previousTrigger = lastLoadTriggerRef.current;
+    const nonResumeTriggerChanged =
+      previousTrigger.userId !== currentTrigger.userId
+      || previousTrigger.userEmail !== currentTrigger.userEmail
+      || previousTrigger.userName !== currentTrigger.userName
+      || previousTrigger.profileName !== currentTrigger.profileName
+      || previousTrigger.profileRole !== currentTrigger.profileRole
+      || previousTrigger.clubSlugFromPath !== currentTrigger.clubSlugFromPath
+      || previousTrigger.reloadToken !== currentTrigger.reloadToken
+      || previousTrigger.clubContextTick !== currentTrigger.clubContextTick;
+    const isResumeOnlyRefresh =
+      previousTrigger.resumeTick !== currentTrigger.resumeTick && !nonResumeTriggerChanged;
+    lastLoadTriggerRef.current = currentTrigger;
 
     const load = async () => {
       if (!user?.id) {
@@ -238,10 +281,16 @@ export function PermissionProvider({ children }) {
           featureRows: [],
           roleFeatureRows: [],
         });
+        hasResolvedPermissionsRef.current = true;
         return;
       }
 
-      setState((prev) => ({ ...prev, loading: true, error: null }));
+      const shouldShowBlockingLoading = !isResumeOnlyRefresh || !hasResolvedPermissionsRef.current;
+      setState((prev) => (
+        shouldShowBlockingLoading
+          ? { ...prev, loading: true, error: null }
+          : { ...prev, error: null }
+      ));
 
       try {
         const [membershipsResult, superadminResult] = await Promise.all([
@@ -279,6 +328,7 @@ export function PermissionProvider({ children }) {
               userEmail: user.email,
               fallbackName,
               clubId: clubIdFromPath,
+              allowSelfProvision: memberships.length === 0,
             });
             if (provisioned) {
               const refreshedMembershipsResult = await fetchMembershipRowsForUser(user.id);
@@ -353,7 +403,7 @@ export function PermissionProvider({ children }) {
           roleFeatureMap = buildRoleFeatureMap(roleFeatureRows);
         }
 
-        const role = normalizeRole(membership?.role ?? profile?.role ?? ROLES.GUEST, ROLES.GUEST);
+        const role = normalizeRole(membership?.role ?? ROLES.GUEST, ROLES.GUEST);
 
         setState({
           loading: false,
@@ -369,9 +419,10 @@ export function PermissionProvider({ children }) {
           featureRows,
           roleFeatureRows,
         });
+        hasResolvedPermissionsRef.current = true;
       } catch (error) {
         if (!active) return;
-        const fallbackRole = normalizeRole(profile?.role ?? ROLES.GUEST, ROLES.GUEST);
+        const fallbackRole = normalizeRole(ROLES.GUEST, ROLES.GUEST);
         setState({
           loading: false,
           error: error?.message || String(error),
@@ -386,6 +437,7 @@ export function PermissionProvider({ children }) {
           featureRows: [],
           roleFeatureRows: [],
         });
+        hasResolvedPermissionsRef.current = true;
       }
     };
 

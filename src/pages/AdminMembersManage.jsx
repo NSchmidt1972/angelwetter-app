@@ -38,7 +38,7 @@ const BASE_ROLE_OPTIONS = [
   { value: ROLES.ADMIN, label: 'Admin' },
 ];
 
-export default function AdminMembersManage() {
+export default function AdminMembersManage({ sectionMode = 'all' }) {
   const detailSectionRef = useRef(null);
 
   // Whitelist
@@ -59,6 +59,10 @@ export default function AdminMembersManage() {
   const [deletingProfileId, setDeletingProfileId] = useState(null);
   const [showMemberList, setShowMemberList] = useState(false);
   const [search, setSearch] = useState('');
+  const isWhitelistOnly = sectionMode === 'whitelist';
+  const isMembersOnly = sectionMode === 'members';
+  const showWhitelistSection = !isMembersOnly;
+  const showMembersSection = !isWhitelistOnly;
 
   const roleOptionsForProfile = useCallback(
     () => BASE_ROLE_OPTIONS,
@@ -234,37 +238,45 @@ export default function AdminMembersManage() {
   return (
     <Card className="space-y-8">
       <section ref={detailSectionRef} className="space-y-6">
-        <WhitelistSection
-          showWhitelist={showWhitelist}
-          onToggleWhitelist={() => setShowWhitelist((prev) => !prev)}
-          newEmail={newEmail}
-          onChangeNewEmail={setNewEmail}
-          addingEmail={addingEmail}
-          whitelist={whitelist}
-          whitelistLoading={whitelistLoading}
-          whitelistError={whitelistError}
-          whitelistMessage={whitelistMessage}
-          onAddEmail={handleAddEmail}
-          onRemoveEmail={handleRemoveEmail}
-          formatDate={formatDate}
-        />
+        {showWhitelistSection ? (
+          <WhitelistSection
+            sectionId="vorstand-whitelist"
+            showWhitelist={isWhitelistOnly ? true : showWhitelist}
+            onToggleWhitelist={() => setShowWhitelist((prev) => !prev)}
+            showToggle={sectionMode === 'all'}
+            newEmail={newEmail}
+            onChangeNewEmail={setNewEmail}
+            addingEmail={addingEmail}
+            whitelist={whitelist}
+            whitelistLoading={whitelistLoading}
+            whitelistError={whitelistError}
+            whitelistMessage={whitelistMessage}
+            onAddEmail={handleAddEmail}
+            onRemoveEmail={handleRemoveEmail}
+            formatDate={formatDate}
+          />
+        ) : null}
 
-        <MembersSection
-          showMemberList={showMemberList}
-          onToggleMemberList={() => setShowMemberList((prev) => !prev)}
-          search={search}
-          onChangeSearch={setSearch}
-          profilesError={profilesError}
-          roleMessage={roleMessage}
-          profilesLoading={profilesLoading}
-          filteredProfiles={filteredProfiles}
-          updatingRoleId={updatingRoleId}
-          deletingProfileId={deletingProfileId}
-          onChangeRole={handleRoleChange}
-          onMemberActionChange={handleMemberActionChange}
-          roleOptionsForProfile={roleOptionsForProfile}
-          formatDate={formatDate}
-        />
+        {showMembersSection ? (
+          <MembersSection
+            sectionId="vorstand-members"
+            showMemberList={isMembersOnly ? true : showMemberList}
+            onToggleMemberList={() => setShowMemberList((prev) => !prev)}
+            showToggle={sectionMode === 'all'}
+            search={search}
+            onChangeSearch={setSearch}
+            profilesError={profilesError}
+            roleMessage={roleMessage}
+            profilesLoading={profilesLoading}
+            filteredProfiles={filteredProfiles}
+            updatingRoleId={updatingRoleId}
+            deletingProfileId={deletingProfileId}
+            onChangeRole={handleRoleChange}
+            onMemberActionChange={handleMemberActionChange}
+            roleOptionsForProfile={roleOptionsForProfile}
+            formatDate={formatDate}
+          />
+        ) : null}
       </section>
     </Card>
   );
