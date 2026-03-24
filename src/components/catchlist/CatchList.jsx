@@ -37,17 +37,6 @@ function readWaterTemp(entry) {
   return Number.isFinite(value) ? value : null;
 }
 
-function readWaterTempMeasuredAt(entry) {
-  const raw = entry?.weather?.water_temp_measured_at
-    ?? entry?.weather?.waterTemperatureMeasuredAt
-    ?? entry?.weather?.waterTempMeasuredAt
-    ?? null;
-  if (!raw) return '';
-  const asDate = new Date(raw);
-  if (Number.isNaN(asDate.getTime())) return '';
-  return asDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-}
-
 export default function CatchList({ anglerName }) {
   const { hasFeatureForRole } = usePermissions();
   const canSeeWaterTemperature = hasFeatureForRole(FEATURES.WATER_TEMPERATURE);
@@ -404,7 +393,6 @@ export default function CatchList({ anglerName }) {
             const visibilityPending = isVisibilityPending(entry.id);
             const locationLabel = formatLocationLabel(entry.location_name);
             const waterTemp = canSeeWaterTemperature ? readWaterTemp(entry) : null;
-            const waterTempMeasuredAt = canSeeWaterTemperature ? readWaterTempMeasuredAt(entry) : '';
 
             return (
               <li
@@ -616,11 +604,6 @@ export default function CatchList({ anglerName }) {
                           <div className="mt-1 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-cyan-200 bg-cyan-50 px-2 py-1 text-cyan-900 dark:border-cyan-800/70 dark:bg-cyan-950/40 dark:text-cyan-100">
                             <span className="font-semibold">🌊 Wassertemperatur</span>
                             <span className="text-base font-semibold">{waterTemp.toFixed(1)} °C</span>
-                            {waterTempMeasuredAt ? (
-                              <span className="text-xs text-cyan-700 dark:text-cyan-300">
-                                gemessen {waterTempMeasuredAt} Uhr
-                              </span>
-                            ) : null}
                           </div>
                         )}
                         <p>
