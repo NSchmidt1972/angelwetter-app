@@ -30,7 +30,10 @@ function readWaterTemp(entry) {
     ?? entry?.weather?.water_temperature
     ?? entry?.weather?.waterTemp
     ?? null;
-  const value = typeof raw === 'number' ? raw : Number(raw);
+  if (raw == null) return null;
+  const normalized = typeof raw === 'string' ? raw.trim() : raw;
+  if (normalized === '') return null;
+  const value = typeof normalized === 'number' ? normalized : Number(normalized);
   return Number.isFinite(value) ? value : null;
 }
 

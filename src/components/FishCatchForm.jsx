@@ -237,7 +237,14 @@ export default function FishCatchForm({
         try {
           const latestWaterTemperature = await fetchLatestWaterTemperature({ days: 2 });
           const waterTempRaw = latestWaterTemperature?.temperature_c;
-          const waterTempValue = typeof waterTempRaw === "number" ? waterTempRaw : Number(waterTempRaw);
+          const normalizedWaterTempRaw =
+            typeof waterTempRaw === "string" ? waterTempRaw.trim() : waterTempRaw;
+          const waterTempValue =
+            normalizedWaterTempRaw == null || normalizedWaterTempRaw === ""
+              ? null
+              : (typeof normalizedWaterTempRaw === "number"
+                  ? normalizedWaterTempRaw
+                  : Number(normalizedWaterTempRaw));
           if (Number.isFinite(waterTempValue)) {
             currentWeather = {
               ...currentWeather,

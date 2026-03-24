@@ -18,13 +18,21 @@ function toTimestampMs(value) {
   return Number.isFinite(ts) ? ts : NaN;
 }
 
+function toFiniteNumberOrNull(value) {
+  if (value == null) return null;
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  if (normalized === '') return null;
+  const num = typeof normalized === 'number' ? normalized : Number(normalized);
+  return Number.isFinite(num) ? num : null;
+}
+
 function normalizeRows(rows, { days }) {
   const list = (Array.isArray(rows) ? rows : [])
     .map((row) => ({
-      temperature_c: row?.temperature_c,
+      temperature_c: toFiniteNumberOrNull(row?.temperature_c),
       measured_at: row?.measured_at ?? row?.created_at ?? null,
     }))
-    .filter((row) => Number.isFinite(Number(row?.temperature_c)) && Number.isFinite(toTimestampMs(row?.measured_at)))
+    .filter((row) => row.temperature_c != null && Number.isFinite(toTimestampMs(row?.measured_at)))
     .sort((a, b) => toTimestampMs(a.measured_at) - toTimestampMs(b.measured_at));
 
   if (!list.length) return [];
@@ -49,6 +57,7 @@ async function fetchWaterTemperatureHistoryDirect({ limit }) {
     let query = supabase
       .from('temperature_log')
       .select(variant.select)
+      .not('temperature_c', 'is', null)
       .order('measured_at', { ascending: false, nullsFirst: false })
       .limit(p_limit);
 

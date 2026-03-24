@@ -7,13 +7,21 @@ function weekdayShortUpper(date) {
   return labels[date.getDay()] || '';
 }
 
+function toFiniteTemperatureValue(raw) {
+  if (raw == null) return null;
+  const normalized = typeof raw === 'string' ? raw.trim() : raw;
+  if (normalized === '') return null;
+  const value = typeof normalized === 'number' ? normalized : Number(normalized);
+  return Number.isFinite(value) ? value : null;
+}
+
 function buildWaterHistory(history) {
   if (!Array.isArray(history) || !history.length) return [];
   const points = history
     .map((item) => {
-      const value = Number(item?.temperature_c);
+      const value = toFiniteTemperatureValue(item?.temperature_c);
       const measuredAt = item?.measured_at ? new Date(item.measured_at) : null;
-      if (!Number.isFinite(value) || !measuredAt || Number.isNaN(measuredAt.getTime())) return null;
+      if (value == null || !measuredAt || Number.isNaN(measuredAt.getTime())) return null;
       return {
         key: `${measuredAt.toISOString()}-${value}`,
         measuredAt,
@@ -58,8 +66,8 @@ function buildWaterStats(history) {
   let count = 0;
 
   for (const item of history) {
-    const value = Number(item?.temperature_c);
-    if (!Number.isFinite(value)) continue;
+    const value = toFiniteTemperatureValue(item?.temperature_c);
+    if (value == null) continue;
     min = Math.min(min, value);
     max = Math.max(max, value);
     sum += value;
@@ -363,8 +371,8 @@ export default function CurrentPanel({
     ?? now?.water_temp
     ?? now?.waterTemp
     ?? now?.water_temperature;
-  const waterTempValue = Number(waterTempValueRaw);
-  const hasWaterTemp = Number.isFinite(waterTempValue);
+  const waterTempValue = toFiniteTemperatureValue(waterTempValueRaw);
+  const hasWaterTemp = waterTempValue != null;
   const measuredAtRaw = waterTemperature?.measured_at
     ?? now?.water_temp_measured_at
     ?? now?.waterTempMeasuredAt
