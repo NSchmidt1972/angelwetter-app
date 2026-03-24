@@ -612,15 +612,6 @@ export default function CatchList({ anglerName }) {
                       )}
                       <div>
                         <p>{`${entry.weather.temp} °C, ${entry.weather.description}`}</p>
-                        <p>
-                          💨 {`${entry.weather.wind} m/s`} aus{' '}
-                          {windDirection(entry.weather.wind_deg)} (
-                          {entry.weather.wind_deg}°)
-                        </p>
-                        <p>
-                          💦 {entry.weather.humidity}% • 🧪 {entry.weather.pressure}{' '}
-                          hPa
-                        </p>
                         {waterTemp != null && (
                           <div className="mt-1 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-cyan-200 bg-cyan-50 px-2 py-1 text-cyan-900 dark:border-cyan-800/70 dark:bg-cyan-950/40 dark:text-cyan-100">
                             <span className="font-semibold">🌊 Wassertemperatur</span>
@@ -632,6 +623,15 @@ export default function CatchList({ anglerName }) {
                             ) : null}
                           </div>
                         )}
+                        <p>
+                          💨 {`${entry.weather.wind} m/s`} aus{' '}
+                          {windDirection(entry.weather.wind_deg)} (
+                          {entry.weather.wind_deg}°)
+                        </p>
+                        <p>
+                          💦 {entry.weather.humidity}% • 🧪 {entry.weather.pressure}{' '}
+                          hPa
+                        </p>
                         <p>{getMoonDescription(entry.weather.moon_phase)}</p>
                       </div>
                     </div>
