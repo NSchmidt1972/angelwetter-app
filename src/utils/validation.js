@@ -1,4 +1,4 @@
-export function validateCatchForm({ fish, size, weight, position }) {
+export function validateCatchForm({ fish, size, weight }) {
   if (!fish || !size) {
     return "Bitte Fischart und Größe angeben!";
   }
@@ -14,10 +14,6 @@ export function validateCatchForm({ fish, size, weight, position }) {
     if (isNaN(weightNumber) || weightNumber <= 0) {
       return "Bitte ein gültiges Gewicht eingeben oder Feld leer lassen.";
     }
-  }
-
-  if (!position) {
-    return "Standortdaten fehlen. Bitte Standortfreigabe aktivieren.";
   }
 
   return null; // keine Fehler

@@ -167,7 +167,13 @@ export default function Navbar({ name }) {
         className="bg-white dark:bg-gray-900 shadow-md fixed top-0 left-0 right-0 z-[1200] text-black dark:text-white"
         style={{ paddingTop: "env(safe-area-inset-top)", overflow: "visible" }}
       >
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+        <div
+          className={`max-w-7xl mx-auto px-4 py-4 items-center ${
+            showHamburger
+              ? "grid grid-cols-[1fr_auto_1fr]"
+              : "flex justify-between"
+          }`}
+        >
           {/* Links: Navigation */}
           <div className="flex items-center gap-4">
             {showHamburger && (
@@ -197,20 +203,33 @@ export default function Navbar({ name }) {
             )}
           </div>
 
+          {showHamburger && (
+            <button
+              type="button"
+              onClick={toggle}
+              className="justify-self-center px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300 text-xl leading-none"
+            >
+              {dark ? "☀️ Tageslicht" : "🌙 Nachtangeln"}
+            </button>
+          )}
+
           {/* Rechts: Profil / Push / Version */}
-          <UserMenu
-            ref={profileRef}
-            dark={dark}
-            onToggleDark={toggle}
-            displayName={displayName}
-            clubLogoSrc={clubLogoSrc}
-            showMenu={showMenu}
-            onToggleMenu={() => setShowMenu((v) => !v)}
-            showDataFilter={showDataFilter}
-            dataFilterValue={dataFilter}
-            onToggleDataFilter={handleToggleDataFilter}
-            onLogout={handleLogout}
-          />
+          <div className={showHamburger ? "justify-self-end" : ""}>
+            <UserMenu
+              ref={profileRef}
+              dark={dark}
+              onToggleDark={toggle}
+              showThemeToggle={!showHamburger}
+              displayName={displayName}
+              clubLogoSrc={clubLogoSrc}
+              showMenu={showMenu}
+              onToggleMenu={() => setShowMenu((v) => !v)}
+              showDataFilter={showDataFilter}
+              dataFilterValue={dataFilter}
+              onToggleDataFilter={handleToggleDataFilter}
+              onLogout={handleLogout}
+            />
+          </div>
         </div>
 
         {showHamburger && (

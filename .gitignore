@@ -15,6 +15,7 @@ playwright-report/
 test-results/
 .lighthouseci/
 tests/ux-agent/artifacts/
+tests/security-agent/artifacts/
 
 # local env files
 .env

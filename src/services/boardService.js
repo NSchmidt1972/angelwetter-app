@@ -3,8 +3,14 @@ import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { ROLES, normalizeRole } from '@/permissions/roles';
 
-export async function fetchWhitelist() {
-  const clubId = getActiveClubId();
+function resolveClubId(clubIdOverride = null) {
+  const clubId = clubIdOverride || getActiveClubId();
+  if (!clubId) throw new Error('Kein aktiver Verein ausgewählt.');
+  return clubId;
+}
+
+export async function fetchWhitelist(clubIdOverride = null) {
+  const clubId = resolveClubId(clubIdOverride);
   const { data, error } = await supabase
     .from('whitelist_emails')
     .select('email, created_at, club_id')
@@ -43,8 +49,8 @@ export async function removeWhitelistEmail(email) {
   return true;
 }
 
-export async function fetchProfiles() {
-  const clubId = getActiveClubId();
+export async function fetchProfiles(clubIdOverride = null) {
+  const clubId = resolveClubId(clubIdOverride);
   const [{ data: profiles, error: profilesError }, { data: memberships, error: membershipsError }] = await Promise.all([
     supabase
       .from('profiles')
@@ -77,8 +83,8 @@ export async function fetchProfiles() {
   });
 }
 
-export async function fetchFishAggregates() {
-  const clubId = getActiveClubId();
+export async function fetchFishAggregates(clubIdOverride = null) {
+  const clubId = resolveClubId(clubIdOverride);
   const { data, error } = await supabase
     .from('fishes')
     .select(
@@ -167,8 +173,8 @@ export async function deleteProfile(profileId) {
   return true;
 }
 
-export async function fetchCrayfishCatches() {
-  const clubId = getActiveClubId();
+export async function fetchCrayfishCatches(clubIdOverride = null) {
+  const clubId = resolveClubId(clubIdOverride);
   const { data, error } = await supabase
     .from('crayfish_catches')
     .select('species, count, catch_timestamp, angler, note, club_id')

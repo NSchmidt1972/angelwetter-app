@@ -4,19 +4,24 @@ import { getActiveClubId } from '@/utils/clubId';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useFormattedNamesMap } from '@/hooks/useFormattedNamesMap';
 import { useViewerContext } from '@/hooks/useViewerContext';
+import { useClubCoordinates } from '@/hooks/useClubCoordinates';
 import PageContainer from '../components/PageContainer';
 import { isHomeWaterEntry } from '@/utils/location';
 import { Card } from '@/components/ui';
 import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
 import { isMarilouAngler, isTrustedAngler, isVisibleByDate } from '@/utils/visibilityPolicy';
-import { withTimeout } from '@/utils/async';
 
 const PRESET_YEARS = [2025, 2026];
 
 export default function Leaderboard() {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [fishes, setFishes] = useState([]);
-  const [clubCoords, setClubCoords] = useState(null);
+  const { clubCoords, reload: reloadClubCoords } = useClubCoordinates({
+    timeoutLabel: 'Leaderboard Club-Koordinaten timeout',
+    onError: (error) => {
+      console.warn('Leaderboard: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+    },
+  });
   const formattedNamesMap = useFormattedNamesMap();
   const [showIntern, setShowIntern] = useState(false);
   const currentYear = new Date().getFullYear();
@@ -27,34 +32,6 @@ export default function Leaderboard() {
   // ⬇️ Nur zählbare Fänge laden
   useEffect(() => {
     let active = true;
-    async function loadClubCoords() {
-      try {
-        const clubId = getActiveClubId();
-        if (!clubId) {
-          if (active) setClubCoords(null);
-          return;
-        }
-        const { data, error } = await withTimeout(
-          supabase
-            .from('clubs')
-            .select('weather_lat, weather_lon')
-            .eq('id', clubId)
-            .maybeSingle(),
-          10000,
-          'Leaderboard Club-Koordinaten timeout'
-        );
-        if (error) throw error;
-        const lat = Number(data?.weather_lat);
-        const lon = Number(data?.weather_lon);
-        if (!active) return;
-        setClubCoords(Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null);
-      } catch (error) {
-        if (!active) return;
-        setClubCoords(null);
-        console.warn('Leaderboard: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
-      }
-    }
-
     async function loadData() {
       // lade nur die Felder, die wir hier brauchen
       const clubId = getActiveClubId();
@@ -72,12 +49,12 @@ export default function Leaderboard() {
 
       if (active) setFishes(data || []);
     }
-    void loadClubCoords();
+    void reloadClubCoords();
     void loadData();
     return () => {
       active = false;
     };
-  }, [resumeTick]);
+  }, [reloadClubCoords, resumeTick]);
 
   // 🔒 Clientseitige Zusatzsicherheit (falls mal alte Zeilen ohne Flag dabei sind)
   const eligibleFishes = useMemo(

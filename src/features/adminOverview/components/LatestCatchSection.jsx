@@ -7,9 +7,20 @@ export default function LatestCatchSection({
   listItemClass,
   fallbackTextClass,
   metaTextClass,
+  collapsible = false,
+  defaultOpen = true,
 }) {
+  const summaryValue = latestCatch
+    ? `${nameShort} · ${latestCatch.fish}`
+    : 'Keine Fänge';
+
   return (
-    <OverviewSection title="🐟 Letzter Fang (7 Tage)">
+    <OverviewSection
+      title="🐟 Letzter Fang (7 Tage)"
+      value={summaryValue}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
+    >
       {latestCatch ? (
         <div className="max-h-60 overflow-y-auto">
           <ul className={listItemClass}>

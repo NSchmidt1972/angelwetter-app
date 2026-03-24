@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom';
 import { lazy, useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
-import { getClubIdForSlug, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
+import { getClubIdForSlug, getPreferredClubSlug, rememberClubSlugId, setActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
 import { debugLog } from '@/utils/runtimeDebug';
 import RequireRole from '@/components/guards/RequireRole';
@@ -78,6 +78,24 @@ function LegacyTenantRedirect({ to }) {
   const { currentClub, membership } = usePermissions();
   const resolvedSlug = currentClub?.slug || membership?.clubs?.slug || 'asv-rotauge';
   return <Navigate to={`/${resolvedSlug}${to}`} replace />;
+}
+
+function RootClubRedirect() {
+  const { loading, currentClub, membership } = usePermissions();
+  if (loading) {
+    return <div className="p-6 text-center">Lädt Verein...</div>;
+  }
+  const slug = currentClub?.slug || membership?.clubs?.slug || getPreferredClubSlug();
+  return <Navigate to={`/${slug}`} replace />;
+}
+
+function RootAuthRedirect() {
+  const { loading, currentClub, membership } = usePermissions();
+  if (loading) {
+    return <div className="p-6 text-center">Lädt Verein...</div>;
+  }
+  const slug = currentClub?.slug || membership?.clubs?.slug || getPreferredClubSlug();
+  return <Navigate to={`/${slug}/auth`} replace />;
 }
 
 function ClubGuard() {
@@ -251,8 +269,8 @@ export default function ProtectedRoutes({ anglerName }) {
         </>
       )}
 
-      <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
-      <Route path="/auth" element={<Navigate to="/asv-rotauge/auth" replace />} />
+      <Route path="/" element={<RootClubRedirect />} />
+      <Route path="/auth" element={<RootAuthRedirect />} />
       <Route path="/admin" element={<LegacyTenantRedirect to="/vorstand" />} />
       <Route path="/admin/members" element={<LegacyTenantRedirect to="/vorstand" />} />
       <Route path="/admin/verein" element={<LegacyTenantRedirect to="/vorstand" />} />

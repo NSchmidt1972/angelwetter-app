@@ -20,9 +20,16 @@ export default function RegisteredUsersSection({
   getBuildInfoForUser,
   listItemClass,
   metaTextClass,
+  collapsible = false,
+  defaultOpen = true,
 }) {
   return (
-    <OverviewSection title="🗓 Registrierte User" value={`${allProfiles.length} registrierte Nutzer`}>
+    <OverviewSection
+      title="🗓 Registrierte User"
+      value={`${allProfiles.length} registrierte Nutzer`}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
+    >
       <div className="max-h-60 overflow-y-auto">
         <ul className={listItemClass}>
           {allProfiles

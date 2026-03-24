@@ -8,14 +8,12 @@ import {
 import MarkerClusterGroup from 'react-leaflet-markercluster';
 import L from 'leaflet';
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '@/supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
+import { useClubCoordinates } from '@/hooks/useClubCoordinates';
 import { FISH_SELECT, fetchClubFishesQuery } from '@/services/fishes';
 import { HOME_WATER_RADIUS_KM } from '@/utils/location';
 import { getDistanceKm } from '@/utils/geo';
-import { withTimeout } from '@/utils/async';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -103,7 +101,12 @@ export default function CatchMap() {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [entries, setEntries] = useState([]);
   const [onlyMine, setOnlyMine] = useState(false);
-  const [homeCenter, setHomeCenter] = useState(DEFAULT_HOME_CENTER);
+  const { clubCoords, reload: reloadClubCoords } = useClubCoordinates({
+    timeoutLabel: 'CatchMap Club-Koordinaten timeout',
+    onError: (error) => {
+      console.warn('CatchMap: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+    },
+  });
 
   const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState(now.getFullYear());
@@ -111,45 +114,14 @@ export default function CatchMap() {
 
   const [storedAnglerName] = useLocalStorageValue('anglerName', '');
   const anglerName = (storedAnglerName || '').trim().toLowerCase();
+  const homeCenter = useMemo(
+    () => (clubCoords ? [clubCoords.lat, clubCoords.lon] : DEFAULT_HOME_CENTER),
+    [clubCoords]
+  );
 
   useEffect(() => {
-    let active = true;
-    async function loadHomeCenter() {
-      try {
-        const clubId = getActiveClubId();
-        if (!clubId) {
-          if (active) setHomeCenter(DEFAULT_HOME_CENTER);
-          return;
-        }
-        const { data, error } = await withTimeout(
-          supabase
-            .from('clubs')
-            .select('weather_lat, weather_lon')
-            .eq('id', clubId)
-            .maybeSingle(),
-          10000,
-          'CatchMap Club-Koordinaten timeout'
-        );
-        if (error) throw error;
-        const lat = Number(data?.weather_lat);
-        const lon = Number(data?.weather_lon);
-        if (!active) return;
-        if (Number.isFinite(lat) && Number.isFinite(lon)) {
-          setHomeCenter([lat, lon]);
-        } else {
-          setHomeCenter(DEFAULT_HOME_CENTER);
-        }
-      } catch (error) {
-        if (!active) return;
-        console.warn('CatchMap: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
-        setHomeCenter(DEFAULT_HOME_CENTER);
-      }
-    }
-    void loadHomeCenter();
-    return () => {
-      active = false;
-    };
-  }, [resumeTick]);
+    void reloadClubCoords();
+  }, [reloadClubCoords, resumeTick]);
 
   useEffect(() => {
     let active = true;

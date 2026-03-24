@@ -1,20 +1,20 @@
 // src/components/FishCatchForm.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 
 // Utils
 import { validateCatchForm } from "@/utils/validation";
 import { reverseGeocode } from "@/utils/geo";
 import { parseFloatLocale } from "@/utils/number";
+import { fishListForRegion, DEFAULT_REGION_OPTIONS } from "@/constants/fishRegions";
+import { getActiveClubId } from "@/utils/clubId";
 
 // Services
 import { processAndUploadImage } from "@/services/imageProcessing";
 import { loadWeatherForPosition } from "@/services/weatherService";
 import { saveBlankDay } from "@/services/blankService";
 import { saveCatchEntry } from "@/services/catchService";
-
-// Domain
-import { fishListForRegion } from "@/constants/fishRegions";
+import { fetchFishRegionCatalog } from "@/services/fishRegionsService";
 
 // Hooks & UI
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -74,7 +74,20 @@ export default function FishCatchForm({
 
   // Region mit Persistenz
   const [region, setRegion] = useLocalStorage("fishRegion", "ferkensbruch");
-  const fishList = fishListForRegion(region);
+  const [regionOptions, setRegionOptions] = useState(DEFAULT_REGION_OPTIONS);
+  const [regionFishMap, setRegionFishMap] = useState({});
+  const [homeWaterFishList, setHomeWaterFishList] = useState(null);
+  const [clubContextTick, setClubContextTick] = useState(0);
+
+  const fishList = useMemo(() => {
+    if (region === "ferkensbruch") {
+      if (Array.isArray(homeWaterFishList)) return homeWaterFishList;
+      return fishListForRegion(region);
+    }
+    const dynamicList = regionFishMap?.[region];
+    if (Array.isArray(dynamicList)) return dynamicList;
+    return fishListForRegion(region);
+  }, [homeWaterFishList, region, regionFishMap]);
 
   // Name-Quelle: Prop > localStorage
   const anglerName = propAnglerName || localStorage.getItem("anglerName") || "Unbekannt";
@@ -90,6 +103,81 @@ export default function FishCatchForm({
   useEffect(() => {
     if (fish && !fishList.includes(fish)) setFish("");
   }, [fishList, fish]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const catalog = await fetchFishRegionCatalog();
+      if (!active) return;
+      if (Array.isArray(catalog.regionOptions) && catalog.regionOptions.length > 0) {
+        setRegionOptions(catalog.regionOptions);
+      }
+      if (catalog.regionFishMap && typeof catalog.regionFishMap === "object") {
+        setRegionFishMap(catalog.regionFishMap);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handler = () => setClubContextTick((prev) => prev + 1);
+    window.addEventListener("angelwetter:club-context-changed", handler);
+    return () => window.removeEventListener("angelwetter:club-context-changed", handler);
+  }, []);
+
+  useEffect(() => {
+    if (region !== "ferkensbruch") {
+      setHomeWaterFishList(null);
+      return;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const clubId = getActiveClubId();
+        if (!clubId) {
+          if (!active) return;
+          setHomeWaterFishList(null);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("club_fish_rules")
+          .select("species")
+          .eq("club_id", clubId)
+          .is("waterbody_id", null)
+          .eq("is_active", true)
+          .order("species", { ascending: true });
+
+        if (error) throw error;
+
+        const speciesList = Array.from(
+          new Set(
+            (Array.isArray(data) ? data : [])
+              .map((entry) => String(entry?.species || "").trim())
+              .filter(Boolean)
+          )
+        );
+        if (!active) return;
+        setHomeWaterFishList(speciesList);
+      } catch {
+        if (!active) return;
+        setHomeWaterFishList(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [clubContextTick, region]);
+
+  useEffect(() => {
+    if (!Array.isArray(regionOptions) || regionOptions.length === 0) return;
+    const regionExists = regionOptions.some((entry) => entry?.id === region);
+    if (regionExists) return;
+    setRegion(regionOptions[0].id);
+  }, [region, regionOptions, setRegion]);
 
   // Zwischenstand für den 2-stufigen Speichern-Flow („entnommen?“)
   const [pendingEntry, setPendingEntry] = useState(null);
@@ -250,7 +338,7 @@ export default function FishCatchForm({
 
           <div className="space-y-6">
             {/* Region + Fischart */}
-            <RegionSelect value={region} onChange={setRegion} />
+            <RegionSelect value={region} onChange={setRegion} options={regionOptions} />
             <FishSelect fishList={fishList} value={fish} onChange={setFish} />
 
             {/* Größe */}

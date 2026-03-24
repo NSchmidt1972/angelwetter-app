@@ -1,6 +1,5 @@
 // src/hooks/useWeatherCache.jsx
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
@@ -8,10 +7,9 @@ import { fetchWeather } from '@/services/weatherService';
 
 const WeatherContext = createContext(null);
 
-const WEATHER_ID = 'latest';
 const WEATHER_SESSION_CACHE_KEY_PREFIX = 'weather_latest_session_v2';
 const INITIAL_DELAY_MS = 400;
-const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const WEATHER_TIMEOUT_MS = 10000;
 const INITIAL_RETRY_DELAY_MS = 8000;
 
@@ -83,24 +81,15 @@ function writeSessionWeather(clubId = null, value) {
 
 async function fetchLatestWeather(clubId) {
   if (!clubId) return null;
-  const { data, error } = await withTimeout(
-    supabase
-      .from('weather_cache')
-      .select('data, updated_at')
-      .eq('club_id', clubId)
-      .eq('id', WEATHER_ID)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+  const liveData = await withTimeout(
+    fetchWeather(null, { clubId }),
     WEATHER_TIMEOUT_MS,
-    'Wetter-Request timeout'
+    'Wetter-Live-Request timeout'
   );
-
-  if (error) throw error;
-  if (!isValidWeatherPayload(data?.data)) return null;
+  if (!isValidWeatherPayload(liveData)) return null;
   return {
-    data: data.data,
-    savedAt: data?.updated_at ? new Date(data.updated_at).getTime() : Date.now(),
+    data: liveData,
+    savedAt: Date.now(),
     clubId,
   };
 }
@@ -137,7 +126,11 @@ export function WeatherProvider({ children }) {
       try {
         let latest = await fetchLatestWeather(clubId);
         if (!latest) {
-          const liveData = await withTimeout(fetchWeather(null), WEATHER_TIMEOUT_MS, 'Wetter-Live-Request timeout');
+          const liveData = await withTimeout(
+            fetchWeather(null, { clubId }),
+            WEATHER_TIMEOUT_MS,
+            'Wetter-Live-Request timeout'
+          );
           if (!isValidWeatherPayload(liveData)) {
             throw new Error('Wetterdaten unvollständig');
           }

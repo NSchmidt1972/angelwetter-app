@@ -18,9 +18,69 @@ function hasServiceWorkerSupport() {
   return typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 }
 
+async function probeServiceWorkerAsset(path) {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') {
+    return { path, ok: false, status: null, contentType: null, error: 'fetch-unavailable' };
+  }
+
+  try {
+    const response = await fetch(path, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    const hasExpectedType =
+      !contentType ||
+      contentType.includes('javascript') ||
+      contentType.includes('ecmascript');
+    const ok = response.ok && hasExpectedType;
+    return {
+      path,
+      ok,
+      status: response.status,
+      contentType: contentType || null,
+      error: ok ? null : hasExpectedType ? `http-${response.status}` : `unexpected-content-type:${contentType || 'unknown'}`,
+    };
+  } catch (error) {
+    return {
+      path,
+      ok: false,
+      status: null,
+      contentType: null,
+      error: error?.message || String(error || 'fetch-failed'),
+    };
+  }
+}
+
 function toAbsoluteUrl(path) {
   if (typeof window === 'undefined') return path;
   return new URL(path, window.location.origin).href;
+}
+
+function toPathname(url) {
+  if (!url) return '';
+  try {
+    const base = typeof window === 'undefined' ? 'https://example.invalid' : window.location.origin;
+    return new URL(url, base).pathname || '';
+  } catch {
+    return '';
+  }
+}
+
+function getRegistrationScriptUrl(registration) {
+  if (!registration) return '';
+  return (
+    registration.active?.scriptURL ||
+    registration.waiting?.scriptURL ||
+    registration.installing?.scriptURL ||
+    ''
+  );
+}
+
+function isLegacyOneSignalScriptPath(pathname) {
+  if (!pathname || pathname.startsWith(ONESIGNAL_SW_SCOPE)) return false;
+  return LEGACY_ONESIGNAL_SW_PATHS.some((legacyPath) => pathname === legacyPath || pathname.endsWith(legacyPath));
 }
 
 function isOneSignalRegistration(registration) {
@@ -28,30 +88,19 @@ function isOneSignalRegistration(registration) {
   const expectedScope = toAbsoluteUrl(ONESIGNAL_SW_SCOPE);
   if (registration.scope === expectedScope) return true;
 
-  const scriptUrl =
-    registration.active?.scriptURL ||
-    registration.waiting?.scriptURL ||
-    registration.installing?.scriptURL ||
-    '';
+  const scriptUrl = getRegistrationScriptUrl(registration);
 
   return scriptUrl.includes(ONESIGNAL_SW_REGISTER_PATH);
 }
 
-function isLegacyRootOneSignalRegistration(registration) {
+function isLegacyOneSignalRegistration(registration) {
   if (!registration) return false;
-  const rootScope = toAbsoluteUrl('/');
-  if (registration.scope !== rootScope) return false;
-
-  const scriptUrl =
-    registration.active?.scriptURL ||
-    registration.waiting?.scriptURL ||
-    registration.installing?.scriptURL ||
-    '';
-
-  return LEGACY_ONESIGNAL_SW_PATHS.some((path) => scriptUrl.includes(path));
+  if (isOneSignalRegistration(registration)) return false;
+  const scriptPath = toPathname(getRegistrationScriptUrl(registration));
+  return isLegacyOneSignalScriptPath(scriptPath);
 }
 
-async function cleanupLegacyRootRegistrations() {
+async function cleanupLegacyRegistrations() {
   if (!hasServiceWorkerSupport()) return;
 
   try {
@@ -60,12 +109,12 @@ async function cleanupLegacyRootRegistrations() {
 
     await Promise.all(
       registrations
-        .filter(isLegacyRootOneSignalRegistration)
+        .filter(isLegacyOneSignalRegistration)
         .map(async (registration) => {
           try {
             await registration.unregister();
           } catch (error) {
-            console.warn('[swHelpers] Legacy-OneSignal-Root-SW konnte nicht entfernt werden:', error);
+            console.warn('[swHelpers] Legacy-OneSignal-SW konnte nicht entfernt werden:', error);
           }
         })
     );
@@ -91,70 +140,115 @@ export async function ensureServiceWorkerRegistration({ cleanupLegacy = false } 
   if (!hasServiceWorkerSupport()) return null;
 
   if (cleanupLegacy) {
-    await cleanupLegacyRootRegistrations();
+    await cleanupLegacyRegistrations();
   }
 
   const existing = await getOneSignalRegistration();
-  if (existing) return existing;
+  if (existing) {
+    try {
+      await existing.update();
+    } catch {
+      /* ignore update errors */
+    }
+    return existing;
+  }
+
+  const [workerProbe, compatProbe] = await Promise.all([
+    probeServiceWorkerAsset(ONESIGNAL_SW_REGISTER_PATH),
+    probeServiceWorkerAsset('/push/onesignal/OneSignalSDK.sw.cdn.js'),
+  ]);
+
+  if (!workerProbe.ok || !compatProbe.ok) {
+    console.warn('[swHelpers] OneSignal-SW-Assets nicht erreichbar:', {
+      workerProbe,
+      compatProbe,
+    });
+  }
 
   try {
     return await navigator.serviceWorker.register(ONESIGNAL_SW_REGISTER_PATH, {
       scope: ONESIGNAL_SW_SCOPE,
+      updateViaCache: 'none',
     });
   } catch (registerErr) {
-    console.warn('[swHelpers] OneSignal-SW-Registrierung fehlgeschlagen:', registerErr);
+    console.warn('[swHelpers] OneSignal-SW-Registrierung fehlgeschlagen:', {
+      error: registerErr?.message || String(registerErr || ''),
+      workerProbe,
+      compatProbe,
+      scope: ONESIGNAL_SW_SCOPE,
+      registerPath: ONESIGNAL_SW_REGISTER_PATH,
+    });
     return null;
   }
 }
 
-function waitForActivation(registration) {
+function waitForActivation(registration, { timeoutMs = 8000 } = {}) {
   if (!registration) return Promise.resolve(null);
 
   if (registration.active) {
     return Promise.resolve(registration);
   }
 
-  const worker = registration.installing || registration.waiting;
-  if (worker) {
-    return new Promise((resolve) => {
-      const handleStateChange = () => {
-        if (worker.state === 'activated') {
-          worker.removeEventListener('statechange', handleStateChange);
-          resolve(registration);
-        }
-      };
+  if (typeof window === 'undefined') return Promise.resolve(registration);
 
-      worker.addEventListener('statechange', handleStateChange);
-      window.setTimeout(() => {
-        worker.removeEventListener('statechange', handleStateChange);
-        resolve(registration);
-      }, 4000);
-    });
-  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeoutId = null;
+    let pollId = null;
+    let trackedWorker = null;
 
-  return Promise.resolve(registration);
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+      if (pollId != null) window.clearInterval(pollId);
+      registration.removeEventListener?.('updatefound', onUpdateFound);
+      trackedWorker?.removeEventListener?.('statechange', onStateChange);
+      resolve(registration);
+    };
+
+    const onStateChange = () => {
+      if (registration.active || trackedWorker?.state === 'activated') {
+        finish();
+      }
+    };
+
+    const attachWorker = (worker) => {
+      if (!worker) return;
+      if (trackedWorker && trackedWorker !== worker) {
+        trackedWorker.removeEventListener?.('statechange', onStateChange);
+      }
+      trackedWorker = worker;
+      trackedWorker.addEventListener?.('statechange', onStateChange);
+    };
+
+    const onUpdateFound = () => {
+      attachWorker(registration.installing || registration.waiting);
+    };
+
+    attachWorker(registration.installing || registration.waiting);
+    registration.addEventListener?.('updatefound', onUpdateFound);
+
+    pollId = window.setInterval(() => {
+      if (registration.active) {
+        finish();
+      }
+    }, 200);
+    timeoutId = window.setTimeout(finish, timeoutMs);
+  });
 }
 
-export async function waitForServiceWorkerRegistration({ timeoutMs = 4000 } = {}) {
+export async function waitForServiceWorkerRegistration({ timeoutMs = 4000, cleanupLegacy = false } = {}) {
   if (!hasServiceWorkerSupport()) return null;
 
-  const registration = await ensureServiceWorkerRegistration();
+  const registration = await ensureServiceWorkerRegistration({ cleanupLegacy });
   if (!registration) return null;
 
-  const activation = waitForActivation(registration);
-  if (typeof window === 'undefined') {
-    return activation;
-  }
-
-  const timeout = new Promise((resolve) => {
-    window.setTimeout(() => resolve(registration), timeoutMs);
-  });
-
-  return Promise.race([activation, timeout]);
+  return waitForActivation(registration, { timeoutMs });
 }
 
 export async function cleanupLegacyOneSignalRegistrations() {
-  await cleanupLegacyRootRegistrations();
+  await cleanupLegacyRegistrations();
 }
 
 export const SERVICE_WORKER_INFO = {

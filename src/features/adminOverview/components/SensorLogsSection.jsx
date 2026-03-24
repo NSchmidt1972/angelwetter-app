@@ -47,6 +47,8 @@ export default function SensorLogsSection({
   temperatureLatest,
   temperatureCount,
   formatDateTimeLabel,
+  collapsible = false,
+  defaultOpen = true,
 }) {
   const knownCounts = [battCount, gpsCount, temperatureCount].filter((value) => Number.isInteger(value));
   const totalCount = knownCounts.reduce((sum, value) => sum + value, 0);
@@ -57,7 +59,12 @@ export default function SensorLogsSection({
       : 'Keine Daten';
 
   return (
-    <OverviewSection title="📡 Sensor-Logs (Supabase)" value={valueLabel}>
+    <OverviewSection
+      title="📡 Sensor-Logs (Supabase)"
+      value={valueLabel}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
+    >
       <div className="space-y-3">
         {telemetryError && (
           <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200">

@@ -3,7 +3,7 @@ import { parseTimestamp } from '@/utils/dateUtils';
 export const PAGE_VIEW_RECENT_LIMIT = 5000;
 export const PAGE_VIEW_PAGE_SIZE = 1000;
 export const PAGE_VIEW_MAX_FETCH_PAGES = 1000;
-export const EXCLUDED_PAGE_VIEW_ANGLERS = new Set();
+export const EXCLUDED_PAGE_VIEW_ANGLERS = new Set(['nicol schmidt']);
 export const PAGE_VIEW_YEAR_FILTER_ALL = 'all';
 
 export function normalizePath(value) {

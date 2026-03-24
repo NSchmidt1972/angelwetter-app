@@ -7,7 +7,7 @@ import { FEATURE_KEYS } from '../../../src/permissions/features';
 const clubSlug = process.env.UX_CLUB_SLUG || 'asv-rotauge';
 const authPath = `/${clubSlug}/auth`;
 const mockedClub = {
-  id: '00000000-0000-0000-0000-000000000001',
+  id: '22222222-2222-4222-8222-222222222222',
   slug: clubSlug,
 };
 const mockedWeather = {

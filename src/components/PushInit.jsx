@@ -49,11 +49,13 @@ export default function PushInit() {
           attachPushStatusListeners(OneSignal, {
             onSubscriptionChange: async (event) => {
               const current = event?.current || {};
-              const subscriptionId = current?.id ?? (await getSubscriptionId(OneSignal));
-              if (!subscriptionId) return;
+              const previous = event?.previous || {};
+              const subscriptionId = current?.id ?? previous?.id ?? (await getSubscriptionId(OneSignal));
+              if (!subscriptionId && current?.optedIn !== false) return;
 
               try {
                 if (current?.optedIn === false) {
+                  if (!subscriptionId) return;
                   await revokeCurrentSubscription({
                     OneSignal,
                     subscriptionId,

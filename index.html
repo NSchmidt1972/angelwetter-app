@@ -20,8 +20,103 @@
   <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
   <link rel="icon" href="/icon-192.png" type="image/png" />
 
-  <!-- PWA Manifest (nur einmal!) -->
-  <link rel="manifest" href="/manifest.webmanifest" />
+  <!-- Tenant-spezifisches Manifest (wird im Bootstrap-Script gesetzt) -->
+  <link rel="manifest" id="tenant-manifest" />
+  <script>
+    (function () {
+      const NON_TENANT_SEGMENTS = new Set([
+        'auth',
+        'update-password',
+        'reset-done',
+        'auth-verified',
+        'forgot-password',
+        'push',
+        'superadmin',
+        '__ux',
+      ]);
+      const CLUB_SLUG_RE = /^[a-z0-9-]+$/i;
+      const ACTIVE_SLUG_KEY = 'angelwetter_active_club_slug_v1';
+      const MANIFEST_BOOTSTRAP_KEY = '__AW_MANIFEST_URL__';
+
+      function normalizeSlug(value) {
+        if (!value || typeof value !== 'string') return null;
+        const normalized = value.trim().toLowerCase();
+        if (!normalized) return null;
+        if (!CLUB_SLUG_RE.test(normalized)) return null;
+        if (NON_TENANT_SEGMENTS.has(normalized)) return null;
+        return normalized;
+      }
+
+      function tenantFromPath(pathname) {
+        if (typeof pathname !== 'string') return null;
+        const firstSegment = pathname.split('/').filter(Boolean)[0] || null;
+        return normalizeSlug(firstSegment);
+      }
+
+      function slugToLabel(slug) {
+        if (!slug) return 'Angelwetter';
+        const label = slug
+          .split('-')
+          .filter(Boolean)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' ');
+        return label || 'Angelwetter';
+      }
+
+      function readStoredSlug() {
+        try {
+          return normalizeSlug(window.localStorage.getItem(ACTIVE_SLUG_KEY));
+        } catch {
+          return null;
+        }
+      }
+
+      const tenantSlug = tenantFromPath(window.location.pathname) || readStoredSlug();
+      const origin = window.location.origin;
+      const basePath = tenantSlug ? `/${tenantSlug}/` : '/';
+      const absoluteStartUrl = new URL(basePath, origin).href;
+      const tenantLabel = slugToLabel(tenantSlug);
+      const appName = tenantSlug ? `Angelwetter ${tenantLabel}` : 'Angelwetter';
+
+      const manifest = {
+        id: basePath,
+        name: appName,
+        short_name: tenantLabel,
+        start_url: absoluteStartUrl,
+        scope: absoluteStartUrl,
+        display: 'standalone',
+        background_color: '#ffffff',
+        theme_color: '#007BFF',
+        icons: [
+          { src: `${origin}/icon-192.png`, sizes: '192x192', type: 'image/png' },
+          { src: `${origin}/icon-512.png`, sizes: '512x512', type: 'image/png' },
+        ],
+      };
+
+      const objectUrl = URL.createObjectURL(
+        new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' })
+      );
+
+      const allManifestLinks = Array.from(document.querySelectorAll('link[rel="manifest"]'));
+      let manifestLink = allManifestLinks[0] || null;
+      if (!manifestLink) {
+        manifestLink = document.createElement('link');
+        manifestLink.setAttribute('rel', 'manifest');
+        document.head.appendChild(manifestLink);
+      }
+      manifestLink.setAttribute('href', objectUrl);
+      for (let i = 1; i < allManifestLinks.length; i += 1) {
+        allManifestLinks[i].remove();
+      }
+
+      const applicationNameMeta = document.querySelector('meta[name="application-name"]');
+      if (applicationNameMeta) applicationNameMeta.setAttribute('content', appName);
+      const appleTitleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+      if (appleTitleMeta) appleTitleMeta.setAttribute('content', tenantLabel);
+
+      window[MANIFEST_BOOTSTRAP_KEY] = objectUrl;
+    })();
+  </script>
 
   <!-- Performance -->
   <link rel="preconnect" href="https://ai.asv-rotauge.de" crossorigin>

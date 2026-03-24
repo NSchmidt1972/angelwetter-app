@@ -21,9 +21,16 @@ export default function ActiveUsersSection({
   getBuildInfoForUser,
   listItemClass,
   metaTextClass,
+  collapsible = false,
+  defaultOpen = true,
 }) {
   return (
-    <OverviewSection title="👥 Aktive Angler (7 Tage)" value={`${activeUsers.length} aktive Angler`}>
+    <OverviewSection
+      title="👥 Aktive Angler (7 Tage)"
+      value={`${activeUsers.length} aktive Angler`}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
+    >
       <div className="max-h-60 overflow-y-auto">
         <ul className={listItemClass}>
           {activeUsers

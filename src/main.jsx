@@ -9,6 +9,7 @@ import './styles/themes/light.css';
 import './styles/themes/dark.css';
 import './styles/base.css';
 import { installGlobalErrorMonitoring } from '@/services/opsAlert';
+import { applyDynamicManifestForPath } from '@/utils/pwaManifest';
 
 function scheduleIdle(callback, timeout = 2000) {
   if (typeof window === 'undefined') return;
@@ -24,6 +25,9 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     scheduleIdle(async () => {
       try {
         const { registerSW } = await import('virtual:pwa-register');
+        // App-SW bewusst auf Root lassen:
+        // Tenant-Identitaet wird ueber dynamisches Manifest (id/start_url/scope) gesteuert.
+        // So bleibt OneSignal-SW-Kommunikation stabil, auch wenn Tenant-Pfade variieren.
         registerSW({ immediate: true });
       } catch (err) {
         console.warn('[PWA] Service-Worker Registrierung übersprungen:', err);
@@ -31,6 +35,8 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     });
   }, { once: true });
 }
+
+applyDynamicManifestForPath();
 
 installGlobalErrorMonitoring();
 

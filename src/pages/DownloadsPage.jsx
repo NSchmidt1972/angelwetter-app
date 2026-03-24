@@ -1,52 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 import { createCatchPDF } from '@/utils/pdfExporter';
 import { isHomeWaterEntry } from '@/utils/location';
 import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
+import { useClubCoordinates } from '@/hooks/useClubCoordinates';
 import { Card } from '@/components/ui';
-import { withTimeout } from '@/utils/async';
 
 export default function DownloadsPage() {
   const [anglerName] = useLocalStorageValue('anglerName', 'Unbekannt');
   const [pdfYear, setPdfYear] = useState(new Date().getFullYear());
-  const [clubCoords, setClubCoords] = useState(null);
-
-  useEffect(() => {
-    let active = true;
-    async function loadClubCoords() {
-      try {
-        const clubId = getActiveClubId();
-        if (!clubId) {
-          if (active) setClubCoords(null);
-          return;
-        }
-        const { data, error } = await withTimeout(
-          supabase
-            .from('clubs')
-            .select('weather_lat, weather_lon')
-            .eq('id', clubId)
-            .maybeSingle(),
-          10000,
-          'Downloads Club-Koordinaten timeout'
-        );
-        if (error) throw error;
-
-        const lat = Number(data?.weather_lat);
-        const lon = Number(data?.weather_lon);
-        if (!active) return;
-        setClubCoords(Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null);
-      } catch (error) {
-        if (!active) return;
-        setClubCoords(null);
-        console.warn('Downloads: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
-      }
-    }
-    void loadClubCoords();
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { clubCoords } = useClubCoordinates({
+    timeoutLabel: 'Downloads Club-Koordinaten timeout',
+    onError: (error) => {
+      console.warn('Downloads: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+    },
+  });
 
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();

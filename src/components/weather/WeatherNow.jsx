@@ -272,7 +272,6 @@ function isAbortError(error) {
 
 export default function WeatherNow({
   data,
-  onRefresh,
   loading = false,
   waterTemperature = null,
   waterTemperatureHistory = [],
@@ -313,17 +312,6 @@ export default function WeatherNow({
   useEffect(() => {
     modelFingerprintRef.current = modelFingerprint;
   }, [modelFingerprint]);
-
-  // ⏱ Auto-Refresh (nur sichtbar & online)
-  useEffect(() => {
-    const tick = () => {
-      if (document.visibilityState !== 'visible') return;
-      if ('onLine' in navigator && !navigator.onLine) return;
-      onRefresh?.();
-    };
-    const id = setInterval(tick, 5 * 60 * 1000);
-    return () => clearInterval(id);
-  }, [onRefresh]);
 
   // Basisdaten ohne KI
   useEffect(() => {

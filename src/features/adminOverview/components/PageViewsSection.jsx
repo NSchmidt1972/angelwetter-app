@@ -18,11 +18,15 @@ export default function PageViewsSection({
   pageViewUniqueOpenPath,
   uniqueAnglersForPath,
   setPageViewUniqueOpenPath,
+  collapsible = false,
+  defaultOpen = true,
 }) {
   return (
     <OverviewSection
       title="📊 Seitenaufrufe"
       value={pageViewLoading ? 'Lade…' : `${pageViewTotal} Aufrufe`}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">

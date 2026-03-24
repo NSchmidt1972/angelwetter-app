@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui';
 import { supabase } from '@/supabaseClient';
 import { FEATURES, FEATURE_KEYS } from '@/permissions/features';
+import { useSuperAdminHeaderTitle } from '@/apps/superadmin/context/headerTitleContext';
 import {
   CLUB_SELECT_VARIANTS,
   isMissingClubIsActiveError,
@@ -13,6 +14,8 @@ import {
   sanitizeSlug,
 } from '@/apps/superadmin/features/clubs/utils/clubSchemaCompat';
 import { uploadClubLogoFile } from '@/apps/superadmin/features/clubs/utils/logoUpload';
+
+const PAGE_TITLE = 'Club anlegen';
 
 const CLUB_DEFAULT_FEATURES = Object.freeze({
   [FEATURES.WEATHER]: true,
@@ -71,6 +74,7 @@ async function fallbackCreateClub({ slug, name, host, isActive }) {
 }
 
 export default function ClubsPage() {
+  const setSuperAdminHeaderTitle = useSuperAdminHeaderTitle();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,6 +92,10 @@ export default function ClubsPage() {
     weather_lat: '',
     weather_lon: '',
   });
+
+  useEffect(() => {
+    setSuperAdminHeaderTitle(PAGE_TITLE);
+  }, [setSuperAdminHeaderTitle]);
 
   const loadSchemaSupport = async () => {
     setLoading(true);
@@ -243,13 +251,7 @@ export default function ClubsPage() {
 
   return (
     <Card className="space-y-8 p-4 sm:p-6">
-      <header className="space-y-2">
-        <Link to="/superadmin" className="text-sm text-blue-600 hover:underline">
-          ← Zurück zur Übersicht
-        </Link>
-        <h1 className="text-2xl font-bold text-blue-700 dark:text-blue-300">Superadmin: Clubs</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-300">Neuen Verein anlegen.</p>
-      </header>
+      <p className="text-sm text-gray-600 dark:text-gray-300">Neuen Verein anlegen.</p>
 
       {error ? (
         <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/40 dark:bg-red-900/30 dark:text-red-200">

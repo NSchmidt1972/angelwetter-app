@@ -6,9 +6,16 @@ export default function ExternalCatchesSection({
   listItemClass,
   fallbackTextClass,
   metaTextClass,
+  collapsible = false,
+  defaultOpen = true,
 }) {
   return (
-    <OverviewSection title="🌍 Externe Fänge (außer Vereinsgewässer)">
+    <OverviewSection
+      title="🌍 Externe Fänge (außer Vereinsgewässer)"
+      value={externalCatches.length > 0 ? `${externalCatches.length} Einträge` : 'Keine externen Fänge'}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
+    >
       {externalCatches.length > 0 ? (
         <div className="max-h-60 overflow-y-auto">
           <ul className={listItemClass}>

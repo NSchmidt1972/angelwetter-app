@@ -100,7 +100,12 @@ export default function usePushStatus() {
             setState((prev) => ({
               ...prev,
               subId,
-              optedIn: typeof current?.optedIn === 'boolean' ? current.optedIn : prev.optedIn,
+              optedIn:
+                typeof current?.optedIn === 'boolean'
+                  ? current.optedIn
+                  : subId
+                    ? true
+                    : prev.optedIn,
             }));
           },
         });

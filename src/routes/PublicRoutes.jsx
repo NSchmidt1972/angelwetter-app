@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { lazy } from 'react';
+import { getPreferredClubSlug } from '@/utils/clubId';
 
 const UpdatePassword = lazy(() => import('@/pages/UpdatePassword'));
 const ResetDone = lazy(() => import('@/pages/ResetDone'));
@@ -30,13 +31,21 @@ function ClubNotFound() {
 
 function NotLoggedRedirect() {
   const { clubSlug } = useParams();
-  const target = clubSlug ? `/${clubSlug}/auth` : '/asv-rotauge/auth';
+  const target = clubSlug ? `/${clubSlug}/auth` : `/${getPreferredClubSlug()}/auth`;
   return <Navigate to={target} replace />;
 }
 
 function ClubAuthEntryRedirect() {
   const { clubSlug } = useParams();
   return <Navigate to={`/${clubSlug}/auth`} replace />;
+}
+
+function RootClubRedirect() {
+  return <Navigate to={`/${getPreferredClubSlug()}`} replace />;
+}
+
+function RootAuthRedirect() {
+  return <Navigate to={`/${getPreferredClubSlug()}/auth`} replace />;
 }
 
 export default function PublicRoutes() {
@@ -63,9 +72,9 @@ export default function PublicRoutes() {
           <Route path="/__ux/menu/vorstand" element={<BoardOverview />} />
         </>
       )}
-      <Route path="/" element={<Navigate to="/asv-rotauge" replace />} />
-      <Route path="/auth" element={<Navigate to="/asv-rotauge/auth" replace />} />
-      <Route path="/catches" element={<Navigate to="/asv-rotauge/auth" replace />} />
+      <Route path="/" element={<RootClubRedirect />} />
+      <Route path="/auth" element={<RootAuthRedirect />} />
+      <Route path="/catches" element={<RootAuthRedirect />} />
 
       <Route path="/update-password" element={<UpdatePassword />} />
       <Route path="/reset-done" element={<ResetDone />} />

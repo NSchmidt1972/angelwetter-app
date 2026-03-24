@@ -71,15 +71,28 @@ const BALTIC_SEA_DE_FISH = [
 "Aal", "Plattfisch (allg.)",
 ];
 
-export function fishListForRegion(region) {
-switch (region) {
-case "ferkensbruch": return FERKENSBRUCH_FISH;
-case "inland": return INLAND_FISH;
-case "holland": return HOLLAND_FISH;
-case "northsea_de": return NORTH_SEA_DE_FISH;
-case "baltic_de": return BALTIC_SEA_DE_FISH;
-case "med": return MEDITERRANEAN_FISH;
-case "norway": return NORWAY_FISH;
-default: return FERKENSBRUCH_FISH;
+export const REGION_FISH_LISTS = Object.freeze({
+  ferkensbruch: FERKENSBRUCH_FISH,
+  inland: INLAND_FISH,
+  holland: HOLLAND_FISH,
+  northsea_de: NORTH_SEA_DE_FISH,
+  baltic_de: BALTIC_SEA_DE_FISH,
+  med: MEDITERRANEAN_FISH,
+  norway: NORWAY_FISH,
+});
+
+export const DEFAULT_REGION_OPTIONS = Object.freeze(
+  Object.entries(REGION_LABELS).map(([id, label]) => ({ id, label }))
+);
+
+export function regionFishMapFallback() {
+  const map = {};
+  Object.entries(REGION_FISH_LISTS).forEach(([regionId, fishes]) => {
+    map[regionId] = Array.isArray(fishes) ? [...fishes] : [];
+  });
+  return map;
 }
+
+export function fishListForRegion(region) {
+  return REGION_FISH_LISTS[region] || FERKENSBRUCH_FISH;
 }

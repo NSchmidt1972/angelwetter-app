@@ -3,9 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useFormattedNamesMap } from '@/hooks/useFormattedNamesMap';
 import { useViewerContext } from '@/hooks/useViewerContext';
-import { supabase } from '@/supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
-import { withTimeout } from '@/utils/async';
+import { useClubCoordinates } from '@/hooks/useClubCoordinates';
 import PageContainer from '../components/PageContainer';
 import { formatLocationLabel, isHomeWaterEntry } from '@/utils/location';
 import { Card } from '@/components/ui';
@@ -20,7 +18,12 @@ export default function TopFishes() {
   const [selectedFish, setSelectedFish] = useState(() => searchParams.get('fish') || '');
   const formattedNamesMap = useFormattedNamesMap();
   const [onlyMine, setOnlyMine] = useState(false);
-  const [clubCoords, setClubCoords] = useState(null);
+  const { clubCoords, reload: reloadClubCoords } = useClubCoordinates({
+    timeoutLabel: 'TopFishes Club-Koordinaten timeout',
+    onError: (error) => {
+      console.warn('TopFishes: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+    },
+  });
   const lastSelectedRef = useRef(null);
 
   const {
@@ -32,39 +35,8 @@ export default function TopFishes() {
   } = useViewerContext();
 
   useEffect(() => {
-    let active = true;
-    async function loadClubCoords() {
-      try {
-        const clubId = getActiveClubId();
-        if (!clubId) {
-          if (active) setClubCoords(null);
-          return;
-        }
-        const { data, error } = await withTimeout(
-          supabase
-            .from('clubs')
-            .select('weather_lat, weather_lon')
-            .eq('id', clubId)
-            .maybeSingle(),
-          10000,
-          'TopFishes Club-Koordinaten timeout'
-        );
-        if (error) throw error;
-        const lat = Number(data?.weather_lat);
-        const lon = Number(data?.weather_lon);
-        if (!active) return;
-        setClubCoords(Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null);
-      } catch (error) {
-        if (!active) return;
-        setClubCoords(null);
-        console.warn('TopFishes: Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
-      }
-    }
-    void loadClubCoords();
-    return () => {
-      active = false;
-    };
-  }, [resumeTick]);
+    void reloadClubCoords();
+  }, [reloadClubCoords, resumeTick]);
 
   useEffect(() => {
     let active = true;

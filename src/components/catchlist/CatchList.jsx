@@ -17,6 +17,7 @@ import { isVisibleToUser } from '@/utils/filters';
 import { useReactions } from '@/hooks/useReactions';
 import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
+import { useClubCoordinates } from '@/hooks/useClubCoordinates';
 import { formatLocationLabel, isHomeWaterEntry } from '@/utils/location';
 import { withTimeout } from '@/utils/async';
 import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
@@ -26,7 +27,12 @@ export default function CatchList({ anglerName }) {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [onlyMine, setOnlyMine] = useState(false);
   const [topBadges, setTopBadges] = useState({});
-  const [clubCoords, setClubCoords] = useState(null);
+  const { clubCoords, reload: reloadClubCoords } = useClubCoordinates({
+    timeoutLabel: 'Club-Koordinaten timeout',
+    onError: (error) => {
+      console.warn('Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+    },
+  });
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -68,43 +74,8 @@ export default function CatchList({ anglerName }) {
   } = useReactions(normalizedName);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadClubCoords() {
-      try {
-        const clubId = getActiveClubId();
-        if (!clubId) {
-          if (!cancelled) setClubCoords(null);
-          return;
-        }
-        const { data, error } = await withTimeout(
-          supabase
-            .from('clubs')
-            .select('weather_lat, weather_lon')
-            .eq('id', clubId)
-            .maybeSingle(),
-          10000,
-          'Club-Koordinaten timeout'
-        );
-        if (error) throw error;
-
-        const lat = Number(data?.weather_lat);
-        const lon = Number(data?.weather_lon);
-        const nextCoords = Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
-        if (!cancelled) setClubCoords(nextCoords);
-      } catch (error) {
-        if (!cancelled) {
-          setClubCoords(null);
-          console.warn('Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
-        }
-      }
-    }
-
-    void loadClubCoords();
-    return () => {
-      cancelled = true;
-    };
-  }, [clubSlug, resumeTick]);
+    void reloadClubCoords();
+  }, [clubSlug, reloadClubCoords, resumeTick]);
 
   const entryKey = useCallback(
     (entry) => entry.id ?? `${entry.angler || 'anon'}-${entry.timestamp}-${entry.fish}-${entry.size}`,

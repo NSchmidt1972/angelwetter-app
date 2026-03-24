@@ -338,11 +338,13 @@ export async function ensureOneSignalInitialized() {
 
     // Registrierung zuerst sichern, erst danach SDK laden/initen.
     // Sonst versucht das SDK teilweise zu früh "Page -> SW" postMessage.
-    const registration = await waitForServiceWorkerRegistration({ timeoutMs: 10_000 });
+    const registration = await waitForServiceWorkerRegistration({
+      timeoutMs: 10_000,
+      cleanupLegacy: true,
+    });
     if (!registration) {
       throw new Error('OneSignal Service-Worker Registrierung nicht verfügbar.');
     }
-    await waitForServiceWorkerReady({ timeoutMs: SW_READY_TIMEOUT_MS });
 
     const OneSignal = await getOneSignal({ timeoutMs: 20_000 });
     try {
@@ -380,6 +382,10 @@ export async function getPushStatusSnapshot(OneSignal) {
   const permissionState = getPermissionState(sdk);
   const model = getPushSubscriptionModel(sdk);
   const subId = await getSubscriptionId(sdk);
+  const optedIn =
+    typeof model?.optedIn === 'boolean'
+      ? model.optedIn
+      : Boolean(subId && permissionState === 'granted');
 
   return {
     sdk,
@@ -387,7 +393,7 @@ export async function getPushStatusSnapshot(OneSignal) {
     permissionState,
     granted: permissionState === 'granted',
     blocked: permissionState === 'denied',
-    optedIn: !!model?.optedIn,
+    optedIn,
     subId,
   };
 }
@@ -440,8 +446,7 @@ export async function subscribeCurrentUser(OneSignal) {
   }
 
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-    await waitForServiceWorkerRegistration({ timeoutMs: 10_000 });
-    await waitForServiceWorkerReady({ timeoutMs: SW_READY_TIMEOUT_MS });
+    await waitForServiceWorkerRegistration({ timeoutMs: 10_000, cleanupLegacy: true });
   }
 
   const model = getPushSubscriptionModel(sdk);

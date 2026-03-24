@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useValidFishes } from '../../hooks/useValidFishes';
 import { localDayKey, monthKey } from '../../utils/dateUtils';
 import {
@@ -24,9 +24,7 @@ import {
 import { getWeatherDescription, normalizePlace, parseLocaleNumber } from './utils';
 import { PUBLIC_FROM as DEFAULT_PUBLIC_FROM, TRUSTED_ANGLERS } from '@/constants/visibility';
 import { HOME_WATER_LABEL, isHomeWaterEntry } from '@/utils/location';
-import { withTimeout } from '@/utils/async';
-import { getActiveClubId } from '@/utils/clubId';
-import { supabase } from '@/supabaseClient';
+import { useClubCoordinates } from '@/hooks/useClubCoordinates';
 
 const FEMALE_FIRSTNAMES = new Set(['laura', 'marilou', 'julia']);
 const WEEKDAY_LABELS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -50,57 +48,13 @@ export function useFunFactsData({
   selectedYear = new Date().getFullYear(),
 }) {
   const { fishes, validFishes, loading, loadError } = useValidFishes({ PUBLIC_FROM, vertraute });
-  const [clubCoords, setClubCoords] = useState(null);
-
-  useEffect(() => {
-    let active = true;
-
-    const loadClubCoords = async () => {
-      const clubId = getActiveClubId();
-      if (!clubId) {
-        if (active) setClubCoords(null);
-        return;
-      }
-      try {
-        const { data, error } = await withTimeout(
-          supabase
-            .from('clubs')
-            .select('weather_lat, weather_lon')
-            .eq('id', clubId)
-            .maybeSingle(),
-          10000,
-          'FunFacts Club-Koordinaten timeout',
-        );
-        if (error) throw error;
-        const lat = Number(data?.weather_lat);
-        const lon = Number(data?.weather_lon);
-        if (!active) return;
-        if (Number.isFinite(lat) && Number.isFinite(lon)) {
-          setClubCoords({ lat, lon });
-        } else {
-          setClubCoords(null);
-        }
-      } catch (error) {
-        if (!active) return;
-        console.warn('[useFunFactsData] Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
-        setClubCoords(null);
-      }
-    };
-
-    void loadClubCoords();
-
-    const canListen = typeof window !== 'undefined' && typeof window.addEventListener === 'function';
-    if (canListen) {
-      window.addEventListener('angelwetter:club-context-changed', loadClubCoords);
-    }
-
-    return () => {
-      active = false;
-      if (canListen) {
-        window.removeEventListener('angelwetter:club-context-changed', loadClubCoords);
-      }
-    };
-  }, []);
+  const { clubCoords } = useClubCoordinates({
+    timeoutLabel: 'FunFacts Club-Koordinaten timeout',
+    listenToClubContextChange: true,
+    onError: (error) => {
+      console.warn('[useFunFactsData] Club-Koordinaten konnten nicht geladen werden:', error?.message || error);
+    },
+  });
 
   const yearFilter = normalizeSelectedYear(selectedYear);
 

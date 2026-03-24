@@ -2,10 +2,12 @@ import { lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { usePermissions } from '@/permissions/usePermissions';
 import { supabase } from '@/supabaseClient';
+import SuperAdminLayout from '@/apps/superadmin/components/SuperAdminLayout';
 
 const OverviewPage = lazy(() => import('@/apps/superadmin/pages/OverviewPage'));
 const ClubsPage = lazy(() => import('@/apps/superadmin/features/clubs/pages/ClubsPage'));
 const ClubDetailPage = lazy(() => import('@/apps/superadmin/features/clubs/pages/ClubDetailPage'));
+const RegionsPage = lazy(() => import('@/apps/superadmin/features/regions/pages/RegionsPage'));
 
 function RequireSuperAdmin({ children }) {
   const { loading, error, isSuperAdmin } = usePermissions();
@@ -33,14 +35,15 @@ function RequireSuperAdmin({ children }) {
 export default function ControlPlaneRoutes() {
   return (
     <RequireSuperAdmin>
-      <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
-        <Routes>
+      <Routes>
+        <Route element={<SuperAdminLayout />}>
           <Route index element={<OverviewPage />} />
           <Route path="clubs" element={<ClubsPage />} />
           <Route path="clubs/:clubId" element={<ClubDetailPage />} />
-          <Route path="*" element={<Navigate to="/superadmin" replace />} />
-        </Routes>
-      </div>
+          <Route path="regions" element={<RegionsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/superadmin" replace />} />
+      </Routes>
     </RequireSuperAdmin>
   );
 }

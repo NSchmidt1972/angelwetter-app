@@ -1,8 +1,7 @@
 // src/services/catchService.js
 import { supabase } from '../supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
+import { getActiveClubId, getClubIdForSlug } from '@/utils/clubId';
 
-const ASV_ROTAUGE_ID = '00000000-0000-0000-0000-000000000001';
 const ROTAUGE_HOME_DB_VALUE = 'Lobberich';
 const GENERIC_HOME_DB_VALUE = 'Vereinsgewässer';
 
@@ -53,7 +52,8 @@ export async function saveCatchEntry(entry, taken, position, anglerName, options
   // 1) Insert
   const payload = { ...entry, taken: !!taken };
   payload.club_id = getActiveClubId();
-  const isRotaugeClub = payload.club_id === ASV_ROTAUGE_ID;
+  const rotaugeClubId = getClubIdForSlug('asv-rotauge');
+  const isRotaugeClub = Boolean(rotaugeClubId && payload.club_id === rotaugeClubId);
   const isHomeWaterRegion = typeof options.region === 'string'
     ? options.region.toLowerCase() === 'ferkensbruch'
     : false;

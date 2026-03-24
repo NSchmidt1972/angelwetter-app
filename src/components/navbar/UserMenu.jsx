@@ -8,6 +8,7 @@ const UserMenu = forwardRef(function UserMenu(
   {
     dark,
     onToggleDark,
+    showThemeToggle = true,
     displayName,
     clubLogoSrc = '',
     showMenu,
@@ -21,13 +22,15 @@ const UserMenu = forwardRef(function UserMenu(
 ) {
   return (
     <div className="flex items-center gap-3 text-base relative" ref={ref}>
-      <button
-        type="button"
-        onClick={onToggleDark}
-        className="px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300"
-      >
-        {dark ? "☀️ Tageslicht" : "🌙 Nachtangeln"}
-      </button>
+      {showThemeToggle && (
+        <button
+          type="button"
+          onClick={onToggleDark}
+          className="px-3 py-2 rounded hover:text-blue-600 dark:hover:text-blue-300"
+        >
+          {dark ? "☀️ Tageslicht" : "🌙 Nachtangeln"}
+        </button>
+      )}
 
       <button
         type="button"

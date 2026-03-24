@@ -12,7 +12,8 @@
     "test:ux:func": "UX_CLUB_SLUG=asv-rotauge playwright test --config=tests/ux-agent/config/playwright.config.js",
     "test:ux:summary": "node tests/ux-agent/scripts/playwright_summary.mjs",
     "test:ux:lighthouse": "./tests/ux-agent/scripts/run_lighthouse_ci.sh",
-    "test:ux": "npm run test:ux:func && npm run test:ux:lighthouse"
+    "test:ux": "npm run test:ux:func && npm run test:ux:lighthouse",
+    "test:security": "playwright test --config=tests/security-agent/config/playwright.config.js"
   },
   "dependencies": {
     "@capacitor/cli": "^7.4.3",

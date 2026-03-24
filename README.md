@@ -26,6 +26,14 @@ Angelwetter ist eine React/Vite PWA für Fangmeldungen, Auswertungen und Push-Be
 Der Agent ist im Repo versioniert (`tests/ux-agent/specs`, `tests/ux-agent/config`, `tests/ux-agent/scripts`)
 und läuft extern in CI über [`.github/workflows/ux-agent.yml`](./.github/workflows/ux-agent.yml).
 
+## Integrations-/Security-Tests (Rollen, RLS, Edge Functions)
+- Live-Suite (Playwright API-Tests): `npm run test:security`
+- Safety-Guard: Die Suite läuft nur mit `SECURITY_TEST_RUN_LIVE=1`.
+- Scope:
+  - Rollen-/Feature-Prüfungen über RPC + `club_role_features`
+  - RLS-Prüfungen für `fishes` (z. B. Gast-Write-Block, Cross-Club-Read-Block)
+  - Security-Checks für Edge Functions (`opsAlert`, `weatherProxy`, `sendCatchPush`)
+
 ## Wichtige Umgebungsvariablen
 - `VITE_SUPABASE_URL` – Basis-URL deiner Supabase-Instanz (ohne Slash am Ende).
 - `VITE_SUPABASE_ANON_KEY` – öffentlicher Anon-Key für das Frontend.
@@ -36,6 +44,11 @@ und läuft extern in CI über [`.github/workflows/ux-agent.yml`](./.github/workf
 - `VITE_FORECAST_RETRY_ATTEMPTS` – zusätzliche Retry-Versuche im Forecast-Frontend bei transienten Fehlern (Default: `1`, Range: `0`-`3`).
 - `VITE_FORECAST_RETRY_DELAY_MS` – Wartezeit zwischen Forecast-Retries in Millisekunden (Default: `450`, Range: `0`-`5000`).
 - `VITE_APP_VERSION`, `VITE_BUILD_DATE`, `VITE_GIT_COMMIT` – optional, falls du Build-Metadaten selbst setzen willst.
+- `SECURITY_TEST_RUN_LIVE` – auf `1` setzen, um die Live-Security-Suite auszuführen.
+- `SECURITY_TEST_SUPABASE_URL` – optionaler Override für Security-Tests (sonst `VITE_SUPABASE_URL`).
+- `SECURITY_TEST_SUPABASE_ANON_KEY` – optionaler Override für Security-Tests (sonst `VITE_SUPABASE_ANON_KEY`).
+- `SECURITY_TEST_SERVICE_ROLE_KEY` – optionaler Override für Security-Tests (sonst `SUPABASE_SERVICE_ROLE_KEY`).
+- `SECURITY_TEST_EDGE_SECRET` – optional, falls `sendCatchPush` in der Zielumgebung `x-edge-secret` erzwingt.
 
 ## Deployment & Releases
 - `./deploy-github.sh` committet und pusht den aktuellen Stand (Commit-Message enthält Datum/Uhrzeit).

@@ -6,9 +6,16 @@ export default function TakenCatchesSection({
   listItemClass,
   fallbackTextClass,
   metaTextClass,
+  collapsible = false,
+  defaultOpen = true,
 }) {
   return (
-    <OverviewSection title="🧺 Entnommene Fische" value={`${takenCatches.length} Einträge`}>
+    <OverviewSection
+      title="🧺 Entnommene Fische"
+      value={`${takenCatches.length} Einträge`}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
+    >
       {takenCatches.length > 0 ? (
         <div className="max-h-60 overflow-y-auto">
           <ul className={listItemClass}>

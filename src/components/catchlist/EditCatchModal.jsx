@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react';
 import { FISH_TYPES } from '../../constants';
-import { supabase } from '@/supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
-import { withTimeout } from '@/utils/async';
+import { getActiveClubId, getClubIdForSlug } from '@/utils/clubId';
 import { HOME_WATER_LABEL } from '@/utils/location';
+import { fetchClubCoordinates } from '@/services/clubCoordinatesService';
 
 const PRESET_LAT = 51.3110871;
 const PRESET_LON = 6.2568567;
 const FERKENSBRUCH_LABEL = HOME_WATER_LABEL;
 const LOBBERICH_DB_VALUE = 'Lobberich';
-const ASV_ROTAUGE_ID = '00000000-0000-0000-0000-000000000001';
 
 export default function EditCatchModal({ entry, onCancel, onSave }) {
   const [fish, setFish] = useState(entry.fish);
@@ -30,7 +28,8 @@ export default function EditCatchModal({ entry, onCancel, onSave }) {
     async function loadPresetFromClub() {
       try {
         const clubId = getActiveClubId();
-        const isRotauge = clubId === ASV_ROTAUGE_ID;
+        const rotaugeClubId = getClubIdForSlug('asv-rotauge');
+        const isRotauge = Boolean(rotaugeClubId && clubId === rotaugeClubId);
         const fallbackLabel = isRotauge ? FERKENSBRUCH_LABEL : HOME_WATER_LABEL;
         const fallbackValue = isRotauge ? LOBBERICH_DB_VALUE : HOME_WATER_LABEL;
 
@@ -43,19 +42,11 @@ export default function EditCatchModal({ entry, onCancel, onSave }) {
           return;
         }
 
-        const { data, error } = await withTimeout(
-          supabase
-            .from('clubs')
-            .select('weather_lat, weather_lon')
-            .eq('id', clubId)
-            .maybeSingle(),
-          10000,
-          'EditCatchModal Club-Koordinaten timeout'
-        );
-        if (error) throw error;
-
-        const nextLat = Number(data?.weather_lat);
-        const nextLon = Number(data?.weather_lon);
+        const coords = await fetchClubCoordinates(clubId, {
+          timeoutLabel: 'EditCatchModal Club-Koordinaten timeout',
+        });
+        const nextLat = Number(coords?.lat);
+        const nextLon = Number(coords?.lon);
         if (!active) return;
         setPresetLat(Number.isFinite(nextLat) ? nextLat : PRESET_LAT);
         setPresetLon(Number.isFinite(nextLon) ? nextLon : PRESET_LON);

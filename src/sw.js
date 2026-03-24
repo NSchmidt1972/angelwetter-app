@@ -1,6 +1,6 @@
 // <reference lib="webworker" />
 /* eslint-env serviceworker */
-/* global importScripts, __BUILD_INFO__ */
+/* global __BUILD_INFO__ */
 
 /* Legacy-Kompatibilitaet:
  * Root-/PWA-SW enthielt historisch OneSignal.
@@ -41,8 +41,17 @@ registerRoute(
 );
 
 // JS/CSS schnell + Hintergrund-Update
+function isOneSignalWorkerRequest(url) {
+  if (!url || typeof url.pathname !== 'string') return false;
+  if (url.pathname.startsWith('/push/onesignal/')) return true;
+  return /^\/OneSignalSDK/i.test(url.pathname);
+}
+
 registerRoute(
-  ({ request, url }) => request.destination === 'script' && url.origin === self.location.origin,
+  ({ request, url }) =>
+    request.destination === 'script' &&
+    url.origin === self.location.origin &&
+    !isOneSignalWorkerRequest(url),
   new StaleWhileRevalidate({ cacheName: 'app-scripts' })
 );
 registerRoute(

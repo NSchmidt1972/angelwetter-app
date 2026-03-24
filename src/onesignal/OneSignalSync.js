@@ -1,11 +1,17 @@
 import {
   ensureOneSignalInitialized,
+  getOneSignalRuntimeBlockReason,
   getPushStatusSnapshot,
+  isOneSignalEnabledForRuntime,
   syncCurrentSubscription,
 } from '@/onesignal/onesignalService';
 
 export const runOneSignalHealthCheck = async () => {
   try {
+    if (!isOneSignalEnabledForRuntime()) {
+      return { ok: false, error: getOneSignalRuntimeBlockReason() || 'runtime-disabled' };
+    }
+
     const OneSignal = await ensureOneSignalInitialized();
     const snapshot = await getPushStatusSnapshot(OneSignal);
 

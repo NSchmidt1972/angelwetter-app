@@ -1,11 +1,12 @@
 import { supabase } from "../supabaseClient";
 import { getDistanceKm } from "@/utils/geo";
 import { getActiveClubId } from "@/utils/clubId";
+import { fetchClubCoordinates } from "@/services/clubCoordinatesService";
 
 const DEFAULT_LAT = 51.3135;
 const DEFAULT_LON = 6.256;
 const MIN_DISTANCE_KM = 1.0;
-const CLUB_COORDS_CACHE_TTL_MS = 5 * 60 * 1000;
+const WEATHER_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const UX_TEST_MODE_ENABLED = import.meta.env.VITE_UX_TEST_MODE === "1";
 const UX_TEST_WEATHER = {
   current: {
@@ -19,72 +20,21 @@ const UX_TEST_WEATHER = {
   },
   daily: [{ moon_phase: 0.42 }],
 };
-const clubCoordsCache = new Map();
-const clubCoordsInFlight = new Map();
-
 function toNumberOrNull(value) {
   const num = typeof value === "number" ? value : Number(value);
   return Number.isFinite(num) ? num : null;
 }
 
-function isMissingClubWeatherCoordsError(error) {
-  const code = String(error?.code || "");
-  const message = String(error?.message || "").toLowerCase();
-  return code === "42703" && (message.includes("clubs.weather_lat") || message.includes("clubs.weather_lon"));
-}
-
-function readCachedClubCoords(clubId) {
-  const cached = clubCoordsCache.get(clubId);
-  if (!cached) return { hit: false, coords: null };
-  if (Date.now() - cached.fetchedAt > CLUB_COORDS_CACHE_TTL_MS) {
-    clubCoordsCache.delete(clubId);
-    return { hit: false, coords: null };
-  }
-  return { hit: true, coords: cached.coords };
-}
-
-function cacheClubCoords(clubId, coords) {
-  clubCoordsCache.set(clubId, {
-    coords,
-    fetchedAt: Date.now(),
-  });
-}
-
 async function loadClubWeatherCoords(clubId) {
   if (!clubId) return null;
-  const cached = readCachedClubCoords(clubId);
-  if (cached.hit) return cached.coords;
-  if (clubCoordsInFlight.has(clubId)) {
-    return clubCoordsInFlight.get(clubId);
-  }
-
-  const request = (async () => {
-    const { data, error } = await supabase
-      .from("clubs")
-      .select("weather_lat, weather_lon")
-      .eq("id", clubId)
-      .maybeSingle();
-
-    if (error) {
-      if (!isMissingClubWeatherCoordsError(error)) {
-        console.warn("[weatherService] Club-Wetterkoordinaten konnten nicht geladen werden:", error.message || error);
-      }
-      cacheClubCoords(clubId, null);
-      return null;
-    }
-
-    const lat = toNumberOrNull(data?.weather_lat);
-    const lon = toNumberOrNull(data?.weather_lon);
-    const coords = lat != null && lon != null ? { lat, lon } : null;
-    cacheClubCoords(clubId, coords);
-    return coords;
-  })()
-    .finally(() => {
-      clubCoordsInFlight.delete(clubId);
+  try {
+    return await fetchClubCoordinates(clubId, {
+      timeoutLabel: "weatherService Club-Koordinaten timeout",
     });
-
-  clubCoordsInFlight.set(clubId, request);
-  return request;
+  } catch (error) {
+    console.warn("[weatherService] Club-Wetterkoordinaten konnten nicht geladen werden:", error.message || error);
+    return null;
+  }
 }
 
 function resolveWeatherCoords(userCoords = null, fallbackCoords = null) {
@@ -111,12 +61,12 @@ export async function fetchWeather(userCoords = null, options = {}) {
     return UX_TEST_WEATHER;
   }
 
-  const activeClubId = getActiveClubId();
+  const activeClubId = options?.clubId ?? getActiveClubId();
   const clubFallbackCoords = await loadClubWeatherCoords(activeClubId);
   const fallbackCoords = options?.fallbackCoords ?? clubFallbackCoords;
   const coords = resolveWeatherCoords(userCoords, fallbackCoords);
   const { data, error } = await supabase.functions.invoke("weatherProxy", {
-    body: { lat: coords.lat, lon: coords.lon },
+    body: { lat: coords.lat, lon: coords.lon, clubId: activeClubId || null },
   });
 
   if (error) {
@@ -159,7 +109,10 @@ export async function getLatestWeather() {
     .limit(1)
     .maybeSingle();
 
-  if (error || !weatherRow?.data) {
+  const updatedAtMs = weatherRow?.updated_at ? new Date(weatherRow.updated_at).getTime() : NaN;
+  const isFresh = Number.isFinite(updatedAtMs) && (Date.now() - updatedAtMs <= WEATHER_CACHE_MAX_AGE_MS);
+
+  if (error || !weatherRow?.data || !isFresh) {
     const live = await fetchWeather(null);
     const { current, daily } = live || {};
     if (!current || !Array.isArray(daily)) throw error || new Error("No weather data");

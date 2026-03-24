@@ -62,7 +62,7 @@ export function useCatches(anglerName, onlyMine, options = {}) {
     setHasMore(true);
     setPage(0);
     setLoading(true);
-  }, [onlyMine, anglerName, filterSetting]);
+  }, [onlyMine, anglerName, filterSetting, clubCoords?.lat, clubCoords?.lon]);
 
   useEffect(() => {
     if (resumeTick === 0) return;

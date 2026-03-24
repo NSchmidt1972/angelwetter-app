@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '@/supabaseClient';
-import { getActiveClubId } from '@/utils/clubId';
+import { usePermissions } from '@/permissions/usePermissions';
+import { useClubCoordinates } from '@/hooks/useClubCoordinates';
 import ActivitySection from '@/features/boardOverview/components/ActivitySection';
 import MetricsSection from '@/features/boardOverview/components/MetricsSection';
 import FishTableSection from '@/features/boardOverview/components/FishTableSection';
@@ -32,9 +32,10 @@ import {
   normalizeRoleValue,
 } from '@/features/boardOverview/utils';
 import { PUBLIC_FROM } from '@/constants/visibility';
-import { withTimeout } from '@/utils/async';
 
 export default function BoardOverview() {
+  const { currentClub, loading: permissionsLoading } = usePermissions();
+  const currentClubId = currentClub?.id || null;
   const currentYear = new Date().getFullYear();
   const [profiles, setProfiles] = useState([]);
   const [whitelist, setWhitelist] = useState([]);
@@ -51,39 +52,14 @@ export default function BoardOverview() {
   const [activeSeasonalFish, setActiveSeasonalFish] = useState([]);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [activityRange, setActivityRange] = useState('30d');
-  const [clubCoords, setClubCoords] = useState(null);
-  const detailSectionRef = useRef(null);
-
-  const loadClubCoords = useCallback(async () => {
-    try {
-      const clubId = getActiveClubId();
-      if (!clubId) {
-        setClubCoords(null);
-        return;
-      }
-      const { data, error } = await withTimeout(
-        supabase
-          .from('clubs')
-          .select('weather_lat, weather_lon')
-          .eq('id', clubId)
-          .maybeSingle(),
-        10000,
-        'BoardOverview Club-Koordinaten timeout'
-      );
-      if (error) throw error;
-
-      const lat = Number(data?.weather_lat);
-      const lon = Number(data?.weather_lon);
-      setClubCoords(Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null);
-    } catch (error) {
-      setClubCoords(null);
+  const { clubCoords } = useClubCoordinates({
+    clubId: currentClubId,
+    timeoutLabel: 'BoardOverview Club-Koordinaten timeout',
+    onError: (error) => {
       console.warn('BoardOverview: Club-Koordinaten konnten nicht geladen werden.', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadClubCoords();
-  }, [loadClubCoords]);
+    },
+  });
+  const detailSectionRef = useRef(null);
 
   const availableYears = useMemo(() => {
     const years = new Set([currentYear]);
@@ -597,28 +573,43 @@ export default function BoardOverview() {
   }, [seasonalStats.legend]);
 
   const refreshProfiles = useCallback(async () => {
+    if (!currentClubId) {
+      setProfiles([]);
+      return;
+    }
     try {
-      const data = await fetchProfiles();
+      const data = await fetchProfiles(currentClubId);
       setProfiles(Array.isArray(data) ? data : []);
     } catch (error) {
       console.warn('Profile konnten nicht geladen werden.', error);
     }
-  }, []);
+  }, [currentClubId]);
 
   const refreshWhitelist = useCallback(async () => {
+    if (!currentClubId) {
+      setWhitelist([]);
+      return;
+    }
     try {
-      const data = await fetchWhitelist();
+      const data = await fetchWhitelist(currentClubId);
       setWhitelist(Array.isArray(data) ? data : []);
     } catch (error) {
       console.warn('Whitelist konnte nicht geladen werden.', error);
     }
-  }, []);
+  }, [currentClubId]);
 
   const refreshFishAggregates = useCallback(async () => {
+    if (!currentClubId) {
+      setActivityFishEntries([]);
+      setFishEntries([]);
+      setFishStatsError('');
+      setFishStatsLoading(false);
+      return;
+    }
     setFishStatsLoading(true);
     setFishStatsError('');
     try {
-      const data = await fetchFishAggregates();
+      const data = await fetchFishAggregates(currentClubId);
       const publicFromAnalysisTs = PUBLIC_FROM.getTime();
       const items = Array.isArray(data) ? data : [];
 
@@ -654,27 +645,34 @@ export default function BoardOverview() {
     } finally {
       setFishStatsLoading(false);
     }
-  }, [clubCoords]);
+  }, [clubCoords, currentClubId]);
 
   const refreshCrayfish = useCallback(async () => {
+    if (!currentClubId) {
+      setCrayfishEntries([]);
+      setCrayfishError('');
+      setCrayfishLoading(false);
+      return;
+    }
     setCrayfishLoading(true);
     setCrayfishError('');
     try {
-      const data = await fetchCrayfishCatches();
+      const data = await fetchCrayfishCatches(currentClubId);
       setCrayfishEntries(Array.isArray(data) ? data : []);
     } catch (error) {
       setCrayfishError(error.message || 'Krebsdaten konnten nicht geladen werden.');
     } finally {
       setCrayfishLoading(false);
     }
-  }, []);
+  }, [currentClubId]);
 
   useEffect(() => {
+    if (permissionsLoading) return;
     refreshProfiles();
     refreshWhitelist();
     refreshFishAggregates();
     refreshCrayfish();
-  }, [refreshProfiles, refreshWhitelist, refreshFishAggregates, refreshCrayfish]);
+  }, [permissionsLoading, refreshProfiles, refreshWhitelist, refreshFishAggregates, refreshCrayfish]);
 
   useEffect(() => {
     if (!selectedFishDetail) return;

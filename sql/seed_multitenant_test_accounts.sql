@@ -7,15 +7,24 @@
 -- Voraussetzung:
 -- Die Testnutzer existieren bereits in auth.users (z. B. per normalem Signup oder im Auth-Dashboard).
 
--- Club-IDs aus dem Seed:
--- Club A: asv-rotauge  -> 00000000-0000-0000-0000-000000000001
--- Club B: demo-club    -> 00000000-0000-0000-0000-000000000002
+-- Club-IDs werden dynamisch über die Slugs aufgelöst.
 
 -- 0) Whitelist für Signup in beiden Clubs
+with club_map as (
+  select slug, id
+  from public.clubs
+  where slug in ('asv-rotauge', 'demo-club')
+)
 insert into public.whitelist_emails (club_id, email)
-values
-  ('00000000-0000-0000-0000-000000000001', 'nicol@schmidt-2006.de'),
-  ('00000000-0000-0000-0000-000000000002', 'blackberry@schmidt-2006.de')
+select
+  cm.id as club_id,
+  src.email
+from (
+  values
+    ('asv-rotauge', 'nicol@schmidt-2006.de'),
+    ('demo-club', 'blackberry@schmidt-2006.de')
+) as src(club_slug, email)
+join club_map cm on cm.slug = src.club_slug
 on conflict (email, club_id) do nothing;
 
 -- 1) Mapping per E-Mail -> roles/memberships/profiles setzen
@@ -24,15 +33,16 @@ do $$
 declare
   rec record;
   v_user_id uuid;
+  v_club_id uuid;
 begin
   for rec in
     select *
     from (
       values
-        -- email,                    display_name,    club_id,                                      role,        is_active, is_superadmin
-        ('nicol@schmidt-2006.de',    'Nicol Schmidt', '00000000-0000-0000-0000-000000000001'::uuid, 'admin',     true,      true),
-        ('blackberry@schmidt-2006.de', 'Blackberry',  '00000000-0000-0000-0000-000000000002'::uuid, 'admin',     true,      false)
-    ) as t(email, display_name, club_id, role, is_active, is_superadmin)
+        -- email,                      display_name,     club_slug,     role,    is_active, is_superadmin
+        ('nicol@schmidt-2006.de',      'Nicol Schmidt',  'asv-rotauge', 'admin', true,      true),
+        ('blackberry@schmidt-2006.de', 'Blackberry',     'demo-club',   'admin', true,      false)
+    ) as t(email, display_name, club_slug, role, is_active, is_superadmin)
   loop
     select u.id
       into v_user_id
@@ -45,8 +55,19 @@ begin
       continue;
     end if;
 
+    select c.id
+      into v_club_id
+      from public.clubs c
+     where c.slug = rec.club_slug
+     limit 1;
+
+    if v_club_id is null then
+      raise notice 'Club fehlt: % (bitte zuerst in public.clubs anlegen).', rec.club_slug;
+      continue;
+    end if;
+
     insert into public.profiles (id, club_id, name, role)
-    values (v_user_id, rec.club_id, rec.display_name, rec.role)
+    values (v_user_id, v_club_id, rec.display_name, rec.role)
     on conflict (id, club_id)
     do update set
       name = excluded.name,
@@ -54,7 +75,7 @@ begin
       updated_at = timezone('utc', now());
 
     insert into public.memberships (user_id, club_id, role, is_active)
-    values (v_user_id, rec.club_id, rec.role, rec.is_active)
+    values (v_user_id, v_club_id, rec.role, rec.is_active)
     on conflict (user_id, club_id)
     do update set
       role = excluded.role,

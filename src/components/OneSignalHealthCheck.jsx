@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import usePushStatus from '@/hooks/usePushStatus';
+import { SERVICE_WORKER_INFO, waitForServiceWorkerRegistration } from '@/onesignal/swHelpers';
 
 export default function OneSignalHealthCheck() {
   const {
@@ -16,6 +18,37 @@ export default function OneSignalHealthCheck() {
   const sdkLoaded = Boolean(sdk);
   const permissionGranted = permissionState === 'granted';
   const isPushEnabled = !!(supported && permissionGranted && optedIn && subId);
+  const [workerState, setWorkerState] = useState({
+    loading: true,
+    scope: null,
+    scriptUrl: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const registration = await waitForServiceWorkerRegistration({ timeoutMs: 6000, cleanupLegacy: true });
+        if (cancelled) return;
+        setWorkerState({
+          loading: false,
+          scope: registration?.scope || null,
+          scriptUrl:
+            registration?.active?.scriptURL ||
+            registration?.waiting?.scriptURL ||
+            registration?.installing?.scriptURL ||
+            null,
+        });
+      } catch {
+        if (cancelled) return;
+        setWorkerState({ loading: false, scope: null, scriptUrl: null });
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow max-w-xl mx-auto mt-6 text-gray-800 dark:text-gray-100">
@@ -27,6 +60,9 @@ export default function OneSignalHealthCheck() {
         <li>📬 Opt-in (Abo-Status): <b>{optedIn == null ? '…' : optedIn ? '✅' : '❌'}</b></li>
         <li>🆔 Subscription-ID: <b className="break-all">{subId || '—'}</b></li>
         <li>🔔 Push aktiviert (gesamt): <b>{isPushEnabled ? '✅' : '❌'}</b></li>
+        <li>🧱 OneSignal-SW Scope (erwartet): <b className="break-all">{SERVICE_WORKER_INFO.scope}</b></li>
+        <li>⚙️ OneSignal-SW Scope (aktiv): <b className="break-all">{workerState.loading ? '…' : workerState.scope || '—'}</b></li>
+        <li>📄 OneSignal-SW Script: <b className="break-all">{workerState.loading ? '…' : workerState.scriptUrl || '—'}</b></li>
       </ul>
 
       {error ? <p className="mt-3 text-sm text-red-600 dark:text-red-400">❌ {error}</p> : null}

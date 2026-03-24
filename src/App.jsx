@@ -5,11 +5,12 @@ import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabaseClient';
 import AppRoutes from '@/AppRoutes';
 import { useAppResumeTick } from '@/hooks/useAppResumeTick';
-import { getActiveClubId, setActiveClubId } from '@/utils/clubId';
+import { getActiveClubId, setActiveClubId, syncActiveClubSlugFromPathname } from '@/utils/clubId';
 import { withTimeout } from '@/utils/async';
 import { debugLog } from '@/utils/runtimeDebug';
 import { PermissionProvider } from '@/permissions/PermissionContext';
 import { usePermissions } from '@/permissions/usePermissions';
+import { applyDynamicManifestForPath } from '@/utils/pwaManifest';
 import '@/index.css';
 
 const PROFILE_CACHE_KEY = 'angelwetter_profile_cache_v2';
@@ -31,6 +32,7 @@ const STATIC_NON_CLUB_SEGMENTS = new Set([
   'reset-done',
   'auth-verified',
   'forgot-password',
+  'push',
   'superadmin',
   '__ux',
 ]);
@@ -159,6 +161,11 @@ function AppContent() {
   const isPublicLightweightRoute = !isLoggedIn && isPublicRoutePath(location.pathname);
   const isClubScopedRoute = isClubScopedPath(location.pathname);
   const isUxRoute = location.pathname.split('/').filter(Boolean)[0] === '__ux';
+
+  useEffect(() => {
+    syncActiveClubSlugFromPathname(location.pathname);
+    applyDynamicManifestForPath(location.pathname);
+  }, [location.pathname]);
 
   // Splash kurz anzeigen
   useEffect(() => {
@@ -313,6 +320,7 @@ function AppContent() {
       'reset-done',
       'auth-verified',
       'forgot-password',
+      'push',
       'superadmin',
       '__ux',
     ]);

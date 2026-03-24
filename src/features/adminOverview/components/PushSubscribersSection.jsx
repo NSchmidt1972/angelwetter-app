@@ -6,6 +6,8 @@ export default function PushSubscribersSection({
   listItemClass,
   fallbackTextClass,
   metaTextClass,
+  collapsible = false,
+  defaultOpen = true,
 }) {
   const totalPushSubscriptions = pushDeviceSummary.reduce((sum, entry) => sum + entry.total, 0);
   const activePushSubscriptions = pushDeviceSummary.reduce((sum, entry) => sum + entry.active, 0);
@@ -17,7 +19,12 @@ export default function PushSubscribersSection({
   const deviceGroupCount = pushDeviceSummary.length;
 
   return (
-    <OverviewSection title="📣 Push-Abonnenten" value={pushSectionLabel}>
+    <OverviewSection
+      title="📣 Push-Abonnenten"
+      value={pushSectionLabel}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
+    >
       {pushByAngler.length > 0 || pushDeviceSummary.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2">
           <div>

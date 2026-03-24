@@ -16,7 +16,7 @@ export default function Home() {
     description: 'Angelwetter Dashboard mit aktuellen Wetterdaten, Fangübersicht und Vereinsinformationen.',
   });
 
-  const { weather, loading, error, refresh } = useWeatherCache();
+  const { weather, loading, error } = useWeatherCache();
   const resumeTick = useAppResumeTick({ enabled: true });
   const { hasAtLeastRole } = usePermissions();
   const [waterTemperature, setWaterTemperature] = useState(null);
@@ -78,7 +78,6 @@ export default function Home() {
         <WeatherNow
           data={weatherData}
           loading={loading}
-          onRefresh={() => refresh()}
           waterTemperature={waterTemperature}
           waterTemperatureHistory={waterTemperatureHistory}
           waterTemperatureLoading={waterTemperatureLoading}

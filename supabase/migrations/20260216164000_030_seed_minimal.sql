@@ -1,5 +1,6 @@
 -- Minimal seed for staging bootstrapping
--- NOTE: Keep deterministic IDs to match existing frontend fallback config.
+-- NOTE: Uses legacy deterministic IDs for bootstrap compatibility.
+-- A later migration rotates these IDs to generated UUIDs.
 
 insert into public.clubs (id, slug, name, host, is_active)
 values
