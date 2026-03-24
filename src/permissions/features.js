@@ -9,6 +9,7 @@ export const FEATURES = Object.freeze({
   ADMIN_TOOLS: 'admin_tools',
   CATCH_LOGGING: 'catch_logging',
   WEATHER: 'weather',
+  WATER_TEMPERATURE: 'water_temperature',
 });
 
 export const FEATURE_KEYS = Object.freeze(Object.values(FEATURES));
@@ -22,6 +23,7 @@ export const FEATURE_DEFAULTS = Object.freeze({
   [FEATURES.ADMIN_TOOLS]: false,
   [FEATURES.CATCH_LOGGING]: false,
   [FEATURES.WEATHER]: false,
+  [FEATURES.WATER_TEMPERATURE]: false,
 });
 
 export const FEATURE_MIN_ROLE = Object.freeze({

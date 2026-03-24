@@ -21,6 +21,15 @@ function isFishInYear(fishEntry, year) {
   return ts.getFullYear() === year;
 }
 
+function readWaterTemp(entry) {
+  const raw = entry?.weather?.water_temp
+    ?? entry?.weather?.water_temperature
+    ?? entry?.weather?.waterTemp
+    ?? null;
+  const value = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
 export default function useAnalysisData({ anglerName }) {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [filterSetting] = useLocalStorageValue('dataFilter', 'recent');
@@ -196,6 +205,13 @@ export default function useAnalysisData({ anglerName }) {
     }),
     {}
   );
+  const waterTempStats = weatherValidFishes.reduce(
+    statsReducer((fishEntry) => {
+      const t = readWaterTemp(fishEntry);
+      return t != null ? `${Math.floor(t / 2) * 2}–${Math.floor(t / 2) * 2 + 2} °C` : null;
+    }),
+    {}
+  );
   const pressureStats = weatherValidFishes.reduce(
     statsReducer((fishEntry) => {
       const p = fishEntry.weather?.pressure;
@@ -244,6 +260,10 @@ export default function useAnalysisData({ anglerName }) {
   const activeKeys = {
     time: nowLabel,
     temp: findMatchingKey(weatherNow?.current?.temp, tempStats),
+    waterTemp: findMatchingKey(
+      readWaterTemp({ weather: weatherNow?.current || null }),
+      waterTempStats
+    ),
     pressure: findMatchingKey(weatherNow?.current?.pressure, pressureStats),
     wind: findMatchingKey(weatherNow?.current?.wind_speed, windStats),
     windDir: weatherNow?.current?.wind_deg != null ? windDirection(weatherNow.current.wind_deg) : null,
@@ -273,6 +293,7 @@ export default function useAnalysisData({ anglerName }) {
     yearTotalCount,
     fishOptions,
     tempStats,
+    waterTempStats,
     pressureStats,
     windStats,
     windDirStats,

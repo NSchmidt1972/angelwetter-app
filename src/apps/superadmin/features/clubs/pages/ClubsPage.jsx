@@ -26,7 +26,16 @@ const CLUB_DEFAULT_FEATURES = Object.freeze({
   [FEATURES.ANALYSIS]: true,
   [FEATURES.PUSH]: false,
   [FEATURES.ADMIN_TOOLS]: true,
+  [FEATURES.WATER_TEMPERATURE]: false,
 });
+
+const WATER_TEMPERATURE_ROLE_DEFAULTS = Object.freeze([
+  { role: 'gast', enabled: false },
+  { role: 'mitglied', enabled: false },
+  { role: 'tester', enabled: false },
+  { role: 'vorstand', enabled: true },
+  { role: 'admin', enabled: true },
+]);
 
 async function fallbackCreateClub({ slug, name, host, isActive }) {
   let clubInsert = null;
@@ -69,6 +78,17 @@ async function fallbackCreateClub({ slug, name, host, isActive }) {
     onConflict: 'club_id,feature_key',
   });
   if (featureError) throw featureError;
+
+  const roleRows = WATER_TEMPERATURE_ROLE_DEFAULTS.map((row) => ({
+    club_id: clubInsert.id,
+    role: row.role,
+    feature_key: FEATURES.WATER_TEMPERATURE,
+    enabled: row.enabled,
+  }));
+  const { error: roleFeatureError } = await supabase.from('club_role_features').upsert(roleRows, {
+    onConflict: 'club_id,role,feature_key',
+  });
+  if (roleFeatureError) throw roleFeatureError;
 
   return clubInsert.id;
 }

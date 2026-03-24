@@ -26,6 +26,7 @@ export const FEATURE_LABELS = Object.freeze({
   [FEATURES.ANALYSIS]: 'Analyse',
   [FEATURES.PUSH]: 'Push',
   [FEATURES.ADMIN_TOOLS]: 'Admin-Tools',
+  [FEATURES.WATER_TEMPERATURE]: 'Wassertemperatur',
 });
 
 export function buildFeatureState(rows) {

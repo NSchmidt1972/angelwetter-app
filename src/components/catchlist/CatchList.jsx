@@ -22,8 +22,32 @@ import { formatLocationLabel, isHomeWaterEntry } from '@/utils/location';
 import { withTimeout } from '@/utils/async';
 import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
 import { isTrustedAngler } from '@/utils/visibilityPolicy';
+import { usePermissions } from '@/permissions/usePermissions';
+import { FEATURES } from '@/permissions/features';
+
+function readWaterTemp(entry) {
+  const raw = entry?.weather?.water_temp
+    ?? entry?.weather?.water_temperature
+    ?? entry?.weather?.waterTemp
+    ?? null;
+  const value = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function readWaterTempMeasuredAt(entry) {
+  const raw = entry?.weather?.water_temp_measured_at
+    ?? entry?.weather?.waterTemperatureMeasuredAt
+    ?? entry?.weather?.waterTempMeasuredAt
+    ?? null;
+  if (!raw) return '';
+  const asDate = new Date(raw);
+  if (Number.isNaN(asDate.getTime())) return '';
+  return asDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
 
 export default function CatchList({ anglerName }) {
+  const { hasFeatureForRole } = usePermissions();
+  const canSeeWaterTemperature = hasFeatureForRole(FEATURES.WATER_TEMPERATURE);
   const resumeTick = useAppResumeTick({ enabled: true });
   const [onlyMine, setOnlyMine] = useState(false);
   const [topBadges, setTopBadges] = useState({});
@@ -376,6 +400,8 @@ export default function CatchList({ anglerName }) {
             const isSharedExternal = entry.share_public_non_home === true;
             const visibilityPending = isVisibilityPending(entry.id);
             const locationLabel = formatLocationLabel(entry.location_name);
+            const waterTemp = canSeeWaterTemperature ? readWaterTemp(entry) : null;
+            const waterTempMeasuredAt = canSeeWaterTemperature ? readWaterTempMeasuredAt(entry) : '';
 
             return (
               <li
@@ -592,6 +618,12 @@ export default function CatchList({ anglerName }) {
                           💦 {entry.weather.humidity}% • 🧪 {entry.weather.pressure}{' '}
                           hPa
                         </p>
+                        {waterTemp != null && (
+                          <p>
+                            🌊 {waterTemp.toFixed(1)} °C
+                            {waterTempMeasuredAt ? ` • gemessen ${waterTempMeasuredAt} Uhr` : ''}
+                          </p>
+                        )}
                         <p>{getMoonDescription(entry.weather.moon_phase)}</p>
                       </div>
                     </div>

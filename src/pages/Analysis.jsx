@@ -6,8 +6,12 @@ import WeatherFishFilter from '@/features/analysis/components/WeatherFishFilter'
 import YearMonthOverview from '@/features/analysis/components/YearMonthOverview';
 import useAnalysisData from '@/features/analysis/hooks/useAnalysisData';
 import { ANALYSIS_YEAR_FILTER_ALL, MONTH_NAMES } from '@/features/analysis/utils';
+import { usePermissions } from '@/permissions/usePermissions';
+import { FEATURES } from '@/permissions/features';
 
 export default function Analysis({ anglerName }) {
+  const { hasFeatureForRole } = usePermissions();
+  const canSeeWaterTemperature = hasFeatureForRole(FEATURES.WATER_TEMPERATURE);
   const {
     selectedYear,
     setSelectedYear,
@@ -25,6 +29,7 @@ export default function Analysis({ anglerName }) {
     yearTotalCount,
     fishOptions,
     tempStats,
+    waterTempStats,
     pressureStats,
     windStats,
     windDirStats,
@@ -109,6 +114,9 @@ export default function Analysis({ anglerName }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-6">
         <StatListCard title="🌡 Temperaturbereiche" stats={tempStats} activeKey={activeKeys.temp} descIconMap={descIconMap} />
+        {canSeeWaterTemperature && (
+          <StatListCard title="🌊 Wassertemperatur" stats={waterTempStats} activeKey={activeKeys.waterTemp} descIconMap={descIconMap} />
+        )}
         <StatListCard title="🧪 Luftdruck" stats={pressureStats} activeKey={activeKeys.pressure} descIconMap={descIconMap} />
         <StatListCard title="💨 Windstärken" stats={windStats} activeKey={activeKeys.wind} descIconMap={descIconMap} />
         <StatListCard title="🧭 Windrichtungen" stats={windDirStats} activeKey={activeKeys.windDir} descIconMap={descIconMap} />

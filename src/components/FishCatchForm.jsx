@@ -12,6 +12,7 @@ import { getActiveClubId } from "@/utils/clubId";
 // Services
 import { processAndUploadImage } from "@/services/imageProcessing";
 import { loadWeatherForPosition } from "@/services/weatherService";
+import { fetchLatestWaterTemperature } from "@/services/waterTemperatureService";
 import { saveBlankDay } from "@/services/blankService";
 import { saveCatchEntry } from "@/services/catchService";
 import { fetchFishRegionCatalog } from "@/services/fishRegionsService";
@@ -230,6 +231,27 @@ export default function FishCatchForm({
 
       // Ort (best-effort)
       const locationName = await reverseGeocode(position?.lat, position?.lon).catch(() => null);
+
+      const isHomeWaterRegion = typeof region === "string" && region.toLowerCase() === "ferkensbruch";
+      if (isHomeWaterRegion) {
+        try {
+          const latestWaterTemperature = await fetchLatestWaterTemperature({ days: 2 });
+          const waterTempRaw = latestWaterTemperature?.temperature_c;
+          const waterTempValue = typeof waterTempRaw === "number" ? waterTempRaw : Number(waterTempRaw);
+          if (Number.isFinite(waterTempValue)) {
+            currentWeather = {
+              ...currentWeather,
+              water_temp: Math.round(waterTempValue * 10) / 10,
+              water_temp_measured_at: latestWaterTemperature?.measured_at || null,
+            };
+          }
+        } catch (waterTempError) {
+          console.warn(
+            "⚠️ Wassertemperatur konnte nicht geladen werden, speichere Fang ohne Wassertemperatur:",
+            waterTempError?.message || waterTempError
+          );
+        }
+      }
 
       // Zahlen robust parsen
       const sizeNumber = parseFloatLocale(size);
