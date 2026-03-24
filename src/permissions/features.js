@@ -30,8 +30,18 @@ export const FEATURE_MIN_ROLE = Object.freeze({
   [FEATURES.ADMIN_TOOLS]: ROLES.BOARD,
 });
 
+const ROLE_FEATURE_DEFAULTS = Object.freeze({
+  [FEATURES.WATER_TEMPERATURE]: false,
+});
+
 export function isFeatureKey(value) {
   return FEATURE_KEYS.includes(value);
+}
+
+export function getRoleFeatureDefaultEnabled(featureKey) {
+  if (!isFeatureKey(featureKey)) return true;
+  const explicitDefault = ROLE_FEATURE_DEFAULTS[featureKey];
+  return typeof explicitDefault === 'boolean' ? explicitDefault : true;
 }
 
 export function createInitialFeatureMap() {

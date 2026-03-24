@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui';
 import { supabase } from '@/supabaseClient';
 import { usePermissions } from '@/permissions/usePermissions';
-import { FEATURES, FEATURE_KEYS, createInitialFeatureMap } from '@/permissions/features';
+import {
+  FEATURES,
+  FEATURE_KEYS,
+  createInitialFeatureMap,
+  getRoleFeatureDefaultEnabled,
+} from '@/permissions/features';
 import { ROLES } from '@/permissions/roles';
 
 const ROLE_COLUMNS = [ROLES.GUEST, ROLES.MEMBER, ROLES.TESTER, ROLES.BOARD, ROLES.ADMIN];
@@ -273,7 +278,10 @@ export default function AdminPermissionsPage() {
                   {ROLE_COLUMNS.map((role) => {
                     const key = `role:${role}:${row.featureKey}`;
                     const overrideValue = roleFeatures?.[role]?.[row.featureKey];
-                    const enabled = typeof overrideValue === 'boolean' ? overrideValue : true;
+                    const enabled =
+                      typeof overrideValue === 'boolean'
+                        ? overrideValue
+                        : getRoleFeatureDefaultEnabled(row.featureKey);
                     return (
                       <td key={key} className="px-3 py-2 text-center">
                         <input

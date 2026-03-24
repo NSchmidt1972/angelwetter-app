@@ -9,6 +9,7 @@ import {
   createLegacyFeatureMap,
   FEATURE_KEYS,
   FEATURE_MIN_ROLE,
+  getRoleFeatureDefaultEnabled,
   isFeatureKey,
 } from '@/permissions/features';
 import { ROLES, getRoleLevel, isRoleAtLeast, normalizeRole } from '@/permissions/roles';
@@ -476,7 +477,8 @@ export function PermissionProvider({ children }) {
       if (normalizedRole === ROLES.INACTIVE) return false;
 
       const overrideValue = state.roleFeatures?.[normalizedRole]?.[featureKey];
-      const enabledByRoleOverride = typeof overrideValue === 'boolean' ? overrideValue : true;
+      const enabledByRoleOverride =
+        typeof overrideValue === 'boolean' ? overrideValue : getRoleFeatureDefaultEnabled(featureKey);
       if (!enabledByRoleOverride) return false;
 
       const requiredMinRole = FEATURE_MIN_ROLE[featureKey];

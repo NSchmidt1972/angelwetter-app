@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card } from '@/components/ui';
 import { supabase } from '@/supabaseClient';
-import { FEATURE_KEYS, createInitialFeatureMap } from '@/permissions/features';
+import {
+  FEATURE_KEYS,
+  createInitialFeatureMap,
+  getRoleFeatureDefaultEnabled,
+} from '@/permissions/features';
 import { ROLES } from '@/permissions/roles';
 import { useSuperAdminHeaderTitle } from '@/apps/superadmin/context/headerTitleContext';
 import AdminOverview from '@/pages/AdminOverview';
@@ -882,7 +886,10 @@ export default function ClubDetailPage() {
                     <td className="px-3 py-2">{row.label}</td>
                     {ROLE_COLUMNS.map((role) => {
                       const overrideValue = roleFeatures?.[role]?.[row.featureKey];
-                      const enabled = typeof overrideValue === 'boolean' ? overrideValue : true;
+                      const enabled =
+                        typeof overrideValue === 'boolean'
+                          ? overrideValue
+                          : getRoleFeatureDefaultEnabled(row.featureKey);
                       return (
                         <td key={`${role}:${row.featureKey}`} className="px-3 py-2 text-center">
                           <input
