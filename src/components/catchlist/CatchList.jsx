@@ -622,10 +622,15 @@ export default function CatchList({ anglerName }) {
                           hPa
                         </p>
                         {waterTemp != null && (
-                          <p>
-                            🌊 {waterTemp.toFixed(1)} °C
-                            {waterTempMeasuredAt ? ` • gemessen ${waterTempMeasuredAt} Uhr` : ''}
-                          </p>
+                          <div className="mt-1 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-cyan-200 bg-cyan-50 px-2 py-1 text-cyan-900 dark:border-cyan-800/70 dark:bg-cyan-950/40 dark:text-cyan-100">
+                            <span className="font-semibold">🌊 Wassertemperatur</span>
+                            <span className="text-base font-semibold">{waterTemp.toFixed(1)} °C</span>
+                            {waterTempMeasuredAt ? (
+                              <span className="text-xs text-cyan-700 dark:text-cyan-300">
+                                gemessen {waterTempMeasuredAt} Uhr
+                              </span>
+                            ) : null}
+                          </div>
                         )}
                         <p>{getMoonDescription(entry.weather.moon_phase)}</p>
                       </div>
