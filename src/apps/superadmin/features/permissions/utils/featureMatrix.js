@@ -39,6 +39,23 @@ export function buildFeatureState(rows) {
   return base;
 }
 
+export function buildFeatureEnabledFromDateState(rows) {
+  const base = FEATURE_KEYS.reduce((acc, key) => {
+    acc[key] = null;
+    return acc;
+  }, {});
+
+  (rows || []).forEach((row) => {
+    const key = String(row?.feature_key || '').trim().toLowerCase();
+    if (!FEATURE_KEYS.includes(key)) return;
+    const raw = row?.enabled_from_date;
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    base[key] = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+  });
+
+  return base;
+}
+
 export function buildRoleFeatureState(rows, roleColumns = ROLE_COLUMNS) {
   return (rows || []).reduce((acc, row) => {
     const role = String(row?.role || '').trim().toLowerCase();

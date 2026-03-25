@@ -25,6 +25,7 @@ import {
   ROLE_OPTIONS,
   FEATURE_LABELS,
   buildFeatureState,
+  buildFeatureEnabledFromDateState,
   buildRoleFeatureState,
 } from '@/apps/superadmin/features/permissions/utils/featureMatrix';
 import { formatDateTime } from '@/utils/dateUtils';
@@ -44,6 +45,11 @@ function toNonNegativeNumber(value) {
   return Math.max(0, parsed);
 }
 
+function normalizeEnabledFromDate(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
 export default function ClubDetailPage() {
   const setSuperAdminHeaderTitle = useSuperAdminHeaderTitle();
   const { clubId } = useParams();
@@ -59,6 +65,7 @@ export default function ClubDetailPage() {
   const [logoFilePreviewUrl, setLogoFilePreviewUrl] = useState('');
   const logoFileInputRef = useRef(null);
   const [clubFeatures, setClubFeatures] = useState(createInitialFeatureMap());
+  const [clubFeatureEnabledFromDates, setClubFeatureEnabledFromDates] = useState({});
   const [roleFeatures, setRoleFeatures] = useState({});
   const [whitelist, setWhitelist] = useState([]);
   const [whitelistBusy, setWhitelistBusy] = useState(false);
@@ -80,8 +87,9 @@ export default function ClubDetailPage() {
       featureKey,
       label: FEATURE_LABELS[featureKey] || featureKey,
       enabled: Boolean(clubFeatures[featureKey]),
+      enabledFromDate: normalizeEnabledFromDate(clubFeatureEnabledFromDates?.[featureKey]),
     })),
-    [clubFeatures],
+    [clubFeatures, clubFeatureEnabledFromDates],
   );
   const normalizedFeatureSearch = String(featureSearch || '').trim().toLowerCase();
   const visibleRows = useMemo(
@@ -160,7 +168,7 @@ export default function ClubDetailPage() {
       const [featureResult, roleFeatureResult, whitelistResult, metricsResult] = await Promise.all([
         supabase
           .from('club_features')
-          .select('feature_key, enabled')
+          .select('feature_key, enabled, enabled_from_date')
           .eq('club_id', clubId),
         supabase
           .from('club_role_features')
@@ -193,6 +201,7 @@ export default function ClubDetailPage() {
         clubResult.data ? normalizeClubWithSchemaSupport(clubResult.data, selectMeta) : null,
       );
       setClubFeatures(buildFeatureState(featureResult.data || []));
+      setClubFeatureEnabledFromDates(buildFeatureEnabledFromDateState(featureResult.data || []));
       setRoleFeatures(buildRoleFeatureState(roleFeatureResult.data || []));
       setWhitelist(whitelistResult.data || []);
 
@@ -373,6 +382,7 @@ export default function ClubDetailPage() {
   const toggleClubFeature = async (featureKey, enabled) => {
     if (!club?.id) return;
     const previous = clubFeatures;
+    const enabledFromDate = normalizeEnabledFromDate(clubFeatureEnabledFromDates?.[featureKey]);
     setClubFeatures((prev) => ({ ...prev, [featureKey]: enabled }));
     setError('');
     setMessage('');
@@ -382,6 +392,7 @@ export default function ClubDetailPage() {
           club_id: club.id,
           feature_key: featureKey,
           enabled,
+          enabled_from_date: enabledFromDate,
         },
         { onConflict: 'club_id,feature_key' },
       );
@@ -390,6 +401,32 @@ export default function ClubDetailPage() {
     } catch (err) {
       setClubFeatures(previous);
       setError(err?.message || 'Feature konnte nicht gespeichert werden.');
+    }
+  };
+
+  const updateFeatureEnabledFromDate = async (featureKey, nextDateRaw) => {
+    if (!club?.id) return;
+    const previous = clubFeatureEnabledFromDates;
+    const normalizedDate = normalizeEnabledFromDate(nextDateRaw);
+    setClubFeatureEnabledFromDates((prev) => ({ ...prev, [featureKey]: normalizedDate }));
+    setError('');
+    setMessage('');
+
+    try {
+      const { error: upsertError } = await supabase.from('club_features').upsert(
+        {
+          club_id: club.id,
+          feature_key: featureKey,
+          enabled: Boolean(clubFeatures?.[featureKey]),
+          enabled_from_date: normalizedDate,
+        },
+        { onConflict: 'club_id,feature_key' },
+      );
+      if (upsertError) throw upsertError;
+      setMessage('Feature-Datum gespeichert.');
+    } catch (err) {
+      setClubFeatureEnabledFromDates(previous);
+      setError(err?.message || 'Feature-Datum konnte nicht gespeichert werden.');
     }
   };
 
@@ -843,21 +880,43 @@ export default function ClubDetailPage() {
               </div>
             ) : (
               visibleRows.map((row) => (
-                <label
+                <div
                   key={row.featureKey}
-                  className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 dark:border-gray-700"
+                  className="flex flex-col gap-2 rounded border border-gray-200 px-3 py-2 dark:border-gray-700"
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate">{row.label}</span>
-                    <span className="block text-xs text-gray-500 dark:text-gray-400">{row.featureKey}</span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={row.enabled}
-                    onChange={(event) => toggleClubFeature(row.featureKey, event.target.checked)}
-                    className="h-4 w-4"
-                  />
-                </label>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate">{row.label}</span>
+                      <span className="block text-xs text-gray-500 dark:text-gray-400">{row.featureKey}</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={row.enabled}
+                      onChange={(event) => toggleClubFeature(row.featureKey, event.target.checked)}
+                      className="h-4 w-4"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-600 dark:text-gray-300">
+                      Aktiv ab
+                    </label>
+                    <input
+                      type="date"
+                      value={row.enabledFromDate || ''}
+                      onChange={(event) => void updateFeatureEnabledFromDate(row.featureKey, event.target.value)}
+                      className="rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-700 dark:bg-gray-900"
+                    />
+                    {row.enabledFromDate ? (
+                      <button
+                        type="button"
+                        onClick={() => void updateFeatureEnabledFromDate(row.featureKey, '')}
+                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                      >
+                        Sofort
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
               ))
             )}
           </div>

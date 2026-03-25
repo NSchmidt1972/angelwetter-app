@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatDateTime } from '@/utils/dateUtils';
 import {
@@ -15,6 +15,25 @@ function hasMultipleAnglers(entries) {
     if (normalized) anglers.add(normalized);
   });
   return anglers.size > 1;
+}
+
+function formatNumber(value, digits = 2) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed.toFixed(digits);
+}
+
+function formatGpsValue(gps) {
+  const lat = formatNumber(gps?.lat, 5);
+  const lon = formatNumber(gps?.lon, 5);
+  if (lat == null || lon == null) return 'Keine Koordinaten';
+  if (Number(lat) === 0 && Number(lon) === 0) return 'Keine Koordinaten';
+  return `${lat}, ${lon}`;
+}
+
+function formatSensorTimestamp(primaryValue, fallbackValue) {
+  const timestamp = primaryValue || fallbackValue || null;
+  return timestamp ? formatDateTime(timestamp) : '—';
 }
 
 function ActivityTile({ title, activity, emptyLabel, showFish = false, onOpenPopup }) {
@@ -57,9 +76,34 @@ export default function ClubCardsGrid({
   stats,
   supportsWeatherMetrics,
   latestClubActivityByClub,
+  waterbodySensorAssignments,
+  sensorTelemetryByDevice,
 }) {
   const navigate = useNavigate();
   const [popupData, setPopupData] = useState(null);
+  const sensorRowsByClub = useMemo(() => {
+    const byClub = new Map();
+    (Array.isArray(waterbodySensorAssignments) ? waterbodySensorAssignments : []).forEach((row) => {
+      const clubId = row?.club_id;
+      const deviceId = String(row?.device_id || '').trim();
+      if (!clubId || !deviceId) return;
+      const waterbodyName = String(row?.waterbody_name || '').trim() || 'Unbekanntes Gewässer';
+      if (!byClub.has(clubId)) byClub.set(clubId, []);
+      byClub.get(clubId).push({
+        device_id: deviceId,
+        waterbody_name: waterbodyName,
+      });
+    });
+
+    byClub.forEach((rows) => {
+      rows.sort(
+        (left, right) =>
+          left.waterbody_name.localeCompare(right.waterbody_name, 'de', { sensitivity: 'base' })
+          || left.device_id.localeCompare(right.device_id, 'de', { sensitivity: 'base' }),
+      );
+    });
+    return byClub;
+  }, [waterbodySensorAssignments]);
 
   useEffect(() => {
     if (!popupData) return undefined;
@@ -84,6 +128,7 @@ export default function ClubCardsGrid({
           const statusLabel =
             CLUB_STATUS_OPTIONS.find((option) => option.key === status)?.label || 'Unbekannt';
           const clubActivity = latestClubActivityByClub?.[clubId] || null;
+          const clubSensors = sensorRowsByClub.get(clubId) || [];
 
           const openPopupFor = (title, activity, showFish) => {
             if (!activity || !Array.isArray(activity.entries) || activity.entries.length === 0) return;
@@ -163,6 +208,92 @@ export default function ClubCardsGrid({
                     {supportsWeatherMetrics ? openWeatherRequests : '—'}
                   </div>
                 </div>
+              </div>
+
+              <div className="mt-3 rounded-xl border border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-sky-50 p-3 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-800">
+                    Temperatur-Sensoren
+                  </div>
+                  <span className="inline-flex items-center rounded-full border border-cyan-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-cyan-800">
+                    {clubSensors.length}
+                  </span>
+                </div>
+                {clubSensors.length > 0 ? (
+                  <div className="mt-2 space-y-2 text-xs text-cyan-900">
+                    {clubSensors.slice(0, 3).map((sensor) => {
+                      const telemetry = sensorTelemetryByDevice?.[sensor.device_id] || {};
+                      const temperatureText = formatNumber(telemetry?.temperature?.temperature_c, 2);
+                      const batteryPercent = formatNumber(telemetry?.batt?.percent, 0);
+                      const batteryVoltage = formatNumber(telemetry?.batt?.voltage_v, 2);
+                      const batteryText =
+                        batteryPercent != null || batteryVoltage != null
+                          ? [batteryPercent != null ? `${batteryPercent}%` : null, batteryVoltage != null ? `${batteryVoltage} V` : null]
+                            .filter(Boolean)
+                            .join(' · ')
+                          : 'Keine Daten';
+                      const temperatureTimestamp = temperatureText != null
+                        ? formatSensorTimestamp(
+                          telemetry?.temperature?.measured_at,
+                          telemetry?.temperature?.created_at,
+                        )
+                        : '—';
+                      const batteryTimestamp = batteryText !== 'Keine Daten'
+                        ? formatSensorTimestamp(
+                          telemetry?.batt?.measured_at,
+                          telemetry?.batt?.created_at,
+                        )
+                        : '—';
+                      const gpsText = telemetry?.gps ? formatGpsValue(telemetry.gps) : 'Keine Daten';
+                      const gpsTimestamp = telemetry?.gps
+                        ? formatSensorTimestamp(
+                          telemetry?.gps?.fix_time_utc,
+                          telemetry?.gps?.created_at,
+                        )
+                        : '—';
+
+                      return (
+                        <div
+                          key={`${sensor.waterbody_name}-${sensor.device_id}`}
+                          className="rounded-lg border border-cyan-200 bg-white px-2.5 py-2.5 shadow-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="font-semibold text-cyan-950">{sensor.waterbody_name}</div>
+                            <div className="rounded-md bg-cyan-100 px-2 py-0.5 font-mono text-[11px] text-cyan-900">
+                              {sensor.device_id}
+                            </div>
+                          </div>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                            <div className="rounded-md border border-rose-100 bg-rose-50 p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Temperatur</div>
+                              <div className="mt-0.5 text-sm font-semibold text-rose-900">
+                                {temperatureText != null ? `${temperatureText} °C` : 'Keine Daten'}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] text-rose-700">{temperatureTimestamp}</div>
+                            </div>
+                            <div className="rounded-md border border-emerald-100 bg-emerald-50 p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Batterie</div>
+                              <div className="mt-0.5 text-sm font-semibold text-emerald-900">{batteryText}</div>
+                              <div className="mt-0.5 truncate text-[11px] text-emerald-700">{batteryTimestamp}</div>
+                            </div>
+                            <div className="rounded-md border border-sky-100 bg-sky-50 p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-700">GPS</div>
+                              <div className="mt-0.5 truncate text-sm font-semibold text-sky-900">{gpsText}</div>
+                              <div className="mt-0.5 truncate text-[11px] text-sky-700">{gpsTimestamp}</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {clubSensors.length > 3 ? (
+                      <div className="text-[11px] font-medium text-cyan-700">+{clubSensors.length - 3} weitere Sensoren</div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-md border border-dashed border-cyan-300 bg-white/70 px-2 py-2 text-xs text-cyan-700">
+                    Keine aktive Zuordnung.
+                  </div>
+                )}
               </div>
 
               <div className="mt-3 grid gap-2 xl:grid-cols-3">

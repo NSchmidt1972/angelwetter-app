@@ -425,7 +425,7 @@ export default function FishCatchForm({
           const latestWaterTemperature = await fetchLatestWaterTemperature({
             days: 2,
             waterbodyId: selectedWaterbodyId || null,
-            fallbackToClubDefault: true,
+            fallbackToClubDefault: false,
           });
           const waterTempRaw = latestWaterTemperature?.temperature_c;
           const normalizedWaterTempRaw =

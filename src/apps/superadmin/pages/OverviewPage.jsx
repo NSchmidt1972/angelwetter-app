@@ -3,9 +3,7 @@ import { Card } from '@/components/ui';
 import BuildUpdatePanel from '@/apps/superadmin/components/BuildUpdatePanel';
 import ClubCardsGrid from '@/apps/superadmin/features/overview/components/ClubCardsGrid';
 import ClubStatusFilterSection from '@/apps/superadmin/features/overview/components/ClubStatusFilterSection';
-import LatestSensorLogsSection from '@/apps/superadmin/features/overview/components/LatestSensorLogsSection';
 import OverviewTotalsSection from '@/apps/superadmin/features/overview/components/OverviewTotalsSection';
-import { useLatestSensorLogs } from '@/apps/superadmin/features/overview/hooks/useLatestSensorLogs';
 import { useOverviewCoreData } from '@/apps/superadmin/features/overview/hooks/useOverviewCoreData';
 import { useSuperAdminHeaderTitle } from '@/apps/superadmin/context/headerTitleContext';
 import {
@@ -29,17 +27,9 @@ export default function OverviewPage() {
     fishes,
     weatherRequestRows,
     supportsWeatherMetrics,
+    waterbodySensorAssignments,
+    sensorTelemetryByDevice,
   } = useOverviewCoreData();
-
-  const {
-    latestSensorLogsLoading,
-    latestSensorLogsError,
-    latestSensorLogs,
-    latestSensorLogErrors,
-    battValueText,
-    gpsValueText,
-    temperatureValueText,
-  } = useLatestSensorLogs();
 
   useEffect(() => {
     setSuperAdminHeaderTitle(PAGE_TITLE);
@@ -89,21 +79,13 @@ export default function OverviewPage() {
         supportsWeatherMetrics={supportsWeatherMetrics}
       />
 
-      <LatestSensorLogsSection
-        latestSensorLogsLoading={latestSensorLogsLoading}
-        latestSensorLogsError={latestSensorLogsError}
-        latestSensorLogErrors={latestSensorLogErrors}
-        latestSensorLogs={latestSensorLogs}
-        battValueText={battValueText}
-        gpsValueText={gpsValueText}
-        temperatureValueText={temperatureValueText}
-      />
-
       <ClubCardsGrid
         filteredClubs={filteredClubs}
         stats={stats}
         supportsWeatherMetrics={supportsWeatherMetrics}
         latestClubActivityByClub={latestClubActivityByClub}
+        waterbodySensorAssignments={waterbodySensorAssignments}
+        sensorTelemetryByDevice={sensorTelemetryByDevice}
       />
     </Card>
   );

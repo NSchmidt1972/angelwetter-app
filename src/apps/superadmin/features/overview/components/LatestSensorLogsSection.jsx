@@ -9,6 +9,9 @@ export default function LatestSensorLogsSection({
   battValueText,
   gpsValueText,
   temperatureValueText,
+  battSensorContext,
+  gpsSensorContext,
+  temperatureSensorContext,
 }) {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -29,6 +32,7 @@ export default function LatestSensorLogsSection({
           error={latestSensorLogErrors.batt}
           hasData={Boolean(latestSensorLogs.batt)}
           valueText={battValueText}
+          sensorContext={battSensorContext}
           timestampText={formatLogTimestamp(
             latestSensorLogs.batt?.measured_at || latestSensorLogs.batt?.created_at
           )}
@@ -41,6 +45,7 @@ export default function LatestSensorLogsSection({
           hasData={Boolean(latestSensorLogs.gps)}
           valueLabel="Ort"
           valueText={gpsValueText}
+          sensorContext={gpsSensorContext}
           timestampText={formatLogTimestamp(
             latestSensorLogs.gps?.fix_time_utc || latestSensorLogs.gps?.created_at
           )}
@@ -52,6 +57,7 @@ export default function LatestSensorLogsSection({
           error={latestSensorLogErrors.temperature}
           hasData={Boolean(latestSensorLogs.temperature)}
           valueText={temperatureValueText}
+          sensorContext={temperatureSensorContext}
           timestampText={formatLogTimestamp(
             latestSensorLogs.temperature?.measured_at || latestSensorLogs.temperature?.created_at
           )}

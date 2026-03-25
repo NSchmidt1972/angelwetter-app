@@ -26,6 +26,13 @@ function toFiniteNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function hasAssignedWaterbody(entry) {
+  const raw = entry?.waterbody_id;
+  if (raw == null) return false;
+  if (typeof raw === 'string') return raw.trim().length > 0;
+  return String(raw).trim().length > 0;
+}
+
 export function isNearClubHomeWater(entry, clubCoords, radiusKm = HOME_WATER_RADIUS_KM) {
   const lat = toFiniteNumber(entry?.lat);
   const lon = toFiniteNumber(entry?.lon);
@@ -36,6 +43,8 @@ export function isNearClubHomeWater(entry, clubCoords, radiusKm = HOME_WATER_RAD
 }
 
 export function isHomeWaterEntry(entry, { clubCoords = null, radiusKm = HOME_WATER_RADIUS_KM } = {}) {
+  // Canonical signal: catches assigned to a club waterbody are home-water catches.
+  if (hasAssignedWaterbody(entry)) return true;
   if (isNearClubHomeWater(entry, clubCoords, radiusKm)) return true;
   return isFerkensbruchLocation(entry?.location_name);
 }

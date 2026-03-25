@@ -69,12 +69,24 @@ function buildRoleFeatureMap(rows) {
   }, {});
 }
 
+function getTodayUtcDateKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeDateKey(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
 function buildFeatureMap(rows) {
   const base = createInitialFeatureMap();
+  const todayUtc = getTodayUtcDateKey();
   (rows || []).forEach((row) => {
     const featureKey = String(row?.feature_key || '').trim().toLowerCase();
     if (!FEATURE_KEYS.includes(featureKey)) return;
-    base[featureKey] = Boolean(row?.enabled);
+    const enabledFromDate = normalizeDateKey(row?.enabled_from_date);
+    const isScheduledForFuture = Boolean(enabledFromDate && enabledFromDate > todayUtc);
+    base[featureKey] = Boolean(row?.enabled) && !isScheduledForFuture;
   });
   return base;
 }
@@ -381,7 +393,7 @@ export function PermissionProvider({ children }) {
           const [featureResult, roleFeatureResult] = await Promise.all([
             supabase
               .from('club_features')
-              .select('club_id, feature_key, enabled')
+              .select('club_id, feature_key, enabled, enabled_from_date')
               .eq('club_id', resolvedClubId),
             supabase
               .from('club_role_features')

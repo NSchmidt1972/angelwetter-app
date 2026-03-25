@@ -24,7 +24,6 @@ function toDraft(row) {
     weather_lat: row?.weather_lat != null ? String(row.weather_lat) : '',
     weather_lon: row?.weather_lon != null ? String(row.weather_lon) : '',
     temperature_device_id: row?.temperature_device_id ?? '',
-    temperature_topic: row?.temperature_topic ?? '',
     sort_order: row?.sort_order != null ? String(row.sort_order) : '0',
     is_active: row?.is_active !== false,
   };
@@ -41,7 +40,6 @@ function createEmptyDraft() {
     weather_lat: '',
     weather_lon: '',
     temperature_device_id: '',
-    temperature_topic: '',
     sort_order: '0',
     is_active: true,
   };
@@ -151,7 +149,6 @@ export default function WaterbodyManagerSection({
             return toDraft({
               ...row,
               temperature_device_id: sensor?.device_id || '',
-              temperature_topic: sensor?.topic || '',
             });
           }),
         );
@@ -199,18 +196,7 @@ export default function WaterbodyManagerSection({
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
   }, [temperatureSensorCandidates]);
 
-  const temperatureTopicCandidates = useMemo(() => {
-    const set = new Set();
-    temperatureSensorCandidates.forEach((entry) => {
-      const topic = String(entry?.topic || '').trim();
-      if (!topic) return;
-      set.add(topic);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
-  }, [temperatureSensorCandidates]);
-
   const temperatureDeviceDatalistId = 'waterbody-temperature-device-options';
-  const temperatureTopicDatalistId = 'waterbody-temperature-topic-options';
 
   const updateLocalRow = useCallback((id, patch) => {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
@@ -231,7 +217,7 @@ export default function WaterbodyManagerSection({
           clubId: effectiveClubId,
           waterbodyId: created.id,
           deviceId: createDraft.temperature_device_id,
-          topic: createDraft.temperature_topic,
+          topic: null,
           isActive: true,
         });
         if (!savedSensor) {
@@ -245,7 +231,6 @@ export default function WaterbodyManagerSection({
             ? {
               ...row,
               temperature_device_id: savedSensor.device_id || '',
-              temperature_topic: savedSensor.topic || '',
             }
             : row
         )));
@@ -274,7 +259,7 @@ export default function WaterbodyManagerSection({
           clubId: effectiveClubId,
           waterbodyId: row.id,
           deviceId: row.temperature_device_id,
-          topic: row.temperature_topic,
+          topic: null,
           isActive: true,
         });
         setRows((prev) => prev.map((entry) => (
@@ -282,7 +267,6 @@ export default function WaterbodyManagerSection({
             ? {
               ...toDraft(updated),
               temperature_device_id: savedSensor?.device_id || '',
-              temperature_topic: savedSensor?.topic || '',
             }
             : entry
         )));
@@ -297,7 +281,7 @@ export default function WaterbodyManagerSection({
     }
   };
 
-  const tableColumnCount = allowSensorAssignment ? 13 : 11;
+  const tableColumnCount = allowSensorAssignment ? 12 : 11;
 
   const handleDeactivate = async (row) => {
     if (!effectiveClubId || !row?.id || deactivatingRowId) return;
@@ -333,9 +317,6 @@ export default function WaterbodyManagerSection({
                 <th className="p-2 text-left">Wetter-Lon</th>
                 {allowSensorAssignment ? (
                   <th className="p-2 text-left">Sensor-ID</th>
-                ) : null}
-                {allowSensorAssignment ? (
-                  <th className="p-2 text-left">Sensor-Topic</th>
                 ) : null}
                 <th className="p-2 text-left">Sort</th>
                 <th className="p-2 text-left">Aktiv</th>
@@ -423,18 +404,6 @@ export default function WaterbodyManagerSection({
                             onChange={(event) => updateLocalRow(row.id, { temperature_device_id: event.target.value })}
                             className="w-32 rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-900"
                             placeholder="device_id"
-                          />
-                        </td>
-                      ) : null}
-                      {allowSensorAssignment ? (
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            list={temperatureTopicDatalistId}
-                            value={row.temperature_topic}
-                            onChange={(event) => updateLocalRow(row.id, { temperature_topic: event.target.value })}
-                            className="w-40 rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-900"
-                            placeholder="optional topic"
                           />
                         </td>
                       ) : null}
@@ -595,19 +564,6 @@ export default function WaterbodyManagerSection({
                 />
               </label>
             ) : null}
-            {allowSensorAssignment ? (
-              <label className="text-sm">
-                Sensor-Topic (optional)
-                <input
-                  type="text"
-                  list={temperatureTopicDatalistId}
-                  value={createDraft.temperature_topic}
-                  onChange={(event) => setCreateDraft((prev) => ({ ...prev, temperature_topic: event.target.value }))}
-                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-                  placeholder="z. B. sensors/club-a/temp"
-                />
-              </label>
-            ) : null}
             <label className="text-sm md:col-span-2">
               Beschreibung
               <textarea
@@ -646,13 +602,6 @@ export default function WaterbodyManagerSection({
           <datalist id={temperatureDeviceDatalistId}>
             {temperatureDeviceCandidates.map((deviceId) => (
               <option key={deviceId} value={deviceId} />
-            ))}
-          </datalist>
-        ) : null}
-        {allowSensorAssignment ? (
-          <datalist id={temperatureTopicDatalistId}>
-            {temperatureTopicCandidates.map((topic) => (
-              <option key={topic} value={topic} />
             ))}
           </datalist>
         ) : null}

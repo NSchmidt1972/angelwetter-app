@@ -6,7 +6,16 @@ export default function LatestSensorLogCard({
   valueText,
   timestampText,
   valueLabel = 'Wert',
+  sensorContext = null,
 }) {
+  const deviceIdText = sensorContext?.deviceId || '—';
+  const clubText = sensorContext?.deviceId
+    ? sensorContext?.clubName || 'Nicht zugeordnet'
+    : '—';
+  const waterbodyText = sensorContext?.deviceId
+    ? sensorContext?.waterbodyName || 'Nicht zugeordnet'
+    : '—';
+
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
       <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</h3>
@@ -29,6 +38,22 @@ export default function LatestSensorLogCard({
             <dt className="inline font-medium">Zeit: </dt>
             <dd className="inline">{timestampText}</dd>
           </div>
+          {sensorContext ? (
+            <>
+              <div>
+                <dt className="inline font-medium">Sensor-ID: </dt>
+                <dd className="inline">{deviceIdText}</dd>
+              </div>
+              <div>
+                <dt className="inline font-medium">Verein: </dt>
+                <dd className="inline">{clubText}</dd>
+              </div>
+              <div>
+                <dt className="inline font-medium">Gewässer: </dt>
+                <dd className="inline">{waterbodyText}</dd>
+              </div>
+            </>
+          ) : null}
         </dl>
       ) : null}
     </div>
