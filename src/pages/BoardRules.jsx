@@ -244,6 +244,7 @@ export default function BoardRules() {
           title="Gewässer"
           clubId={null}
           collapsible={false}
+          allowSensorAssignment={false}
           onMessage={(nextMessage) => {
             setLoadError('');
             setSaveError('');

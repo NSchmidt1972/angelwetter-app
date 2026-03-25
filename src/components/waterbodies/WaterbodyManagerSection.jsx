@@ -5,6 +5,11 @@ import {
   listWaterbodiesByClub,
   updateWaterbody,
 } from '@/services/waterbodiesService';
+import {
+  listRecentTemperatureSensorCandidates,
+  listWaterbodyTemperatureSensorsByClub,
+  saveWaterbodyTemperatureSensorAssignment,
+} from '@/services/waterbodySensorsService';
 import { getActiveClubId } from '@/utils/clubId';
 
 function toDraft(row) {
@@ -18,6 +23,8 @@ function toDraft(row) {
     radius_m: row?.radius_m != null ? String(row.radius_m) : '300',
     weather_lat: row?.weather_lat != null ? String(row.weather_lat) : '',
     weather_lon: row?.weather_lon != null ? String(row.weather_lon) : '',
+    temperature_device_id: row?.temperature_device_id ?? '',
+    temperature_topic: row?.temperature_topic ?? '',
     sort_order: row?.sort_order != null ? String(row.sort_order) : '0',
     is_active: row?.is_active !== false,
   };
@@ -33,6 +40,8 @@ function createEmptyDraft() {
     radius_m: '300',
     weather_lat: '',
     weather_lon: '',
+    temperature_device_id: '',
+    temperature_topic: '',
     sort_order: '0',
     is_active: true,
   };
@@ -89,6 +98,7 @@ export default function WaterbodyManagerSection({
   title = 'Gewässer',
   sectionClassName = '',
   collapsible = true,
+  allowSensorAssignment = true,
   onMessage,
   onError,
 }) {
@@ -100,6 +110,7 @@ export default function WaterbodyManagerSection({
   const [adding, setAdding] = useState(false);
   const [savingRowId, setSavingRowId] = useState(null);
   const [deactivatingRowId, setDeactivatingRowId] = useState(null);
+  const [temperatureSensorCandidates, setTemperatureSensorCandidates] = useState([]);
 
   const sortedRows = useMemo(
     () =>
@@ -120,19 +131,86 @@ export default function WaterbodyManagerSection({
     }
     setLoading(true);
     try {
-      const data = await listWaterbodiesByClub(effectiveClubId, { activeOnly: false });
-      setRows((Array.isArray(data) ? data : []).map(toDraft));
+      if (!allowSensorAssignment) {
+        const waterbodyRows = await listWaterbodiesByClub(effectiveClubId, { activeOnly: false });
+        setRows((Array.isArray(waterbodyRows) ? waterbodyRows : []).map((row) => toDraft(row)));
+      } else {
+        const [waterbodyRows, sensorRows] = await Promise.all([
+          listWaterbodiesByClub(effectiveClubId, { activeOnly: false }),
+          listWaterbodyTemperatureSensorsByClub(effectiveClubId, { activeOnly: true }),
+        ]);
+        const sensorByWaterbody = new Map(
+          (Array.isArray(sensorRows) ? sensorRows : [])
+            .filter((row) => row?.waterbody_id)
+            .map((row) => [row.waterbody_id, row]),
+        );
+
+        setRows(
+          (Array.isArray(waterbodyRows) ? waterbodyRows : []).map((row) => {
+            const sensor = sensorByWaterbody.get(row.id);
+            return toDraft({
+              ...row,
+              temperature_device_id: sensor?.device_id || '',
+              temperature_topic: sensor?.topic || '',
+            });
+          }),
+        );
+      }
     } catch (error) {
       setRows([]);
       onError?.(error.message || 'Gewässer konnten nicht geladen werden.');
     } finally {
       setLoading(false);
     }
-  }, [effectiveClubId, onError]);
+  }, [effectiveClubId, allowSensorAssignment, onError]);
 
   useEffect(() => {
     void loadRows();
   }, [loadRows]);
+
+  useEffect(() => {
+    if (!allowSensorAssignment) {
+      setTemperatureSensorCandidates([]);
+      return () => {};
+    }
+    let active = true;
+    (async () => {
+      try {
+        const candidates = await listRecentTemperatureSensorCandidates({ limit: 300 });
+        if (!active) return;
+        setTemperatureSensorCandidates(Array.isArray(candidates) ? candidates : []);
+      } catch {
+        if (!active) return;
+        setTemperatureSensorCandidates([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [effectiveClubId, allowSensorAssignment]);
+
+  const temperatureDeviceCandidates = useMemo(() => {
+    const set = new Set();
+    temperatureSensorCandidates.forEach((entry) => {
+      const deviceId = String(entry?.device_id || '').trim();
+      if (!deviceId) return;
+      set.add(deviceId);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+  }, [temperatureSensorCandidates]);
+
+  const temperatureTopicCandidates = useMemo(() => {
+    const set = new Set();
+    temperatureSensorCandidates.forEach((entry) => {
+      const topic = String(entry?.topic || '').trim();
+      if (!topic) return;
+      set.add(topic);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+  }, [temperatureSensorCandidates]);
+
+  const temperatureDeviceDatalistId = 'waterbody-temperature-device-options';
+  const temperatureTopicDatalistId = 'waterbody-temperature-topic-options';
 
   const updateLocalRow = useCallback((id, patch) => {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
@@ -148,6 +226,30 @@ export default function WaterbodyManagerSection({
         ...payload,
       });
       setRows((prev) => [...prev, toDraft(created)]);
+      if (allowSensorAssignment) {
+        const savedSensor = await saveWaterbodyTemperatureSensorAssignment({
+          clubId: effectiveClubId,
+          waterbodyId: created.id,
+          deviceId: createDraft.temperature_device_id,
+          topic: createDraft.temperature_topic,
+          isActive: true,
+        });
+        if (!savedSensor) {
+          setCreateDraft(createEmptyDraft());
+          setShowCreateForm(false);
+          onMessage?.('Gewässer angelegt.');
+          return;
+        }
+        setRows((prev) => prev.map((row) => (
+          row.id === created.id
+            ? {
+              ...row,
+              temperature_device_id: savedSensor.device_id || '',
+              temperature_topic: savedSensor.topic || '',
+            }
+            : row
+        )));
+      }
       setCreateDraft(createEmptyDraft());
       setShowCreateForm(false);
       onMessage?.('Gewässer angelegt.');
@@ -167,7 +269,26 @@ export default function WaterbodyManagerSection({
         club_id: effectiveClubId,
         ...payload,
       });
-      setRows((prev) => prev.map((entry) => (entry.id === row.id ? toDraft(updated) : entry)));
+      if (allowSensorAssignment) {
+        const savedSensor = await saveWaterbodyTemperatureSensorAssignment({
+          clubId: effectiveClubId,
+          waterbodyId: row.id,
+          deviceId: row.temperature_device_id,
+          topic: row.temperature_topic,
+          isActive: true,
+        });
+        setRows((prev) => prev.map((entry) => (
+          entry.id === row.id
+            ? {
+              ...toDraft(updated),
+              temperature_device_id: savedSensor?.device_id || '',
+              temperature_topic: savedSensor?.topic || '',
+            }
+            : entry
+        )));
+      } else {
+        setRows((prev) => prev.map((entry) => (entry.id === row.id ? toDraft(updated) : entry)));
+      }
       onMessage?.('Gewässer gespeichert.');
     } catch (error) {
       onError?.(error.message || 'Gewässer konnte nicht gespeichert werden.');
@@ -175,6 +296,8 @@ export default function WaterbodyManagerSection({
       setSavingRowId(null);
     }
   };
+
+  const tableColumnCount = allowSensorAssignment ? 13 : 11;
 
   const handleDeactivate = async (row) => {
     if (!effectiveClubId || !row?.id || deactivatingRowId) return;
@@ -208,6 +331,12 @@ export default function WaterbodyManagerSection({
                 <th className="p-2 text-left">Radius</th>
                 <th className="p-2 text-left">Wetter-Lat</th>
                 <th className="p-2 text-left">Wetter-Lon</th>
+                {allowSensorAssignment ? (
+                  <th className="p-2 text-left">Sensor-ID</th>
+                ) : null}
+                {allowSensorAssignment ? (
+                  <th className="p-2 text-left">Sensor-Topic</th>
+                ) : null}
                 <th className="p-2 text-left">Sort</th>
                 <th className="p-2 text-left">Aktiv</th>
                 <th className="p-2 text-left">Beschreibung</th>
@@ -217,11 +346,11 @@ export default function WaterbodyManagerSection({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="p-3 text-center text-gray-500">Lade Gewässer...</td>
+                  <td colSpan={tableColumnCount} className="p-3 text-center text-gray-500">Lade Gewässer...</td>
                 </tr>
               ) : sortedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-3 text-center text-gray-500">Noch keine Gewässer vorhanden.</td>
+                  <td colSpan={tableColumnCount} className="p-3 text-center text-gray-500">Noch keine Gewässer vorhanden.</td>
                 </tr>
               ) : (
                 sortedRows.map((row) => {
@@ -285,6 +414,30 @@ export default function WaterbodyManagerSection({
                           className="w-28 rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-900"
                         />
                       </td>
+                      {allowSensorAssignment ? (
+                        <td className="p-2">
+                          <input
+                            type="text"
+                            list={temperatureDeviceDatalistId}
+                            value={row.temperature_device_id}
+                            onChange={(event) => updateLocalRow(row.id, { temperature_device_id: event.target.value })}
+                            className="w-32 rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-900"
+                            placeholder="device_id"
+                          />
+                        </td>
+                      ) : null}
+                      {allowSensorAssignment ? (
+                        <td className="p-2">
+                          <input
+                            type="text"
+                            list={temperatureTopicDatalistId}
+                            value={row.temperature_topic}
+                            onChange={(event) => updateLocalRow(row.id, { temperature_topic: event.target.value })}
+                            className="w-40 rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-900"
+                            placeholder="optional topic"
+                          />
+                        </td>
+                      ) : null}
                       <td className="p-2">
                         <input
                           type="number"
@@ -429,6 +582,32 @@ export default function WaterbodyManagerSection({
                 className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
               />
             </label>
+            {allowSensorAssignment ? (
+              <label className="text-sm">
+                Sensor-ID (Temperatur)
+                <input
+                  type="text"
+                  list={temperatureDeviceDatalistId}
+                  value={createDraft.temperature_device_id}
+                  onChange={(event) => setCreateDraft((prev) => ({ ...prev, temperature_device_id: event.target.value }))}
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                  placeholder="device_id"
+                />
+              </label>
+            ) : null}
+            {allowSensorAssignment ? (
+              <label className="text-sm">
+                Sensor-Topic (optional)
+                <input
+                  type="text"
+                  list={temperatureTopicDatalistId}
+                  value={createDraft.temperature_topic}
+                  onChange={(event) => setCreateDraft((prev) => ({ ...prev, temperature_topic: event.target.value }))}
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                  placeholder="z. B. sensors/club-a/temp"
+                />
+              </label>
+            ) : null}
             <label className="text-sm md:col-span-2">
               Beschreibung
               <textarea
@@ -456,7 +635,26 @@ export default function WaterbodyManagerSection({
                 {adding ? 'Legt an...' : '+ Gewässer'}
               </button>
             </div>
+            {allowSensorAssignment && temperatureDeviceCandidates.length > 0 ? (
+              <p className="text-xs text-gray-500 md:col-span-2">
+                Vorschläge aus Sensor-Logs verfügbar ({temperatureDeviceCandidates.length} Geräte).
+              </p>
+            ) : null}
           </div>
+        ) : null}
+        {allowSensorAssignment ? (
+          <datalist id={temperatureDeviceDatalistId}>
+            {temperatureDeviceCandidates.map((deviceId) => (
+              <option key={deviceId} value={deviceId} />
+            ))}
+          </datalist>
+        ) : null}
+        {allowSensorAssignment ? (
+          <datalist id={temperatureTopicDatalistId}>
+            {temperatureTopicCandidates.map((topic) => (
+              <option key={topic} value={topic} />
+            ))}
+          </datalist>
         ) : null}
     </div>
   );

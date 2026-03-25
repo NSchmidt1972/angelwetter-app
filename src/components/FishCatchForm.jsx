@@ -1,10 +1,10 @@
 // src/components/FishCatchForm.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 
 // Utils
 import { validateCatchForm } from "@/utils/validation";
-import { reverseGeocode } from "@/utils/geo";
+import { getDistanceMeters, reverseGeocode } from "@/utils/geo";
 import { parseFloatLocale } from "@/utils/number";
 import { fishListForRegion, DEFAULT_REGION_OPTIONS } from "@/constants/fishRegions";
 import { getActiveClubId } from "@/utils/clubId";
@@ -38,6 +38,7 @@ import { useAchievements } from "@/achievements/useAchievements";
 import { localRemember } from "@/achievements/localRemember";
 
 const WATERBODY_STORAGE_KEY = "angelwetter_selected_waterbody_id";
+const HOMEWATER_MISMATCH_TOLERANCE_M = 200;
 
 export default function FishCatchForm({
   showEffect,                // Achievement-Effekt triggern
@@ -98,6 +99,8 @@ export default function FishCatchForm({
   const [detectedDistanceM, setDetectedDistanceM] = useState(null);
   const [waterbodyManuallySelected, setWaterbodyManuallySelected] = useState(false);
   const [clubContextTick, setClubContextTick] = useState(0);
+  const [gpsMismatchWarning, setGpsMismatchWarning] = useState(null);
+  const waterbodySelectRef = useRef(null);
 
   const selectedWaterbody = useMemo(
     () => waterbodies.find((entry) => entry.id === selectedWaterbodyId) || null,
@@ -115,6 +118,10 @@ export default function FishCatchForm({
     if (Array.isArray(dynamicList)) return dynamicList;
     return fishListForRegion(region);
   }, [clubScopedFishList, hasClubWaterContext, region, regionFishMap]);
+  const currentRegionLabel = useMemo(
+    () => regionOptions.find((entry) => entry?.id === region)?.label || region,
+    [region, regionOptions],
+  );
 
   // Name-Quelle: Prop > localStorage
   const anglerName = propAnglerName || localStorage.getItem("anglerName") || "Unbekannt";
@@ -308,8 +315,63 @@ export default function FishCatchForm({
     };
   };
 
+  const getGpsRegionWarning = useCallback(() => {
+    const userLat = Number(position?.lat);
+    const userLon = Number(position?.lon);
+    if (![userLat, userLon].every(Number.isFinite)) return null;
+
+    if (isHomeWaterRegion) {
+      if (!selectedWaterbody) return null;
+    const waterLat = Number(selectedWaterbody?.lat);
+    const waterLon = Number(selectedWaterbody?.lon);
+    if (![userLat, userLon, waterLat, waterLon].every(Number.isFinite)) return null;
+
+    const radius = Number(selectedWaterbody?.radius_m);
+    const effectiveRadiusM = Number.isFinite(radius) && radius > 0 ? radius : 300;
+    const maxDistanceWithoutWarningM = effectiveRadiusM + HOMEWATER_MISMATCH_TOLERANCE_M;
+    const distanceM = getDistanceMeters(userLat, userLon, waterLat, waterLon);
+    if (!Number.isFinite(distanceM) || distanceM <= maxDistanceWithoutWarningM) return null;
+
+      return {
+        kind: "outside_selected_homewater",
+      waterbodyName: selectedWaterbody?.name || "ausgewähltes Vereinsgewässer",
+      distanceM,
+      radiusM: effectiveRadiusM,
+      };
+    }
+
+    const match = getNearestMatchingWaterbody({
+      waterbodies,
+      lat: userLat,
+      lon: userLon,
+    });
+    if (!match?.waterbody?.id) return null;
+
+    const matchedWaterbody = match.waterbody;
+    const matchedRadiusRaw = Number(matchedWaterbody?.radius_m);
+    const matchedRadiusM = Number.isFinite(matchedRadiusRaw) && matchedRadiusRaw > 0 ? matchedRadiusRaw : 300;
+    const matchedDistanceM = Number.isFinite(match.distance_m)
+      ? match.distance_m
+      : getDistanceMeters(userLat, userLon, Number(matchedWaterbody?.lat), Number(matchedWaterbody?.lon));
+    if (!Number.isFinite(matchedDistanceM)) return null;
+
+    return {
+      kind: "inside_homewater_with_other_region",
+      waterbodyId: matchedWaterbody.id,
+      waterbodyName: matchedWaterbody?.name || "Vereinsgewässer",
+      distanceM: matchedDistanceM,
+      radiusM: matchedRadiusM,
+    };
+  }, [
+    isHomeWaterRegion,
+    position?.lat,
+    position?.lon,
+    selectedWaterbody,
+    waterbodies,
+  ]);
+
   // 1) Formular absenden → Daten sammeln, vorbereiten, Dialog „entnommen?“ anzeigen
-  const handleSubmit = async () => {
+  const handleSubmit = async ({ skipGpsMismatchCheck = false } = {}) => {
     if (loadingCatch || loadingBlank || savingCatch) return;
 
     const errorMessage = validateCatchForm({ fish, size, weight, position });
@@ -317,6 +379,15 @@ export default function FishCatchForm({
       alert(errorMessage);
       return;
     }
+
+    if (!skipGpsMismatchCheck) {
+      const mismatchWarning = getGpsRegionWarning();
+      if (mismatchWarning) {
+        setGpsMismatchWarning(mismatchWarning);
+        return;
+      }
+    }
+    setGpsMismatchWarning(null);
 
     setLoadingCatch(true);
     try {
@@ -351,7 +422,11 @@ export default function FishCatchForm({
 
       if (isHomeWaterRegion) {
         try {
-          const latestWaterTemperature = await fetchLatestWaterTemperature({ days: 2 });
+          const latestWaterTemperature = await fetchLatestWaterTemperature({
+            days: 2,
+            waterbodyId: selectedWaterbodyId || null,
+            fallbackToClubDefault: true,
+          });
           const waterTempRaw = latestWaterTemperature?.temperature_c;
           const normalizedWaterTempRaw =
             typeof waterTempRaw === "string" ? waterTempRaw.trim() : waterTempRaw;
@@ -493,6 +568,7 @@ export default function FishCatchForm({
                   Gewässer
                 </label>
                 <select
+                  ref={waterbodySelectRef}
                   value={selectedWaterbodyId}
                   onChange={(event) => handleWaterbodyChange(event.target.value)}
                   className={inputClasses}
@@ -577,7 +653,7 @@ export default function FishCatchForm({
             {/* Buttons */}
             <div className="space-y-3">
               <button
-                onClick={handleSubmit}
+                onClick={() => void handleSubmit()}
                 disabled={loadingCatch || loadingBlank || savingCatch || !!pendingEntry}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:from-emerald-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -607,6 +683,87 @@ export default function FishCatchForm({
           </div>
         </div>
       </div>
+
+      {gpsMismatchWarning ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-300 bg-white p-5 shadow-2xl dark:border-amber-700 dark:bg-slate-900">
+            <h3 className="text-lg font-bold text-amber-700 dark:text-amber-300">
+              {gpsMismatchWarning.kind === "inside_homewater_with_other_region"
+                ? "Vereinsgewässer erkannt"
+                : "Standort passt nicht zum Gewässer"}
+            </h3>
+            {gpsMismatchWarning.kind === "inside_homewater_with_other_region" ? (
+              <>
+                <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
+                  Du hast aktuell die Region "{currentRegionLabel}" gewählt, befindest dich laut GPS aber innerhalb von
+                  "{gpsMismatchWarning.waterbodyName}" (ca. {Math.round(gpsMismatchWarning.distanceM)} m, Radius {Math.round(gpsMismatchWarning.radiusM)} m).
+                </p>
+                <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                  Region auf Vereinsgewässer umstellen oder trotzdem in der aktuellen Region speichern?
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
+                  Du bist ca. {Math.round(gpsMismatchWarning.distanceM)} m von "{gpsMismatchWarning.waterbodyName}" entfernt
+                  (Radius {Math.round(gpsMismatchWarning.radiusM)} m).
+                </p>
+                <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                  Möchtest du Region/Gewässer anpassen oder trotzdem speichern?
+                </p>
+              </>
+            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {gpsMismatchWarning.kind === "inside_homewater_with_other_region" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegion("ferkensbruch");
+                    if (gpsMismatchWarning.waterbodyId) {
+                      handleWaterbodyChange(gpsMismatchWarning.waterbodyId);
+                    }
+                    setGpsMismatchWarning(null);
+                  }}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Auf Vereinsgewässer wechseln
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fallbackRegionId = regionOptions.find((entry) => entry?.id && entry.id !== "ferkensbruch")?.id || "binnen";
+                      setRegion(fallbackRegionId);
+                      setGpsMismatchWarning(null);
+                    }}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Region wechseln
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGpsMismatchWarning(null);
+                      setTimeout(() => waterbodySelectRef.current?.focus(), 0);
+                    }}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Anderes Gewässer wählen
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleSubmit({ skipGpsMismatchCheck: true })}
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+              >
+                Trotzdem speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Schneidersession-Dialog */}
       <HourDialog

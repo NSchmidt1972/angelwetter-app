@@ -12,6 +12,11 @@ function isMissingColumnError(error, columnName) {
   return String(error?.code || '') === '42703' && message.includes(String(columnName || '').toLowerCase());
 }
 
+function isMissingFunctionError(error, functionName) {
+  const message = String(error?.message || '').toLowerCase();
+  return String(error?.code || '') === '42883' && message.includes(String(functionName || '').toLowerCase());
+}
+
 function toTimestampMs(value) {
   if (!value) return NaN;
   const ts = new Date(value).getTime();
@@ -79,13 +84,44 @@ export async function fetchWaterTemperatureHistory({
   clubId = getActiveClubId(),
   days = 7,
   limit = 500,
+  waterbodyId = null,
+  fallbackToClubDefault = true,
 } = {}) {
   if (!clubId) return [];
 
   const p_days = normalizePositiveInt(days, 7, { min: 1, max: 30 });
   const p_limit = normalizePositiveInt(limit, 500, { min: 1, max: 2000 });
+  const normalizedWaterbodyId =
+    waterbodyId == null ? null : String(waterbodyId).trim() || null;
 
   let rpcError = null;
+  if (normalizedWaterbodyId) {
+    try {
+      const { data, error } = await supabase.rpc('get_water_temperature_history_for_waterbody', {
+        p_club_id: clubId,
+        p_waterbody_id: normalizedWaterbodyId,
+        p_days,
+        p_limit,
+        p_fallback_to_club: fallbackToClubDefault !== false,
+      });
+
+      if (error) {
+        if (!isMissingFunctionError(error, 'get_water_temperature_history_for_waterbody')) {
+          rpcError = error;
+        }
+      } else {
+        const normalizedScopedRows = normalizeRows(data, { days: p_days });
+        if (normalizedScopedRows.length > 0 || fallbackToClubDefault === false) {
+          return normalizedScopedRows;
+        }
+      }
+    } catch (error) {
+      if (!isMissingFunctionError(error, 'get_water_temperature_history_for_waterbody')) {
+        rpcError = error;
+      }
+    }
+  }
+
   try {
     const { data, error } = await supabase.rpc('get_water_temperature_history', {
       p_club_id: clubId,
@@ -124,7 +160,15 @@ export async function fetchWaterTemperatureHistory({
 export async function fetchLatestWaterTemperature({
   clubId = getActiveClubId(),
   days = 2,
+  waterbodyId = null,
+  fallbackToClubDefault = true,
 } = {}) {
-  const history = await fetchWaterTemperatureHistory({ clubId, days, limit: 2000 });
+  const history = await fetchWaterTemperatureHistory({
+    clubId,
+    days,
+    limit: 2000,
+    waterbodyId,
+    fallbackToClubDefault,
+  });
   return history.length ? history[history.length - 1] : null;
 }

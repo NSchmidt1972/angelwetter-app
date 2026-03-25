@@ -1011,6 +1011,7 @@ export default function ClubDetailPage() {
       <WaterbodyManagerSection
         clubId={club.id}
         title="5. Gewässer"
+        allowSensorAssignment
         onMessage={(nextMessage) => {
           setError('');
           setMessage(nextMessage);
