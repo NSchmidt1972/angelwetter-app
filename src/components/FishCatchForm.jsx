@@ -16,6 +16,11 @@ import { fetchLatestWaterTemperature } from "@/services/waterTemperatureService"
 import { saveBlankDay } from "@/services/blankService";
 import { saveCatchEntry } from "@/services/catchService";
 import { fetchFishRegionCatalog } from "@/services/fishRegionsService";
+import { fetchRuleSpeciesForContext } from "@/services/rulesService";
+import {
+  getNearestMatchingWaterbody,
+  listWaterbodiesByClub,
+} from "@/services/waterbodiesService";
 
 // Hooks & UI
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -31,6 +36,8 @@ import { useWeatherCache } from "@/hooks/useWeatherCache";
 import { supabase } from "@/supabaseClient";
 import { useAchievements } from "@/achievements/useAchievements";
 import { localRemember } from "@/achievements/localRemember";
+
+const WATERBODY_STORAGE_KEY = "angelwetter_selected_waterbody_id";
 
 export default function FishCatchForm({
   showEffect,                // Achievement-Effekt triggern
@@ -77,18 +84,37 @@ export default function FishCatchForm({
   const [region, setRegion] = useLocalStorage("fishRegion", "ferkensbruch");
   const [regionOptions, setRegionOptions] = useState(DEFAULT_REGION_OPTIONS);
   const [regionFishMap, setRegionFishMap] = useState({});
-  const [homeWaterFishList, setHomeWaterFishList] = useState(null);
+  const [clubScopedFishList, setClubScopedFishList] = useState(null);
+  const [waterbodies, setWaterbodies] = useState([]);
+  const [selectedWaterbodyId, setSelectedWaterbodyId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return window.localStorage.getItem(WATERBODY_STORAGE_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
+  const [autoDetectedWaterbodyId, setAutoDetectedWaterbodyId] = useState(null);
+  const [detectedDistanceM, setDetectedDistanceM] = useState(null);
+  const [waterbodyManuallySelected, setWaterbodyManuallySelected] = useState(false);
   const [clubContextTick, setClubContextTick] = useState(0);
 
+  const selectedWaterbody = useMemo(
+    () => waterbodies.find((entry) => entry.id === selectedWaterbodyId) || null,
+    [selectedWaterbodyId, waterbodies],
+  );
+  const isHomeWaterRegion = typeof region === "string" && region.toLowerCase() === "ferkensbruch";
+  const hasClubWaterContext = isHomeWaterRegion;
+
   const fishList = useMemo(() => {
-    if (region === "ferkensbruch") {
-      if (Array.isArray(homeWaterFishList)) return homeWaterFishList;
+    if (hasClubWaterContext) {
+      if (Array.isArray(clubScopedFishList) && clubScopedFishList.length > 0) return clubScopedFishList;
       return fishListForRegion(region);
     }
     const dynamicList = regionFishMap?.[region];
     if (Array.isArray(dynamicList)) return dynamicList;
     return fishListForRegion(region);
-  }, [homeWaterFishList, region, regionFishMap]);
+  }, [clubScopedFishList, hasClubWaterContext, region, regionFishMap]);
 
   // Name-Quelle: Prop > localStorage
   const anglerName = propAnglerName || localStorage.getItem("anglerName") || "Unbekannt";
@@ -130,8 +156,79 @@ export default function FishCatchForm({
   }, []);
 
   useEffect(() => {
-    if (region !== "ferkensbruch") {
-      setHomeWaterFishList(null);
+    let active = true;
+    (async () => {
+      try {
+        const clubId = getActiveClubId();
+        if (!clubId) {
+          if (!active) return;
+          setWaterbodies([]);
+          setSelectedWaterbodyId("");
+          setAutoDetectedWaterbodyId(null);
+          setDetectedDistanceM(null);
+          setWaterbodyManuallySelected(false);
+          return;
+        }
+
+        const nextWaterbodies = await listWaterbodiesByClub(clubId, { activeOnly: true });
+        if (!active) return;
+        const firstWaterbodyId = nextWaterbodies?.[0]?.id || "";
+        let rememberedWaterbodyId = "";
+        try {
+          rememberedWaterbodyId = window.localStorage.getItem(WATERBODY_STORAGE_KEY) || "";
+        } catch {
+          rememberedWaterbodyId = "";
+        }
+        const keepRememberedSelection = Boolean(
+          rememberedWaterbodyId
+          && nextWaterbodies.some((entry) => entry?.id === rememberedWaterbodyId),
+        );
+        setWaterbodies(Array.isArray(nextWaterbodies) ? nextWaterbodies : []);
+        setSelectedWaterbodyId(keepRememberedSelection ? rememberedWaterbodyId : firstWaterbodyId);
+        setAutoDetectedWaterbodyId(null);
+        setDetectedDistanceM(null);
+        setWaterbodyManuallySelected(keepRememberedSelection);
+      } catch {
+        if (!active) return;
+        setWaterbodies([]);
+        setSelectedWaterbodyId("");
+        setAutoDetectedWaterbodyId(null);
+        setDetectedDistanceM(null);
+        setWaterbodyManuallySelected(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [clubContextTick]);
+
+  useEffect(() => {
+    const match = getNearestMatchingWaterbody({
+      waterbodies,
+      lat: position?.lat,
+      lon: position?.lon,
+    });
+
+    if (!match) {
+      setAutoDetectedWaterbodyId(null);
+      setDetectedDistanceM(null);
+      if (!waterbodyManuallySelected && isHomeWaterRegion) {
+        setSelectedWaterbodyId(waterbodies?.[0]?.id || "");
+      }
+      return;
+    }
+
+    const matchedId = match.waterbody?.id || "";
+    setAutoDetectedWaterbodyId(matchedId || null);
+    setDetectedDistanceM(match.distance_m ?? null);
+    if (!waterbodyManuallySelected && isHomeWaterRegion && matchedId) {
+      setSelectedWaterbodyId(matchedId);
+    }
+  }, [isHomeWaterRegion, position?.lat, position?.lon, waterbodies, waterbodyManuallySelected]);
+
+  useEffect(() => {
+    if (!hasClubWaterContext) {
+      setClubScopedFishList(null);
       return;
     }
     let active = true;
@@ -140,38 +237,28 @@ export default function FishCatchForm({
         const clubId = getActiveClubId();
         if (!clubId) {
           if (!active) return;
-          setHomeWaterFishList(null);
+          setClubScopedFishList(null);
           return;
         }
 
-        const { data, error } = await supabase
-          .from("club_fish_rules")
-          .select("species")
-          .eq("club_id", clubId)
-          .is("waterbody_id", null)
-          .eq("is_active", true)
-          .order("species", { ascending: true });
-
-        if (error) throw error;
-
-        const speciesList = Array.from(
-          new Set(
-            (Array.isArray(data) ? data : [])
-              .map((entry) => String(entry?.species || "").trim())
-              .filter(Boolean)
-          )
-        );
+        const speciesList = await fetchRuleSpeciesForContext({
+          waterbodyId: selectedWaterbodyId || null,
+          fallbackToClubDefault: true,
+          useStaticFallback: false,
+        });
         if (!active) return;
-        setHomeWaterFishList(speciesList);
+        setClubScopedFishList(
+          Array.isArray(speciesList) && speciesList.length > 0 ? speciesList : null,
+        );
       } catch {
         if (!active) return;
-        setHomeWaterFishList(null);
+        setClubScopedFishList(null);
       }
     })();
     return () => {
       active = false;
     };
-  }, [clubContextTick, region]);
+  }, [clubContextTick, hasClubWaterContext, selectedWaterbodyId]);
 
   useEffect(() => {
     if (!Array.isArray(regionOptions) || regionOptions.length === 0) return;
@@ -182,6 +269,26 @@ export default function FishCatchForm({
 
   // Zwischenstand für den 2-stufigen Speichern-Flow („entnommen?“)
   const [pendingEntry, setPendingEntry] = useState(null);
+  const isAutoDetectedSelection = Boolean(
+    autoDetectedWaterbodyId
+    && selectedWaterbodyId
+    && selectedWaterbodyId === autoDetectedWaterbodyId
+    && !waterbodyManuallySelected,
+  );
+
+  const handleWaterbodyChange = (value) => {
+    setWaterbodyManuallySelected(true);
+    const nextValue = value || "";
+    setSelectedWaterbodyId(nextValue);
+    if (typeof window !== "undefined") {
+      try {
+        if (nextValue) window.localStorage.setItem(WATERBODY_STORAGE_KEY, nextValue);
+        else window.localStorage.removeItem(WATERBODY_STORAGE_KEY);
+      } catch {
+        /* ignore storage errors */
+      }
+    }
+  };
 
   const buildWeatherFallbackFromCache = () => {
     const cached = cachedWeather?.data;
@@ -215,10 +322,20 @@ export default function FishCatchForm({
     try {
       // Wetter laden (mit Club-See-Koordinaten als Fallback)
       let currentWeather = {};
+      const waterbodyWeatherLat = selectedWaterbody?.weather_lat;
+      const waterbodyWeatherLon = selectedWaterbody?.weather_lon;
+      const waterbodyLat = selectedWaterbody?.lat;
+      const waterbodyLon = selectedWaterbody?.lon;
+      const weatherFallbackCoords =
+        isHomeWaterRegion && (waterbodyWeatherLat != null && waterbodyWeatherLon != null)
+          ? { lat: waterbodyWeatherLat, lon: waterbodyWeatherLon }
+          : isHomeWaterRegion && (waterbodyLat != null && waterbodyLon != null)
+            ? { lat: waterbodyLat, lon: waterbodyLon }
+            : null;
       try {
         currentWeather = await loadWeatherForPosition(
           position,
-          null,
+          weatherFallbackCoords,
           updateWeather
         );
       } catch (weatherError) {
@@ -232,7 +349,6 @@ export default function FishCatchForm({
       // Ort (best-effort)
       const locationName = await reverseGeocode(position?.lat, position?.lon).catch(() => null);
 
-      const isHomeWaterRegion = typeof region === "string" && region.toLowerCase() === "ferkensbruch";
       if (isHomeWaterRegion) {
         try {
           const latestWaterTemperature = await fetchLatestWaterTemperature({ days: 2 });
@@ -276,7 +392,8 @@ export default function FishCatchForm({
         blank: false,
         lat: position?.lat ?? null,
         lon: position?.lon ?? null,
-        location_name: locationName,
+        location_name: locationName || (isHomeWaterRegion ? selectedWaterbody?.name || null : null),
+        waterbody_id: isHomeWaterRegion ? (selectedWaterbodyId || null) : null,
       };
 
       setPendingEntry(newEntry);
@@ -338,7 +455,9 @@ export default function FishCatchForm({
     setLoadingBlank(true);
     try {
       setStatusMessage("Schneidersession wird gespeichert...");
-      await saveBlankDay(anglerName, hours, fishingType, position);
+      await saveBlankDay(anglerName, hours, fishingType, position, {
+        waterbody_id: isHomeWaterRegion ? (selectedWaterbodyId || null) : null,
+      });
       setStatusMessage("Schneidersession gespeichert");
       await new Promise((resolve) => setTimeout(resolve, 300));
       navigate(`${clubBasePath || '/'}`);
@@ -366,8 +485,32 @@ export default function FishCatchForm({
           </div>
 
           <div className="space-y-6">
-            {/* Region + Fischart */}
+            {/* Region + Gewässer + Fischart */}
             <RegionSelect value={region} onChange={setRegion} options={regionOptions} />
+            {isHomeWaterRegion ? (
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  Gewässer
+                </label>
+                <select
+                  value={selectedWaterbodyId}
+                  onChange={(event) => handleWaterbodyChange(event.target.value)}
+                  className={inputClasses}
+                >
+                  <option value="">Gewässer auswählen</option>
+                  {waterbodies.map((waterbody) => (
+                    <option key={waterbody.id} value={waterbody.id}>
+                      {waterbody.name}
+                    </option>
+                  ))}
+                </select>
+                {isAutoDetectedSelection ? (
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                    Automatisch erkannt{Number.isFinite(detectedDistanceM) ? ` (${Math.round(detectedDistanceM)} m)` : ''}.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <FishSelect fishList={fishList} value={fish} onChange={setFish} />
 
             {/* Größe */}

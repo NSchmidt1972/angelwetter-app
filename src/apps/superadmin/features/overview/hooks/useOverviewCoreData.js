@@ -9,6 +9,12 @@ import {
 } from '@/apps/superadmin/features/clubs/utils/clubSchemaCompat';
 import { isMissingWeatherProxyMetricsTableError } from '@/apps/superadmin/features/overview/utils/overviewUtils';
 
+function isMissingFishesWaterbodyIdError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '').toLowerCase();
+  return code === '42703' && message.includes('waterbody_id') && message.includes('fishes');
+}
+
 export function useOverviewCoreData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,17 +65,33 @@ export function useOverviewCoreData() {
           return clubRows.map((row) => normalizeClubWithSchemaSupport(row, loadedVariant));
         })();
 
-        const [clubData, membershipsResult, fishesResult, metricsResult] = await Promise.all([
+        const fishesPromise = (async () => {
+          const withWaterbody = await supabase
+            .from('fishes')
+            .select('id, club_id, waterbody_id, angler, fish, timestamp, blank, taken');
+          if (!withWaterbody.error) return withWaterbody.data || [];
+
+          if (!isMissingFishesWaterbodyIdError(withWaterbody.error)) {
+            throw withWaterbody.error;
+          }
+
+          const fallback = await supabase
+            .from('fishes')
+            .select('id, club_id, angler, fish, timestamp, blank, taken');
+          if (fallback.error) throw fallback.error;
+          return (fallback.data || []).map((row) => ({ ...row, waterbody_id: null }));
+        })();
+
+        const [clubData, membershipsResult, fishesData, metricsResult] = await Promise.all([
           clubsPromise,
           supabase.from('memberships').select('user_id, club_id, role, is_active'),
-          supabase.from('fishes').select('id, club_id, angler, fish, timestamp, blank, taken'),
+          fishesPromise,
           supportsWeatherMetrics
             ? supabase.from('weather_proxy_metrics_daily').select('club_id, openweather_call_count')
             : Promise.resolve({ data: [], error: null }),
         ]);
 
         if (membershipsResult.error) throw membershipsResult.error;
-        if (fishesResult.error) throw fishesResult.error;
         if (metricsResult.error && !isMissingWeatherProxyMetricsTableError(metricsResult.error)) {
           throw metricsResult.error;
         }
@@ -78,7 +100,7 @@ export function useOverviewCoreData() {
 
         setClubs(clubData || []);
         setMemberships(membershipsResult.data || []);
-        setFishes(fishesResult.data || []);
+        setFishes(fishesData || []);
 
         if (metricsResult.error && isMissingWeatherProxyMetricsTableError(metricsResult.error)) {
           setSupportsWeatherMetrics(false);

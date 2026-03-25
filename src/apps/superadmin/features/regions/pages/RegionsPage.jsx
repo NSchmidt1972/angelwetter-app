@@ -382,7 +382,7 @@ export default function RegionsPage() {
         ) : isHomeWaterRegionSelected ? (
           <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
             Fischarten für <strong>Vereinsgewässer</strong> werden ausschließlich clubspezifisch gepflegt:
-            im jeweiligen Club unter „Vereinsgewässer-Fischarten“.
+            im jeweiligen Club unter „Fischregel-Kontext je Gewässer“.
           </div>
         ) : (
           <>

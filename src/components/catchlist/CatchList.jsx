@@ -24,6 +24,7 @@ import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
 import { isTrustedAngler } from '@/utils/visibilityPolicy';
 import { usePermissions } from '@/permissions/usePermissions';
 import { FEATURES } from '@/permissions/features';
+import { listWaterbodiesByClub } from '@/services/waterbodiesService';
 
 function readWaterTemp(entry) {
   const raw = entry?.weather?.water_temp
@@ -68,6 +69,7 @@ export default function CatchList({ anglerName }) {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [modalPhoto, setModalPhoto] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
+  const [waterbodyNameById, setWaterbodyNameById] = useState({});
   const [activeReactionFish, setActiveReactionFish] = useState(null);
   const longPressTimer = useRef(null);
   const reactionMenuRef = useRef(null);
@@ -134,7 +136,7 @@ export default function CatchList({ anglerName }) {
         const { data, error } = await withTimeout(
           supabase
             .from('fishes')
-            .select('id, fish, size, angler, timestamp, location_name, lat, lon, blank, share_public_non_home')
+            .select('id, fish, size, angler, timestamp, location_name, lat, lon, waterbody_id, blank, share_public_non_home')
             .eq('club_id', clubId),
           16000,
           'Top10 timeout'
@@ -190,6 +192,32 @@ export default function CatchList({ anglerName }) {
       cancelled = true;
     };
   }, [clubCoords, filterSetting, isTrusted, normalizedName, entryKey, resumeTick]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const clubId = getActiveClubId();
+        if (!clubId) {
+          if (active) setWaterbodyNameById({});
+          return;
+        }
+        const rows = await listWaterbodiesByClub(clubId, { activeOnly: false });
+        if (!active) return;
+        const nextMap = Object.fromEntries(
+          (Array.isArray(rows) ? rows : [])
+            .filter((row) => row?.id && row?.name)
+            .map((row) => [row.id, row.name]),
+        );
+        setWaterbodyNameById(nextMap);
+      } catch {
+        if (active) setWaterbodyNameById({});
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [clubSlug, resumeTick]);
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
@@ -392,6 +420,10 @@ export default function CatchList({ anglerName }) {
             const isSharedExternal = entry.share_public_non_home === true;
             const visibilityPending = isVisibilityPending(entry.id);
             const locationLabel = formatLocationLabel(entry.location_name);
+            const waterbodyLabel = entry.waterbody_id
+              ? (waterbodyNameById[entry.waterbody_id] || null)
+              : null;
+            const headerLocationLabel = waterbodyLabel || (isExternalCatch ? locationLabel : '');
             const waterTemp = canSeeWaterTemperature ? readWaterTemp(entry) : null;
 
             return (
@@ -452,7 +484,7 @@ export default function CatchList({ anglerName }) {
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {dateStr} – {timeStr}{' '}
-                    {isExternalCatch ? `📍 ${locationLabel}` : ''}
+                    {headerLocationLabel ? `📍 ${headerLocationLabel}` : ''}
                   </p>
 
                   <div className="flex items-center gap-2 ml-auto">

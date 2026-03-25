@@ -30,6 +30,7 @@ import {
 import { formatDateTime } from '@/utils/dateUtils';
 import { uploadClubLogoFile, validateClubLogoFile } from '@/apps/superadmin/features/clubs/utils/logoUpload';
 import ClubHomeWaterSpeciesSection from '@/apps/superadmin/features/clubs/components/ClubHomeWaterSpeciesSection';
+import WaterbodyManagerSection from '@/components/waterbodies/WaterbodyManagerSection';
 
 function isMissingWeatherProxyMetricsTableError(error) {
   const code = String(error?.code || '');
@@ -620,11 +621,11 @@ export default function ClubDetailPage() {
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Verein bearbeiten</p>
               <span className="rounded-full border border-gray-300 px-2 py-0.5 text-[11px] text-gray-600 dark:border-gray-600 dark:text-gray-300">
-                5 Bereiche
+                6 Bereiche
               </span>
             </div>
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-              Stammdaten, Features, Rollenmatrix, Whitelist und Vereinsgewässer-Fischarten.
+              Stammdaten, Features, Rollenmatrix, Whitelist, Gewässer und Fischregel-Kontexte.
             </p>
             <p className="mt-2 text-xs font-medium text-gray-700 dark:text-gray-200">
               {enabledFeatureCount} aktive Features, {whitelist.length} Whitelist-Einträge
@@ -1006,6 +1007,19 @@ export default function ClubDetailPage() {
           </div>
         </div>
       </details>
+
+      <WaterbodyManagerSection
+        clubId={club.id}
+        title="5. Gewässer"
+        onMessage={(nextMessage) => {
+          setError('');
+          setMessage(nextMessage);
+        }}
+        onError={(nextError) => {
+          setMessage('');
+          setError(nextError);
+        }}
+      />
 
       <ClubHomeWaterSpeciesSection
         clubId={club.id}

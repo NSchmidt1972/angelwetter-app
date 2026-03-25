@@ -37,7 +37,7 @@ export default function Leaderboard() {
       const clubId = getActiveClubId();
       const { data, error } = await supabase
         .from('fishes')
-        .select('fish,size,angler,timestamp,location_name,lat,lon,count_in_stats,under_min_size,out_of_season')
+        .select('fish,size,angler,timestamp,location_name,lat,lon,waterbody_id,count_in_stats,under_min_size,out_of_season')
         .eq('club_id', clubId)
         .eq('count_in_stats', true); // <— Hauptfilter
 

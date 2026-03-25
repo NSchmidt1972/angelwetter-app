@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabaseClient';
+import { listWaterbodiesByClub } from '@/services/waterbodiesService';
+
+const CLUB_DEFAULT_SCOPE = '__club_default__';
 
 function mapRows(rows) {
   return (Array.isArray(rows) ? rows : []).map((row) => ({
@@ -33,8 +36,30 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
   const [adding, setAdding] = useState(false);
   const [seedingDefaults, setSeedingDefaults] = useState(false);
   const [newSpecies, setNewSpecies] = useState('');
+  const [scope, setScope] = useState(CLUB_DEFAULT_SCOPE);
+  const [waterbodies, setWaterbodies] = useState([]);
 
+  const selectedWaterbodyId = scope === CLUB_DEFAULT_SCOPE ? null : scope;
+  const selectedWaterbody = useMemo(
+    () => waterbodies.find((row) => row.id === selectedWaterbodyId) || null,
+    [waterbodies, selectedWaterbodyId],
+  );
+  const scopeLabel = selectedWaterbody?.name || 'Club-Standard';
   const sortedRows = useMemo(() => sortRows(rows), [rows]);
+
+  const loadWaterbodies = useCallback(async () => {
+    if (!clubId) {
+      setWaterbodies([]);
+      return;
+    }
+    try {
+      const loaded = await listWaterbodiesByClub(clubId, { activeOnly: false });
+      setWaterbodies(Array.isArray(loaded) ? loaded : []);
+    } catch (error) {
+      setWaterbodies([]);
+      onError?.(error?.message || 'Gewässer konnten nicht geladen werden.');
+    }
+  }, [clubId, onError]);
 
   const loadRows = useCallback(async () => {
     if (!clubId) {
@@ -45,21 +70,35 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('club_fish_rules')
         .select('id, species, is_active, min_size_cm, season_start_md, season_end_md')
         .eq('club_id', clubId)
-        .is('waterbody_id', null)
         .order('species', { ascending: true });
+
+      if (selectedWaterbodyId) query = query.eq('waterbody_id', selectedWaterbodyId);
+      else query = query.is('waterbody_id', null);
+
+      const { data, error } = await query;
       if (error) throw error;
       setRows(mapRows(data));
     } catch (error) {
-      onError?.(error?.message || 'Vereinsgewässer-Fischarten konnten nicht geladen werden.');
+      onError?.(error?.message || 'Fischarten konnten nicht geladen werden.');
       setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [clubId, onError]);
+  }, [clubId, onError, selectedWaterbodyId]);
+
+  useEffect(() => {
+    void loadWaterbodies();
+  }, [loadWaterbodies]);
+
+  useEffect(() => {
+    if (!selectedWaterbodyId) return;
+    const exists = waterbodies.some((row) => row.id === selectedWaterbodyId);
+    if (!exists) setScope(CLUB_DEFAULT_SCOPE);
+  }, [selectedWaterbodyId, waterbodies]);
 
   useEffect(() => {
     void loadRows();
@@ -83,7 +122,7 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
         .from('club_fish_rules')
         .insert({
           club_id: clubId,
-          waterbody_id: null,
+          waterbody_id: selectedWaterbodyId,
           species,
           is_active: true,
         })
@@ -93,10 +132,10 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
       const created = mapRows([data])[0];
       setRows((prev) => sortRows([...prev, created]));
       setNewSpecies('');
-      onMessage?.('Fischart hinzugefügt.');
+      onMessage?.(`Fischart hinzugefügt (${scopeLabel}).`);
     } catch (error) {
       if (String(error?.code || '') === '23505') {
-        onError?.('Diese Fischart existiert bereits für das Vereinsgewässer.');
+        onError?.(`Diese Fischart existiert bereits im Kontext "${scopeLabel}".`);
       } else {
         onError?.(error?.message || 'Fischart konnte nicht erstellt werden.');
       }
@@ -120,10 +159,10 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
       if (error) throw error;
       const updated = mapRows([data])[0];
       setRows((prev) => prev.map((item) => (item.id === row.id ? updated : item)));
-      onMessage?.('Fischart gespeichert.');
+      onMessage?.(`Fischart gespeichert (${scopeLabel}).`);
     } catch (error) {
       if (String(error?.code || '') === '23505') {
-        onError?.('Diese Fischart existiert bereits für das Vereinsgewässer.');
+        onError?.(`Diese Fischart existiert bereits im Kontext "${scopeLabel}".`);
       } else {
         onError?.(error?.message || 'Fischart konnte nicht gespeichert werden.');
       }
@@ -148,7 +187,7 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
         .eq('club_id', clubId);
       if (error) throw error;
       setRows((prev) => prev.filter((item) => item.id !== row.id));
-      onMessage?.('Fischart gelöscht.');
+      onMessage?.(`Fischart gelöscht (${scopeLabel}).`);
     } catch (error) {
       onError?.(error?.message || 'Fischart konnte nicht gelöscht werden.');
     } finally {
@@ -157,7 +196,7 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
   };
 
   const seedDefaultRules = async () => {
-    if (!clubId || seedingDefaults) return;
+    if (!clubId || seedingDefaults || selectedWaterbodyId) return;
     setSeedingDefaults(true);
     try {
       const { error } = await supabase.rpc('seed_default_club_fish_rules', {
@@ -176,13 +215,29 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
   return (
     <details className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
       <summary className="cursor-pointer list-none text-lg font-semibold">
-        5. Vereinsgewässer-Fischarten ({rows.length})
+        6. Fischregel-Kontext je Gewässer ({rows.length})
       </summary>
 
       <div className="mt-4 space-y-4">
         <p className="text-sm text-gray-600 dark:text-gray-300">
-          Diese Liste steuert die Fischarten-Auswahl für die Region "Vereinsgewässer" in diesem Club.
+          `waterbody_id = null` ist Club-Standard (Basis aus Region „Binnen“). Pro Gewässer können abweichende Fischarten gepflegt werden.
         </p>
+
+        <label className="block text-sm">
+          Regel-Kontext
+          <select
+            value={scope}
+            onChange={(event) => setScope(event.target.value)}
+            className="mt-1 w-full max-w-md rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+          >
+            <option value={CLUB_DEFAULT_SCOPE}>Club-Standard (waterbody_id = null)</option>
+            {waterbodies.map((waterbody) => (
+              <option key={waterbody.id} value={waterbody.id}>
+                {waterbody.name} {waterbody.is_active ? '' : '(inaktiv)'}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div className="flex flex-wrap items-end gap-2 rounded border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
           <label className="min-w-[220px] flex-1 text-sm">
@@ -207,7 +262,7 @@ export default function ClubHomeWaterSpeciesSection({ clubId, onMessage, onError
           <button
             type="button"
             onClick={() => void seedDefaultRules()}
-            disabled={seedingDefaults}
+            disabled={seedingDefaults || Boolean(selectedWaterbodyId)}
             className="rounded border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
           >
             {seedingDefaults ? 'Lädt...' : 'Standards laden'}

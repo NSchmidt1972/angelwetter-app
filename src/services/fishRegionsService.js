@@ -1,6 +1,9 @@
 import { supabase } from '@/supabaseClient';
 import { DEFAULT_REGION_OPTIONS, regionFishMapFallback } from '@/constants/fishRegions';
 
+const HOME_WATER_REGION_ID = 'ferkensbruch';
+const HOME_WATER_REGION_LABEL = 'Vereinsgewässer';
+
 function asTrimmedString(value) {
   return String(value || '').trim();
 }
@@ -52,14 +55,18 @@ function fallbackCatalog() {
 function buildPublicMap({ regions, species }) {
   const regionOptions = [];
   const regionFishMap = {};
-
-  regions
-    .filter((row) => row.is_active)
+  const activeRegions = regions.filter((row) => row.is_active);
+  const homeWaterRegion = activeRegions.find((row) => row.id === HOME_WATER_REGION_ID)
+    || { id: HOME_WATER_REGION_ID, label: HOME_WATER_REGION_LABEL, is_active: true };
+  const remainingRegions = activeRegions
+    .filter((row) => row.id !== HOME_WATER_REGION_ID)
     .sort((a, b) => a.label.localeCompare(b.label, 'de', { sensitivity: 'base' }))
-    .forEach((region) => {
-      regionOptions.push({ id: region.id, label: region.label });
-      regionFishMap[region.id] = [];
-    });
+  const visibleRegions = [homeWaterRegion, ...remainingRegions];
+
+  visibleRegions.forEach((region) => {
+    regionOptions.push({ id: region.id, label: region.label });
+    regionFishMap[region.id] = [];
+  });
 
   species
     .filter((row) => row.is_active && Boolean(regionFishMap[row.region_id]))
@@ -211,7 +218,7 @@ export async function createFishRegionSpecies(input) {
   const regionId = normalizeRegionId(input?.region_id);
   const species = asTrimmedString(input?.species);
   if (!regionId) throw new Error('Region fehlt.');
-  if (regionId === 'ferkensbruch') {
+  if (regionId === HOME_WATER_REGION_ID) {
     throw new Error('Vereinsgewässer-Fischarten werden clubspezifisch pro Verein gepflegt.');
   }
   if (!species) throw new Error('Fischart fehlt.');

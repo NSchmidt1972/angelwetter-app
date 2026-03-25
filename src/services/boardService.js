@@ -88,7 +88,7 @@ export async function fetchFishAggregates(clubIdOverride = null) {
   const { data, error } = await supabase
     .from('fishes')
     .select(
-      'fish, taken, location_name, lat, lon, timestamp, size, angler, blank, weight, is_marilou, count_in_stats, under_min_size, out_of_season, club_id'
+      'fish, taken, location_name, lat, lon, waterbody_id, timestamp, size, angler, blank, weight, is_marilou, count_in_stats, under_min_size, out_of_season, club_id'
     )
     .eq('club_id', clubId)
     .order('timestamp', { ascending: false });

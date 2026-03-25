@@ -15,13 +15,17 @@ export default function BoardSettings() {
   return (
     <div className="space-y-6">
       <Card className="space-y-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Vorstand: Einstellungen</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Whitelist und Rollenverwaltung sind hier getrennt von der Statistik.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Vorstand: Einstellungen</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Whitelist und Rollenverwaltung sind hier getrennt von der Statistik.
+            </p>
+          </div>
+          <div className="ml-auto">
+            <BoardSubmenu activeKey={activeKey} />
+          </div>
         </div>
-        <BoardSubmenu activeKey={activeKey} />
       </Card>
 
       <AdminMembersManage sectionMode={sectionMode} />

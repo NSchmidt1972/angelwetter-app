@@ -3,15 +3,15 @@ import { supabase } from '../supabaseClient';
 import { getActiveClubId } from '@/utils/clubId';
 
 export const baseSelect =
-  'id, angler, fish, size, weight, note, timestamp, weather, photo_url, location_name, lat, lon, is_marilou, blank, share_public_non_home';
+  'id, angler, fish, size, weight, note, timestamp, weather, photo_url, location_name, lat, lon, waterbody_id, is_marilou, blank, share_public_non_home';
 
 export const FISH_SELECT = Object.freeze({
   CATCHES: baseSelect,
   VALIDATION:
-    'id, angler, fish, size, weight, timestamp, location_name, lat, lon, weather, photo_url, blank, is_marilou, count_in_stats, under_min_size, out_of_season',
-  TOP: 'id, angler, fish, size, timestamp, location_name, lat, lon, blank, is_marilou',
-  ANALYSIS: 'id, angler, fish, size, timestamp, location_name, lat, lon, blank, is_marilou, weather',
-  MAP: 'id, angler, fish, size, timestamp, lat, lon',
+    'id, angler, fish, size, weight, timestamp, location_name, lat, lon, waterbody_id, weather, photo_url, blank, is_marilou, count_in_stats, under_min_size, out_of_season',
+  TOP: 'id, angler, fish, size, timestamp, location_name, lat, lon, waterbody_id, blank, is_marilou',
+  ANALYSIS: 'id, angler, fish, size, timestamp, location_name, lat, lon, waterbody_id, blank, is_marilou, weather',
+  MAP: 'id, angler, fish, size, timestamp, lat, lon, waterbody_id',
 });
 
 export function fetchClubFishesQuery({ select = baseSelect, options } = {}) {
@@ -46,9 +46,29 @@ export async function countFishes({ onlyMine, anglerName, fromIso }) {
   return q;
 }
 
-export async function updateFish(id, { fish, size, note, photo_url, location_name, lat, lon, share_public_non_home }) {
+export async function updateFish(id, {
+  fish,
+  size,
+  note,
+  photo_url,
+  location_name,
+  lat,
+  lon,
+  waterbody_id,
+  share_public_non_home,
+}) {
   const clubId = getActiveClubId();
-  const patch = { fish, size, note, photo_url, location_name, lat, lon, share_public_non_home };
+  const patch = {
+    fish,
+    size,
+    note,
+    photo_url,
+    location_name,
+    lat,
+    lon,
+    waterbody_id,
+    share_public_non_home,
+  };
   Object.keys(patch).forEach((key) => {
     if (patch[key] === undefined) delete patch[key];
   });

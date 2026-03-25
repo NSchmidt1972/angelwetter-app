@@ -511,7 +511,7 @@ test('form flow: Fangformular nutzt Testfisch Aal mit 200 cm', async ({ page, co
   await page.goto('/__ux/fish-form', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /fang eintragen/i })).toBeVisible();
 
-  await page.locator('select').nth(1).selectOption('Aal');
+  await page.locator('select').filter({ has: page.locator('option[value="Aal"]') }).first().selectOption('Aal');
   await page.getByPlaceholder(/z\. B\. 35 cm/i).fill('200');
   await page.getByPlaceholder(/besondere umstände/i).fill('Playwright Testfisch Aal 200cm');
 

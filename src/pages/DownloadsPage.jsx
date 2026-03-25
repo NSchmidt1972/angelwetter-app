@@ -70,7 +70,7 @@ export default function DownloadsPage() {
     const clubId = getActiveClubId();
     const { data, error } = await supabase
       .from('fishes')
-      .select('fish, size, weight, timestamp, location_name, lat, lon')
+      .select('fish, size, weight, timestamp, location_name, lat, lon, waterbody_id')
       .eq('club_id', clubId)
       .eq('angler', anglerName)
       .eq('taken', true)

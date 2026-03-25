@@ -6,7 +6,7 @@ const FUNCTIONS_BASE = `${SUPABASE_URL}/functions/v1`;
 /**
  * Fügt eine Schneidersession hinzu.
  */
-async function insertBlankSession(anglerName, hours, fishingType, position) {
+async function insertBlankSession(anglerName, hours, fishingType, position, waterbodyId = null) {
   const clubId = getActiveClubId();
   const isPlaceholderClubId = clubId === '00000000-0000-0000-0000-000000000000';
 
@@ -35,6 +35,7 @@ async function insertBlankSession(anglerName, hours, fishingType, position) {
     timestamp: new Date().toISOString(),
     lat: position?.lat ?? null,
     lon: position?.lon ?? null,
+    waterbody_id: waterbodyId ?? null,
     club_id: clubId,
   };
 
@@ -86,14 +87,20 @@ async function sendBlankWeatherSummary(anglerName, hours, accessToken) {
  * Hauptfunktion zum Speichern einer Schneidersession.
  * Mehrere Sessions pro Tag sind erlaubt.
  */
-export async function saveBlankDay(anglerName, hours, fishingType, position) {
+export async function saveBlankDay(anglerName, hours, fishingType, position, options = {}) {
   // Session prüfen
   const sessionResult = await supabase.auth.getSession();
   const accessToken = sessionResult.data?.session?.access_token;
   if (!accessToken) throw new Error("Nicht eingeloggt – bitte zuerst anmelden.");
 
   // Eintrag in fishes speichern
-  await insertBlankSession(anglerName, hours, fishingType, position);
+  await insertBlankSession(
+    anglerName,
+    hours,
+    fishingType,
+    position,
+    options?.waterbody_id ?? null,
+  );
 
   // Wetter-Summary ist best-effort und darf das Speichern nicht blockieren
   try {

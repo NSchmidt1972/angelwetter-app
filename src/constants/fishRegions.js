@@ -11,11 +11,6 @@ export const REGION_LABELS = {
   norway: "Norwegen (Salzwasser)",
 };
 
-const FERKENSBRUCH_FISH = [
-"Aal", "Barsch", "Brasse", "Gründling", "Güster", "Hecht", "Karausche", "Karpfen",
-"Rotauge", "Rotfeder", "Schleie", "Wels", "Zander",
-];
-
 const INLAND_FISH = [
 "Aal", "Barsch", "Brasse", "Forelle", "Güster", "Gründling", "Grundel", "Hecht", "Karausche", "Karpfen",
 "Rotauge", "Rotfeder", "Schleie", "Wels", "Zander",
@@ -72,7 +67,7 @@ const BALTIC_SEA_DE_FISH = [
 ];
 
 export const REGION_FISH_LISTS = Object.freeze({
-  ferkensbruch: FERKENSBRUCH_FISH,
+  ferkensbruch: INLAND_FISH,
   inland: INLAND_FISH,
   holland: HOLLAND_FISH,
   northsea_de: NORTH_SEA_DE_FISH,
@@ -94,5 +89,6 @@ export function regionFishMapFallback() {
 }
 
 export function fishListForRegion(region) {
-  return REGION_FISH_LISTS[region] || FERKENSBRUCH_FISH;
+  if (region === 'ferkensbruch') return INLAND_FISH;
+  return REGION_FISH_LISTS[region] || INLAND_FISH;
 }

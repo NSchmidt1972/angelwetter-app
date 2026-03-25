@@ -15,7 +15,7 @@ export default function BoardSubmenu({ activeKey = 'stats' }) {
     { key: 'stats', label: '📊 Kennzahlen', to: boardBasePath },
     { key: 'whitelist', label: '📨 Whitelist', to: `${boardBasePath}/einstellungen#vorstand-whitelist` },
     { key: 'members', label: '👥 Mitglieder & Rollen', to: `${boardBasePath}/einstellungen#vorstand-members` },
-    { key: 'rules', label: '📜 Regeln', to: `${boardBasePath}/regeln` },
+    { key: 'rules', label: '🌊 Gewässer', to: `${boardBasePath}/regeln` },
   ];
 
   return (

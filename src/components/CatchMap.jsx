@@ -12,6 +12,7 @@ import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { useLocalStorageValue } from '@/hooks/useLocalStorageValue';
 import { useClubCoordinates } from '@/hooks/useClubCoordinates';
 import { FISH_SELECT, fetchClubFishesQuery } from '@/services/fishes';
+import { listWaterbodiesByClub } from '@/services/waterbodiesService';
 import { HOME_WATER_RADIUS_KM } from '@/utils/location';
 import { getDistanceKm } from '@/utils/geo';
 import 'leaflet/dist/leaflet.css';
@@ -100,6 +101,8 @@ const MONTHS_DE = [
 export default function CatchMap() {
   const resumeTick = useAppResumeTick({ enabled: true });
   const [entries, setEntries] = useState([]);
+  const [waterbodies, setWaterbodies] = useState([]);
+  const [waterbodyFilter, setWaterbodyFilter] = useState('all');
   const [onlyMine, setOnlyMine] = useState(false);
   const { clubCoords, reload: reloadClubCoords } = useClubCoordinates({
     timeoutLabel: 'CatchMap Club-Koordinaten timeout',
@@ -137,6 +140,30 @@ export default function CatchMap() {
       active = false;
     };
   }, [resumeTick]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const data = await listWaterbodiesByClub(null, { activeOnly: false });
+        if (!active) return;
+        setWaterbodies(Array.isArray(data) ? data : []);
+      } catch (error) {
+        if (!active) return;
+        console.warn('CatchMap: Gewässer konnten nicht geladen werden:', error?.message || error);
+        setWaterbodies([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [resumeTick]);
+
+  useEffect(() => {
+    if (waterbodyFilter === 'all') return;
+    const exists = waterbodies.some((entry) => entry.id === waterbodyFilter);
+    if (!exists) setWaterbodyFilter('all');
+  }, [waterbodies, waterbodyFilter]);
 
   // Aktuelles Jahr immer in der Liste führen
   const availableYears = useMemo(() => {
@@ -177,10 +204,24 @@ export default function CatchMap() {
 
   // Schneidersessions (blank) rausfiltern = nur Einträge mit Fischname
   const filteredEntries = useMemo(() => {
-    const valid = timeFiltered.filter(e => e.fish?.trim());
+    const valid = timeFiltered.filter((entry) => {
+      if (!entry.fish?.trim()) return false;
+      if (waterbodyFilter === 'all') return true;
+      return (entry.waterbody_id || '') === waterbodyFilter;
+    });
     if (!onlyMine) return valid;
     return valid.filter(e => e.angler?.trim().toLowerCase() === anglerName);
-  }, [timeFiltered, onlyMine, anglerName]);
+  }, [timeFiltered, waterbodyFilter, onlyMine, anglerName]);
+
+  const waterbodyById = useMemo(
+    () =>
+      (waterbodies || []).reduce((acc, entry) => {
+        if (!entry?.id) return acc;
+        acc[entry.id] = entry;
+        return acc;
+      }, {}),
+    [waterbodies],
+  );
 
   const bounds = useMemo(() => {
     if (filteredEntries.length === 0) return [];
@@ -224,6 +265,20 @@ export default function CatchMap() {
         </label>
 
         <div className="flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <select
+              value={waterbodyFilter}
+              onChange={(e) => setWaterbodyFilter(e.target.value)}
+              className="border rounded-md px-2 py-1 bg-white dark:bg-gray-800 dark:border-gray-700"
+            >
+              <option value="all">Alle Gewässer</option>
+              {waterbodies.map((waterbody) => (
+                <option key={waterbody.id} value={waterbody.id}>
+                  {waterbody.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-2">
            
             <select
@@ -305,6 +360,11 @@ export default function CatchMap() {
                     <div className="text-sm">
                       <strong>{e.angler}</strong><br />
                       🐟 {e.fish} ({e.size} cm)<br />
+                      {e.waterbody_id && waterbodyById[e.waterbody_id]?.name ? (
+                        <>
+                          🌊 {waterbodyById[e.waterbody_id].name}<br />
+                        </>
+                      ) : null}
                       {new Date(e.timestamp).toLocaleString('de-DE')}
                       {isHomeWaterPoint(e.lat, e.lon, homeCenter) && (
                         <p className="text-xs text-gray-500 mt-1">📍 Position zentriert auf Vereinsgewässer</p>

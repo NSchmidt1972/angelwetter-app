@@ -27,6 +27,10 @@ function asNullableString(value) {
   return str || null;
 }
 
+function normalizeWaterbodyId(value) {
+  return asNullableString(value);
+}
+
 function normalizeMonthDay(value) {
   const candidate = asNullableString(value);
   if (!candidate) return null;
@@ -65,6 +69,7 @@ function mapRuleRow(row) {
     daily_limit: row?.daily_limit != null ? Number(row.daily_limit) : null,
     notes: row?.notes ? String(row.notes) : '',
     is_active: row?.is_active !== false,
+    waterbody_id: row?.waterbody_id ?? null,
     water_body: WATER_BODY_LABEL,
     updated_at: row?.updated_at ?? null,
   };
@@ -89,6 +94,7 @@ function fallbackRulesFromStatic() {
         daily_limit: null,
         notes: season ? SEASON_NOTE : '',
         is_active: true,
+        waterbody_id: null,
         water_body: WATER_BODY_LABEL,
         updated_at: null,
       };
@@ -130,7 +136,7 @@ function mapMutationError(error) {
   if (!error) return null;
   const code = String(error.code || '');
   if (code === '23505') {
-    return new Error('Für diese Fischart gibt es bereits eine Regel im Verein.');
+    return new Error('Für diese Fischart gibt es in diesem Regel-Kontext bereits einen Eintrag.');
   }
   if (code === '42501') {
     return new Error('Keine Berechtigung zum Bearbeiten der Regeln.');
@@ -138,64 +144,118 @@ function mapMutationError(error) {
   return new Error(error.message || 'Regel konnte nicht gespeichert werden.');
 }
 
-/**
- * Öffentliche Regelansicht für Mitglieder.
- */
-export async function fetchRules() {
-  const clubId = getActiveClubId();
-  if (!clubId) return fallbackRulesFromStatic();
-
-  const { data, error } = await supabase
+async function queryRulesByScope({ clubId, waterbodyId = null, includeInactive = false }) {
+  let query = supabase
     .from('club_fish_rules')
     .select(RULES_SELECT)
-    .eq('club_id', clubId)
-    .is('waterbody_id', null)
-    .eq('is_active', true)
+    .eq('club_id', clubId);
+
+  if (waterbodyId) query = query.eq('waterbody_id', waterbodyId);
+  else query = query.is('waterbody_id', null);
+
+  if (!includeInactive) query = query.eq('is_active', true);
+
+  const { data, error } = await query
+    .order('is_active', { ascending: false })
     .order('species', { ascending: true });
 
-  if (error) {
-    if (isMissingRulesTableError(error)) return fallbackRulesFromStatic();
-    throw new Error(error.message || 'Regeln konnten nicht geladen werden.');
+  if (error) throw error;
+  return Array.isArray(data) ? data.map(mapRuleRow) : [];
+}
+
+async function loadRulesWithFallback({
+  clubId,
+  waterbodyId = null,
+  includeInactive = false,
+  fallbackToClubDefault = false,
+}) {
+  const normalizedWaterbodyId = normalizeWaterbodyId(waterbodyId);
+
+  let rules = await queryRulesByScope({
+    clubId,
+    waterbodyId: normalizedWaterbodyId,
+    includeInactive,
+  });
+
+  if (normalizedWaterbodyId && fallbackToClubDefault && rules.length === 0) {
+    rules = await queryRulesByScope({
+      clubId,
+      waterbodyId: null,
+      includeInactive,
+    });
   }
 
-  const rules = Array.isArray(data) ? data.map(mapRuleRow) : [];
-  if (rules.length === 0) return fallbackRulesFromStatic();
   return rules;
 }
 
 /**
- * Vollansicht für Vorstand/Admin (inkl. inaktiver Regeln).
+ * Öffentliche Regelansicht für Mitglieder.
+ * Optional mit Gewässerkontext + Fallback auf Club-Standard.
  */
-export async function fetchBoardRules() {
+export async function fetchRules(options = {}) {
+  const clubId = getActiveClubId();
+  const useStaticFallback = options?.useStaticFallback !== false;
+  if (!clubId) return useStaticFallback ? fallbackRulesFromStatic() : [];
+
+  try {
+    const rules = await loadRulesWithFallback({
+      clubId,
+      waterbodyId: options?.waterbody_id ?? options?.waterbodyId ?? null,
+      includeInactive: false,
+      fallbackToClubDefault: options?.fallbackToClubDefault !== false,
+    });
+    if (rules.length === 0) return useStaticFallback ? fallbackRulesFromStatic() : [];
+    return rules;
+  } catch (error) {
+    if (isMissingRulesTableError(error)) return useStaticFallback ? fallbackRulesFromStatic() : [];
+    throw new Error(error.message || 'Regeln konnten nicht geladen werden.');
+  }
+}
+
+/**
+ * Vollansicht für Vorstand/Admin (inkl. inaktiver Regeln), optional je Gewässer.
+ */
+export async function fetchBoardRules(options = {}) {
   const clubId = getActiveClubId();
   if (!clubId) return fallbackRulesFromStatic();
 
-  const { data, error } = await supabase
-    .from('club_fish_rules')
-    .select(RULES_SELECT)
-    .eq('club_id', clubId)
-    .is('waterbody_id', null)
-    .order('is_active', { ascending: false })
-    .order('species', { ascending: true });
-
-  if (error) {
+  try {
+    return await loadRulesWithFallback({
+      clubId,
+      waterbodyId: options?.waterbody_id ?? options?.waterbodyId ?? null,
+      includeInactive: true,
+      fallbackToClubDefault: options?.fallbackToClubDefault === true,
+    });
+  } catch (error) {
     if (isMissingRulesTableError(error)) return fallbackRulesFromStatic();
     throw new Error(error.message || 'Regeln konnten nicht geladen werden.');
   }
-
-  return Array.isArray(data) ? data.map(mapRuleRow) : [];
 }
 
-export async function createBoardRule(input) {
+export async function fetchRuleSpeciesForContext(options = {}) {
+  const rules = await fetchRules(options);
+  return Array.from(
+    new Set(
+      rules
+        .map((rule) => String(rule?.species || '').trim())
+        .filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+}
+
+export async function createBoardRule(input, options = {}) {
   const clubId = getActiveClubId();
   if (!clubId) throw new Error('Kein aktiver Verein gefunden.');
 
   const payload = buildRulePayload(input);
+  const waterbodyId = normalizeWaterbodyId(
+    input?.waterbody_id ?? input?.waterbodyId ?? options?.waterbody_id ?? options?.waterbodyId,
+  );
   const { data, error } = await supabase
     .from('club_fish_rules')
     .insert({
       club_id: clubId,
-      waterbody_id: null,
+      waterbody_id: waterbodyId,
       ...payload,
     })
     .select(RULES_SELECT)
@@ -205,12 +265,23 @@ export async function createBoardRule(input) {
   return mapRuleRow(data);
 }
 
-export async function updateBoardRule(ruleId, input) {
+export async function updateBoardRule(ruleId, input, options = {}) {
   const clubId = getActiveClubId();
   if (!clubId) throw new Error('Kein aktiver Verein gefunden.');
   if (!ruleId) throw new Error('Regel-ID fehlt.');
 
   const payload = buildRulePayload(input);
+  const nextWaterbodyId = normalizeWaterbodyId(
+    input?.waterbody_id ?? input?.waterbodyId ?? options?.waterbody_id ?? options?.waterbodyId,
+  );
+  if (Object.prototype.hasOwnProperty.call(input || {}, 'waterbody_id')
+    || Object.prototype.hasOwnProperty.call(input || {}, 'waterbodyId')
+    || Object.prototype.hasOwnProperty.call(options || {}, 'waterbody_id')
+    || Object.prototype.hasOwnProperty.call(options || {}, 'waterbodyId')
+  ) {
+    payload.waterbody_id = nextWaterbodyId;
+  }
+
   const { data, error } = await supabase
     .from('club_fish_rules')
     .update(payload)

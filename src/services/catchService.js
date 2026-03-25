@@ -51,6 +51,7 @@ const IS_DEV_BUILD = (() => {
 export async function saveCatchEntry(entry, taken, position, anglerName, options = {}) {
   // 1) Insert
   const payload = { ...entry, taken: !!taken };
+  payload.waterbody_id = entry?.waterbody_id ?? null;
   payload.club_id = getActiveClubId();
   const rotaugeClubId = getClubIdForSlug('asv-rotauge');
   const isRotaugeClub = Boolean(rotaugeClubId && payload.club_id === rotaugeClubId);

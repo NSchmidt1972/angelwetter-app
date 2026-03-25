@@ -25,6 +25,14 @@ export function getDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 /**
+ * Berechnet die Entfernung zwischen zwei Koordinaten in Metern.
+ * @returns {number}
+ */
+export function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  return getDistanceKm(lat1, lon1, lat2, lon2) * 1000;
+}
+
+/**
  * Holt den Ortsnamen (Reverse Geocoding) zu gegebenen Koordinaten
  * @param {number} lat
  * @param {number} lon
@@ -61,4 +69,3 @@ export async function reverseGeocode(lat, lon) {
     return null;
   }
 }
-

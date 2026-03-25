@@ -92,7 +92,7 @@ export function useAdminOverviewCoreData({ effectiveClubId }) {
     const fishSnapshotPromise = resolveQueryData(
       supabase
         .from('fishes')
-        .select('angler, fish, size, timestamp, lat, lon, location_name, blank, taken')
+        .select('angler, fish, size, timestamp, lat, lon, waterbody_id, location_name, blank, taken')
         .eq('club_id', clubId)
         .order('timestamp', { ascending: false })
         .limit(ADMIN_OVERVIEW_FISH_SNAPSHOT_LIMIT),
@@ -194,11 +194,11 @@ export function useAdminOverviewCoreData({ effectiveClubId }) {
         return;
       }
 
-      const takenFallback = await resolveQueryData(
-        supabase
-          .from('fishes')
-          .select('angler, fish, timestamp')
-          .eq('club_id', clubId)
+        const takenFallback = await resolveQueryData(
+          supabase
+            .from('fishes')
+            .select('angler, fish, timestamp, waterbody_id')
+            .eq('club_id', clubId)
           .eq('taken', true)
           .order('timestamp', { ascending: false })
           .limit(100),
@@ -227,7 +227,7 @@ export function useAdminOverviewCoreData({ effectiveClubId }) {
         const externalFallback = await resolveQueryData(
           supabase
             .from('fishes')
-            .select('angler, fish, size, timestamp, lat, lon, location_name, blank')
+            .select('angler, fish, size, timestamp, lat, lon, waterbody_id, location_name, blank')
             .eq('club_id', clubId)
             .not('lat', 'is', null)
             .not('lon', 'is', null)
