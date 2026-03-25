@@ -30,6 +30,61 @@ if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is mi
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+function tryDecodeJwtPayload(token) {
+  if (typeof token !== "string" || !token.startsWith("eyJ")) return null;
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const json = Buffer.from(padded, "base64").toString("utf-8");
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function classifySupabaseKey(key) {
+  if (typeof key !== "string") return "unknown";
+  if (key.startsWith("sb_secret_")) return "secret";
+  if (key.startsWith("sb_publishable_")) return "publishable";
+  const payload = tryDecodeJwtPayload(key);
+  const role = typeof payload?.role === "string" ? payload.role : null;
+  if (role === "service_role") return "service_role_jwt";
+  if (role === "anon") return "anon_jwt";
+  return "unknown";
+}
+
+function getSupabaseProjectRef(url) {
+  try {
+    const host = new URL(url).hostname;
+    const [projectRef] = host.split(".");
+    return projectRef || null;
+  } catch {
+    return null;
+  }
+}
+
+function formatSupabaseError(error) {
+  if (!error) return null;
+  return {
+    code: error.code ?? null,
+    message: error.message ?? String(error),
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    status: error.status ?? null,
+  };
+}
+
+const keyType = classifySupabaseKey(SUPABASE_SERVICE_ROLE_KEY);
+const projectRef = getSupabaseProjectRef(SUPABASE_URL);
+console.log("SUPABASE_PROJECT_REF =", projectRef);
+console.log("SUPABASE_KEY_TYPE =", keyType);
+if (keyType === "publishable" || keyType === "anon_jwt") {
+  console.error("[FATAL] SUPABASE_SERVICE_ROLE_KEY is not a service key:", keyType);
+}
+
 function parseUtcCompactToIso(utcStr) {
   if (!utcStr || typeof utcStr !== "string") return null;
   const m = utcStr.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\.\d+)?$/);
@@ -113,6 +168,18 @@ function warnAndSkipMissingDeviceId(topic, raw, payload) {
   console.warn("[WARN] missing device_id, skipping message:", topic, { raw, payload });
 }
 
+function normalizeTopic(topic) {
+  return String(topic || "").trim().replace(/\/+$/, "");
+}
+
+function isAsvStateTopic(topic) {
+  return (
+    topic === "asv/sensors/state" ||
+    topic === "asv/sensors" ||
+    /^asv\/sensors\/[^/]+\/state$/.test(topic)
+  );
+}
+
 const client = mqtt.connect(MQTT_URL, {
   username: MQTT_USER,
   password: MQTT_PASS,
@@ -132,6 +199,7 @@ client.on("message", async (topic, message) => {
   try {
     const raw = message.toString("utf-8");
     console.log("[MQTT] msg", topic, raw);
+    const normalizedTopic = normalizeTopic(topic);
 
     let payload;
     try {
@@ -143,11 +211,11 @@ client.on("message", async (topic, message) => {
       payload = { raw };
     }
 
-    // --- ASV State Topic: asv/sensors/state ---
-    if (topic === "asv/sensors/state") {
-      const deviceId = resolveDeviceId(topic, payload);
+    // --- ASV State Topic: asv/sensors/state (or legacy asv/sensors) ---
+    if (isAsvStateTopic(normalizedTopic)) {
+      const deviceId = resolveDeviceId(normalizedTopic, payload);
       if (!deviceId) {
-        warnAndSkipMissingDeviceId(topic, raw, payload);
+        warnAndSkipMissingDeviceId(normalizedTopic, raw, payload);
         return;
       }
 
@@ -162,17 +230,17 @@ client.on("message", async (topic, message) => {
       if (temperatureC !== null) {
         const tempRow = {
           device_id: deviceId,
-          topic,
+          topic: normalizedTopic,
           measured_at: measuredAt,
           temperature_c: temperatureC,
           payload,
         };
 
         const { error } = await supabase.from("temperature_log").insert(tempRow);
-        if (error) console.error("Supabase temperature insert error:", error);
+        if (error) console.error("Supabase temperature insert error:", formatSupabaseError(error));
         else console.log("[OK] inserted state temperature", tempRow.device_id, tempRow.temperature_c, tempRow.measured_at);
       } else {
-        console.warn("[WARN] state has no valid temperature:", topic, raw);
+        console.warn("[WARN] state has no valid temperature:", normalizedTopic, raw);
       }
 
       const battery = payload?.battery && typeof payload.battery === "object" ? payload.battery : {};
@@ -188,7 +256,7 @@ client.on("message", async (topic, message) => {
       if (voltageV !== null && percent !== null) {
         const battRow = {
           device_id: deviceId,
-          topic,
+          topic: normalizedTopic,
           measured_at: measuredAt,
           voltage_v: voltageV,
           percent,
@@ -197,10 +265,10 @@ client.on("message", async (topic, message) => {
         };
 
         const { error } = await supabase.from("batt_log").insert(battRow);
-        if (error) console.error("Supabase battery insert error:", error);
+        if (error) console.error("Supabase battery insert error:", formatSupabaseError(error));
         else console.log("[OK] inserted state battery", battRow.device_id, battRow.voltage_v, battRow.percent, battRow.valid);
       } else {
-        console.warn("[WARN] state has no valid battery values:", topic, raw);
+        console.warn("[WARN] state has no valid battery values:", normalizedTopic, raw);
       }
 
       const gps = payload?.gps && typeof payload.gps === "object" ? payload.gps : {};
@@ -210,7 +278,7 @@ client.on("message", async (topic, message) => {
       if (lat !== null && lon !== null) {
         const gpsRow = {
           device_id: deviceId,
-          topic,
+          topic: normalizedTopic,
           fix_time_utc: parseAnyTimestampToIso(gps?.utc) ?? parseUtcCompactToIso(gps?.utc),
           lat,
           lon,
@@ -226,20 +294,20 @@ client.on("message", async (topic, message) => {
         };
 
         const { error } = await supabase.from("gps_log").insert(gpsRow);
-        if (error) console.error("Supabase gps insert error:", error);
+        if (error) console.error("Supabase gps insert error:", formatSupabaseError(error));
         else console.log("[OK] inserted state gps", gpsRow.device_id, gpsRow.fix_time_utc ?? "");
       } else {
-        console.warn("[WARN] state has no valid gps coordinates:", topic, raw);
+        console.warn("[WARN] state has no valid gps coordinates:", normalizedTopic, raw);
       }
 
       return;
     }
 
     // --- ASV Temp Topic: asv/sensors/temp_c ---
-    if (topic === "asv/sensors/temp_c") {
-      const deviceId = resolveDeviceId(topic, payload);
+    if (normalizedTopic === "asv/sensors/temp_c") {
+      const deviceId = resolveDeviceId(normalizedTopic, payload);
       if (!deviceId) {
-        warnAndSkipMissingDeviceId(topic, raw, payload);
+        warnAndSkipMissingDeviceId(normalizedTopic, raw, payload);
         return;
       }
 
@@ -252,29 +320,29 @@ client.on("message", async (topic, message) => {
         toFiniteNumberOrNull(payload?.temp);
 
       if (temperatureC === null) {
-        console.warn("[WARN] could not parse temp:", topic, raw, payload);
+        console.warn("[WARN] could not parse temp:", normalizedTopic, raw, payload);
         return;
       }
 
       const row = {
         device_id: deviceId,
-        topic,
+        topic: normalizedTopic,
         measured_at: resolveMeasuredAt(payload),
         temperature_c: temperatureC,
         payload,
       };
 
       const { error } = await supabase.from("temperature_log").insert(row);
-      if (error) console.error("Supabase temperature insert error:", error);
+      if (error) console.error("Supabase temperature insert error:", formatSupabaseError(error));
       else console.log("[OK] inserted temperature", row.device_id, row.temperature_c, row.measured_at);
       return;
     }
 
     // --- ASV Battery Topic: asv/sensors/battery ---
-    if (topic === "asv/sensors/battery") {
-      const deviceId = resolveDeviceId(topic, payload);
+    if (normalizedTopic === "asv/sensors/battery") {
+      const deviceId = resolveDeviceId(normalizedTopic, payload);
       if (!deviceId) {
-        warnAndSkipMissingDeviceId(topic, raw, payload);
+        warnAndSkipMissingDeviceId(normalizedTopic, raw, payload);
         return;
       }
 
@@ -292,13 +360,13 @@ client.on("message", async (topic, message) => {
       const valid = typeof payload?.valid === "boolean" ? payload.valid : null;
 
       if (voltageV === null || percent === null) {
-        console.warn("[WARN] could not parse battery:", topic, raw, payload);
+        console.warn("[WARN] could not parse battery:", normalizedTopic, raw, payload);
         return;
       }
 
       const row = {
         device_id: deviceId,
-        topic,
+        topic: normalizedTopic,
         measured_at: resolveMeasuredAt(payload),
         voltage_v: voltageV,
         percent,
@@ -307,16 +375,16 @@ client.on("message", async (topic, message) => {
       };
 
       const { error } = await supabase.from("batt_log").insert(row);
-      if (error) console.error("Supabase battery insert error:", error);
+      if (error) console.error("Supabase battery insert error:", formatSupabaseError(error));
       else console.log("[OK] inserted battery", row.device_id, row.voltage_v, row.percent);
       return;
     }
 
     // --- GPS ---
-    if (topic.startsWith("gps/")) {
-      const deviceId = resolveDeviceId(topic, payload);
+    if (normalizedTopic.startsWith("gps/")) {
+      const deviceId = resolveDeviceId(normalizedTopic, payload);
       if (!deviceId) {
-        warnAndSkipMissingDeviceId(topic, raw, payload);
+        warnAndSkipMissingDeviceId(normalizedTopic, raw, payload);
         return;
       }
 
@@ -326,7 +394,7 @@ client.on("message", async (topic, message) => {
 
       const row = {
         device_id: deviceId,
-        topic,
+        topic: normalizedTopic,
         fix_time_utc: parseAnyTimestampToIso(payload?.utc) ?? parseUtcCompactToIso(payload?.utc),
         lat,
         lon,
@@ -342,16 +410,16 @@ client.on("message", async (topic, message) => {
       };
 
       const { error } = await supabase.from("gps_log").insert(row);
-      if (error) console.error("Supabase gps insert error:", error);
+      if (error) console.error("Supabase gps insert error:", formatSupabaseError(error));
       else console.log("[OK] inserted gps", row.device_id, row.fix_time_utc ?? "");
       return;
     }
 
     // --- Generic temperature topics (temperature/<id> oder temp/<id>) ---
-    if (topic.startsWith("temperature/") || topic.startsWith("temp/")) {
-      const deviceId = resolveDeviceId(topic, payload);
+    if (normalizedTopic.startsWith("temperature/") || normalizedTopic.startsWith("temp/")) {
+      const deviceId = resolveDeviceId(normalizedTopic, payload);
       if (!deviceId) {
-        warnAndSkipMissingDeviceId(topic, raw, payload);
+        warnAndSkipMissingDeviceId(normalizedTopic, raw, payload);
         return;
       }
 
@@ -364,23 +432,25 @@ client.on("message", async (topic, message) => {
         toFiniteNumberOrNull(payload.value);
 
       if (temperatureC === null) {
-        console.warn("[WARN] could not parse temp:", topic, raw, payload);
+        console.warn("[WARN] could not parse temp:", normalizedTopic, raw, payload);
         return;
       }
 
       const row = {
         device_id: deviceId,
-        topic,
+        topic: normalizedTopic,
         measured_at: resolveMeasuredAt(payload),
         temperature_c: temperatureC,
         payload,
       };
 
       const { error } = await supabase.from("temperature_log").insert(row);
-      if (error) console.error("Supabase temperature insert error:", error);
+      if (error) console.error("Supabase temperature insert error:", formatSupabaseError(error));
       else console.log("[OK] inserted temperature", row.device_id, row.temperature_c, row.measured_at);
       return;
     }
+
+    console.warn("[WARN] no handler for topic, skipping message:", normalizedTopic);
   } catch (e) {
     console.error("[ERR] handler exception:", e);
   }
