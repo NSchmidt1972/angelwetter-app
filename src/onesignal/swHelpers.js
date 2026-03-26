@@ -204,11 +204,11 @@ function waitForActivation(registration, { timeoutMs = 8000 } = {}) {
       if (pollId != null) window.clearInterval(pollId);
       registration.removeEventListener?.('updatefound', onUpdateFound);
       trackedWorker?.removeEventListener?.('statechange', onStateChange);
-      resolve(registration);
+      resolve(registration.active ? registration : null);
     };
 
     const onStateChange = () => {
-      if (registration.active || trackedWorker?.state === 'activated') {
+      if (registration.active || trackedWorker?.state === 'activated' || trackedWorker?.state === 'redundant') {
         finish();
       }
     };
@@ -230,7 +230,7 @@ function waitForActivation(registration, { timeoutMs = 8000 } = {}) {
     registration.addEventListener?.('updatefound', onUpdateFound);
 
     pollId = window.setInterval(() => {
-      if (registration.active) {
+      if (registration.active || trackedWorker?.state === 'redundant') {
         finish();
       }
     }, 200);

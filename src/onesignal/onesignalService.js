@@ -172,6 +172,43 @@ async function waitForServiceWorkerReady({ timeoutMs = SW_READY_TIMEOUT_MS } = {
   }
 }
 
+function isAlreadyInitializedError(error) {
+  const message = String(error?.message || error || '');
+  return /already.*init/i.test(message) || /already initialized/i.test(message);
+}
+
+function isScriptOriginMismatchError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    message.includes('script origin does not match') ||
+    message.includes("registering client's origin")
+  );
+}
+
+async function resolveReadyOneSignalRegistration({
+  firstTimeoutMs = 10_000,
+  retryTimeoutMs = 12_000,
+  retryDelayMs = 700,
+  cleanupLegacy = true,
+} = {}) {
+  let registration = await waitForServiceWorkerRegistration({
+    timeoutMs: firstTimeoutMs,
+    cleanupLegacy,
+  });
+
+  if (registration?.active) {
+    return registration;
+  }
+
+  await wait(retryDelayMs);
+  registration = await waitForServiceWorkerRegistration({
+    timeoutMs: retryTimeoutMs,
+    cleanupLegacy: false,
+  });
+
+  return registration?.active ? registration : null;
+}
+
 export function getPushSubscriptionModel(OneSignal) {
   return OneSignal?.User?.pushSubscription || OneSignal?.User?.PushSubscription || null;
 }
@@ -338,20 +375,32 @@ export async function ensureOneSignalInitialized() {
 
     // Registrierung zuerst sichern, erst danach SDK laden/initen.
     // Sonst versucht das SDK teilweise zu früh "Page -> SW" postMessage.
-    const registration = await waitForServiceWorkerRegistration({
-      timeoutMs: 10_000,
-      cleanupLegacy: true,
-    });
+    let registration = await resolveReadyOneSignalRegistration();
     if (!registration) {
-      throw new Error('OneSignal Service-Worker Registrierung nicht verfügbar.');
+      throw new Error('OneSignal Service-Worker konnte nicht aktiviert werden. Bitte kurz erneut versuchen.');
     }
 
     const OneSignal = await getOneSignal({ timeoutMs: 20_000 });
-    try {
-      await OneSignal.init(buildInitOptions(registration));
-    } catch (err) {
-      const message = String(err?.message || err || '');
-      if (!/already.*init/i.test(message) && !/already initialized/i.test(message)) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await OneSignal.init(buildInitOptions(registration));
+        break;
+      } catch (err) {
+        if (isAlreadyInitializedError(err)) {
+          break;
+        }
+        if (attempt === 0 && isScriptOriginMismatchError(err)) {
+          registration = await resolveReadyOneSignalRegistration({
+            firstTimeoutMs: 12_000,
+            retryTimeoutMs: 14_000,
+            retryDelayMs: 900,
+            cleanupLegacy: true,
+          });
+          if (!registration) {
+            throw new Error('OneSignal Service-Worker konnte nicht aktiviert werden. Bitte kurz erneut versuchen.');
+          }
+          continue;
+        }
         throw err;
       }
     }

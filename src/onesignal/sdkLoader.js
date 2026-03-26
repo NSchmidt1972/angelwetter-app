@@ -5,13 +5,15 @@ const SAME_ORIGIN_SDK_URL = '/push/onesignal/OneSignalSDK.page.js';
 const SCRIPT_SELECTOR = 'script[data-onesignal-v16], script[src*="OneSignalSDK.page.js"]';
 const SCRIPT_LOAD_TIMEOUT_MS = 15_000;
 const RUNTIME_READY_TIMEOUT_MS = 8_000;
+const ALLOW_CROSS_ORIGIN_FALLBACK =
+  String(import.meta.env.VITE_ONESIGNAL_ALLOW_CROSS_ORIGIN_SDK_FALLBACK || '').trim() === '1';
 
 function getSdkCandidateUrls() {
   const custom = String(import.meta.env.VITE_ONESIGNAL_SDK_URL || '').trim();
   const candidates = [
     custom || null,
     SAME_ORIGIN_SDK_URL,
-    DEFAULT_SDK_URL,
+    ALLOW_CROSS_ORIGIN_FALLBACK ? DEFAULT_SDK_URL : null,
   ].filter(Boolean);
   return [...new Set(candidates)];
 }
