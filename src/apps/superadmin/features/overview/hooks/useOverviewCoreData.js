@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabaseClient';
+import { reverseGeocode } from '@/utils/geo';
 import {
   CLUB_SELECT_VARIANTS,
   isMissingClubIsActiveError,
@@ -31,6 +32,15 @@ function asNullableText(value) {
   if (value == null) return null;
   const text = String(value).trim();
   return text || null;
+}
+
+function parseCoordinate(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildCoordinateKey(lat, lon) {
+  return `${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
 
 function toTimestampMs(value) {
@@ -260,11 +270,46 @@ export function useOverviewCoreData() {
             fallbackTimestampKey: 'created_at',
           });
 
+          const coordinatesByKey = new Map();
+          Object.values(gpsByDevice).forEach((row) => {
+            const lat = parseCoordinate(row?.lat);
+            const lon = parseCoordinate(row?.lon);
+            if (lat === null || lon === null) return;
+            if (lat === 0 && lon === 0) return;
+            const coordKey = buildCoordinateKey(lat, lon);
+            if (!coordinatesByKey.has(coordKey)) coordinatesByKey.set(coordKey, { lat, lon });
+          });
+
+          const gpsLocationNameByCoordKey = new Map();
+          if (coordinatesByKey.size > 0) {
+            const reverseResults = await Promise.all(
+              Array.from(coordinatesByKey.entries()).map(async ([coordKey, coords]) => {
+                const locationName = await reverseGeocode(coords.lat, coords.lon);
+                return [coordKey, asNullableText(locationName)];
+              }),
+            );
+
+            reverseResults.forEach(([coordKey, locationName]) => {
+              gpsLocationNameByCoordKey.set(coordKey, locationName || null);
+            });
+          }
+
           const nextSensorTelemetryByDevice = {};
           sensorDeviceIds.forEach((deviceId) => {
+            const gpsRow = gpsByDevice[deviceId] || null;
+            const lat = parseCoordinate(gpsRow?.lat);
+            const lon = parseCoordinate(gpsRow?.lon);
+            const gpsCoordinateKey =
+              lat !== null && lon !== null && !(lat === 0 && lon === 0)
+                ? buildCoordinateKey(lat, lon)
+                : null;
+
             nextSensorTelemetryByDevice[deviceId] = {
               batt: battByDevice[deviceId] || null,
-              gps: gpsByDevice[deviceId] || null,
+              gps: gpsRow,
+              gpsLocationName: gpsCoordinateKey
+                ? gpsLocationNameByCoordKey.get(gpsCoordinateKey) || null
+                : null,
               temperature: temperatureByDevice[deviceId] || null,
             };
           });

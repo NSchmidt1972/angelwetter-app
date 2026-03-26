@@ -23,7 +23,9 @@ function formatNumber(value, digits = 2) {
   return parsed.toFixed(digits);
 }
 
-function formatGpsValue(gps) {
+function formatGpsValue(gps, locationName) {
+  const resolvedLocation = String(locationName || '').trim();
+  if (resolvedLocation) return resolvedLocation;
   const lat = formatNumber(gps?.lat, 5);
   const lon = formatNumber(gps?.lon, 5);
   if (lat == null || lon == null) return 'Keine Koordinaten';
@@ -244,7 +246,9 @@ export default function ClubCardsGrid({
                           telemetry?.batt?.created_at,
                         )
                         : '—';
-                      const gpsText = telemetry?.gps ? formatGpsValue(telemetry.gps) : 'Keine Daten';
+                      const gpsText = telemetry?.gps
+                        ? formatGpsValue(telemetry.gps, telemetry?.gpsLocationName)
+                        : 'Keine Daten';
                       const gpsTimestamp = telemetry?.gps
                         ? formatSensorTimestamp(
                           telemetry?.gps?.fix_time_utc,
