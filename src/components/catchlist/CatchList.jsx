@@ -22,8 +22,7 @@ import { formatLocationLabel, isHomeWaterEntry } from '@/utils/location';
 import { withTimeout } from '@/utils/async';
 import { isValuableFishEntry, parseFishSize } from '@/utils/fishValidation';
 import { isTrustedAngler } from '@/utils/visibilityPolicy';
-import { usePermissions } from '@/permissions/usePermissions';
-import { FEATURES } from '@/permissions/features';
+import { useWaterTemperatureAccess } from '@/hooks/useWaterTemperatureAccess';
 import { listWaterbodiesByClub } from '@/services/waterbodiesService';
 
 function readWaterTemp(entry) {
@@ -39,8 +38,7 @@ function readWaterTemp(entry) {
 }
 
 export default function CatchList({ anglerName }) {
-  const { hasFeatureForRole } = usePermissions();
-  const canSeeWaterTemperature = hasFeatureForRole(FEATURES.WATER_TEMPERATURE);
+  const { canSeeWaterTemperature } = useWaterTemperatureAccess();
   const resumeTick = useAppResumeTick({ enabled: true });
   const [onlyMine, setOnlyMine] = useState(false);
   const [topBadges, setTopBadges] = useState({});

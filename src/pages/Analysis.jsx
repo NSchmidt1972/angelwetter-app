@@ -6,12 +6,10 @@ import WeatherFishFilter from '@/features/analysis/components/WeatherFishFilter'
 import YearMonthOverview from '@/features/analysis/components/YearMonthOverview';
 import useAnalysisData from '@/features/analysis/hooks/useAnalysisData';
 import { ANALYSIS_YEAR_FILTER_ALL, MONTH_NAMES } from '@/features/analysis/utils';
-import { usePermissions } from '@/permissions/usePermissions';
-import { FEATURES } from '@/permissions/features';
+import { useWaterTemperatureAccess } from '@/hooks/useWaterTemperatureAccess';
 
 export default function Analysis({ anglerName }) {
-  const { hasFeatureForRole } = usePermissions();
-  const canSeeWaterTemperature = hasFeatureForRole(FEATURES.WATER_TEMPERATURE);
+  const { canSeeWaterTemperature } = useWaterTemperatureAccess();
   const {
     selectedYear,
     setSelectedYear,

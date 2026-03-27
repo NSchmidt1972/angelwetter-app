@@ -31,6 +31,7 @@ import PhotoPicker from "@/components/form/PhotoPicker";
 import HourDialog from "@/components/dialogs/HourDialog";
 import TakenDialog from "@/components/dialogs/TakenDialog";
 import { useWeatherCache } from "@/hooks/useWeatherCache";
+import { useWaterTemperatureAccess } from "@/hooks/useWaterTemperatureAccess";
 
 // Achievements (optional/best-effort)
 import { supabase } from "@/supabaseClient";
@@ -73,6 +74,7 @@ export default function FishCatchForm({
   const clubBasePath = clubSlug ? `/${clubSlug}` : '';
   const { position } = useGeoPosition();
   const { weather: cachedWeather, updateWeather } = useWeatherCache();
+  const { canSeeWaterTemperature } = useWaterTemperatureAccess();
 
   // Achievement-Layer aus dem Router-Kontext, falls Prop nicht gesetzt ist
   const outletContext = useOutletContext() ?? {};
@@ -420,12 +422,12 @@ export default function FishCatchForm({
       // Ort (best-effort)
       const locationName = await reverseGeocode(position?.lat, position?.lon).catch(() => null);
 
-      if (isHomeWaterRegion) {
+      if (isHomeWaterRegion && canSeeWaterTemperature) {
         try {
           const latestWaterTemperature = await fetchLatestWaterTemperature({
             days: 2,
             waterbodyId: selectedWaterbodyId || null,
-            fallbackToClubDefault: false,
+            fallbackToClubDefault: true,
           });
           const waterTempRaw = latestWaterTemperature?.temperature_c;
           const normalizedWaterTempRaw =

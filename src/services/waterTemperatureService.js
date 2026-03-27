@@ -17,6 +17,11 @@ function isMissingFunctionError(error, functionName) {
   return String(error?.code || '') === '42883' && message.includes(String(functionName || '').toLowerCase());
 }
 
+function isMissingTableError(error, tableName) {
+  const message = String(error?.message || '').toLowerCase();
+  return String(error?.code || '') === '42P01' && message.includes(String(tableName || '').toLowerCase());
+}
+
 function toTimestampMs(value) {
   if (!value) return NaN;
   const ts = new Date(value).getTime();
@@ -80,6 +85,135 @@ async function fetchWaterTemperatureHistoryDirect({ limit }) {
   return [];
 }
 
+async function fetchWaterTemperatureHistoryScopedDirect({
+  clubId,
+  waterbodyId,
+  limit,
+}) {
+  const p_limit = normalizePositiveInt(limit, 500, { min: 1, max: 2000 });
+  const nowIso = new Date().toISOString();
+
+  const selectVariants = [
+    { select: 'temperature_c, measured_at, created_at', hasCreatedAt: true },
+    { select: 'temperature_c, measured_at', hasCreatedAt: false },
+  ];
+
+  async function fetchSensorCandidates(queryBuilder) {
+    const { data, error } = await queryBuilder;
+    if (error) {
+      if (isMissingTableError(error, 'waterbody_sensors')) return [];
+      throw error;
+    }
+    return Array.isArray(data) ? data : [];
+  }
+
+  const baseQuery = supabase
+    .from('waterbody_sensors')
+    .select('device_id, topic, is_active, valid_from, created_at, valid_to')
+    .eq('club_id', clubId)
+    .eq('waterbody_id', waterbodyId)
+    .eq('sensor_type', 'temperature')
+    .order('is_active', { ascending: false })
+    .order('valid_from', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  const activeCurrent = await fetchSensorCandidates(
+    supabase
+      .from('waterbody_sensors')
+      .select('device_id, topic, is_active, valid_from, created_at, valid_to')
+      .eq('club_id', clubId)
+      .eq('waterbody_id', waterbodyId)
+      .eq('sensor_type', 'temperature')
+      .eq('is_active', true)
+      .is('valid_to', null)
+      .order('valid_from', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(10),
+  );
+
+  const activeFuture = await fetchSensorCandidates(
+    supabase
+      .from('waterbody_sensors')
+      .select('device_id, topic, is_active, valid_from, created_at, valid_to')
+      .eq('club_id', clubId)
+      .eq('waterbody_id', waterbodyId)
+      .eq('sensor_type', 'temperature')
+      .eq('is_active', true)
+      .gt('valid_to', nowIso)
+      .order('valid_from', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(10),
+  );
+
+  const allCandidates = await fetchSensorCandidates(baseQuery);
+  const seen = new Set();
+  const sensorCandidates = [...activeCurrent, ...activeFuture, ...allCandidates]
+    .map((row) => ({
+      deviceId: String(row?.device_id == null ? '' : row.device_id).trim(),
+      topic: String(row?.topic == null ? '' : row.topic).trim() || null,
+    }))
+    .filter((row) => row.deviceId)
+    .filter((row) => {
+      const key = `${row.deviceId}||${row.topic || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  if (!sensorCandidates.length) return [];
+
+  async function queryTemperatureLogBySensor({ deviceId, topic }) {
+    const topicModes = topic ? [true, false] : [false];
+    const deviceModes = ['exact', 'ci'];
+
+    for (const variant of selectVariants) {
+      for (const useTopicFilter of topicModes) {
+        for (const deviceMode of deviceModes) {
+          let query = supabase
+            .from('temperature_log')
+            .select(variant.select)
+            .not('temperature_c', 'is', null)
+            .order('measured_at', { ascending: false, nullsFirst: false })
+            .limit(p_limit);
+
+          if (deviceMode === 'exact') {
+            query = query.eq('device_id', deviceId);
+          } else {
+            query = query.ilike('device_id', deviceId);
+          }
+
+          if (useTopicFilter && topic) query = query.eq('topic', topic);
+          if (variant.hasCreatedAt) {
+            query = query.order('created_at', { ascending: false, nullsFirst: false });
+          }
+
+          const { data, error } = await query;
+          if (!error) {
+            const rows = Array.isArray(data) ? data : [];
+            if (rows.length > 0) return rows;
+            continue;
+          }
+          if (isMissingTableError(error, 'temperature_log')) return [];
+          if (variant.hasCreatedAt && isMissingColumnError(error, 'created_at')) {
+            continue;
+          }
+          throw error;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  for (const sensor of sensorCandidates) {
+    const rows = await queryTemperatureLogBySensor(sensor);
+    if (rows.length > 0) return rows;
+  }
+
+  return [];
+}
+
 export async function fetchWaterTemperatureHistory({
   clubId = getActiveClubId(),
   days = 7,
@@ -106,20 +240,56 @@ export async function fetchWaterTemperatureHistory({
       });
 
       if (error) {
-        if (!isMissingFunctionError(error, 'get_water_temperature_history_for_waterbody')) {
+        if (isMissingFunctionError(error, 'get_water_temperature_history_for_waterbody')) {
+          const scopedRows = await fetchWaterTemperatureHistoryScopedDirect({
+            clubId,
+            waterbodyId: normalizedWaterbodyId,
+            limit: p_limit,
+          });
+          const normalizedScopedRows = normalizeRows(scopedRows, { days: p_days });
+          if (normalizedScopedRows.length > 0 || fallbackToClubDefault === false) {
+            return normalizedScopedRows;
+          }
+        } else {
           rpcError = error;
         }
       } else {
         const normalizedScopedRows = normalizeRows(data, { days: p_days });
-        if (normalizedScopedRows.length > 0 || fallbackToClubDefault === false) {
+        if (normalizedScopedRows.length > 0) {
           return normalizedScopedRows;
+        }
+        if (fallbackToClubDefault === false) {
+          const scopedRows = await fetchWaterTemperatureHistoryScopedDirect({
+            clubId,
+            waterbodyId: normalizedWaterbodyId,
+            limit: p_limit,
+          });
+          const normalizedScopedDirectRows = normalizeRows(scopedRows, { days: p_days });
+          return normalizedScopedDirectRows;
         }
       }
     } catch (error) {
-      if (!isMissingFunctionError(error, 'get_water_temperature_history_for_waterbody')) {
+      if (isMissingFunctionError(error, 'get_water_temperature_history_for_waterbody')) {
+        const scopedRows = await fetchWaterTemperatureHistoryScopedDirect({
+          clubId,
+          waterbodyId: normalizedWaterbodyId,
+          limit: p_limit,
+        });
+        const normalizedScopedRows = normalizeRows(scopedRows, { days: p_days });
+        if (normalizedScopedRows.length > 0 || fallbackToClubDefault === false) {
+          return normalizedScopedRows;
+        }
+      } else {
         rpcError = error;
       }
     }
+  }
+
+  // Strict mode for waterbody-scoped requests:
+  // never fall back to club/global history when a waterbody context is required.
+  if (fallbackToClubDefault === false) {
+    if (rpcError) throw rpcError;
+    return [];
   }
 
   try {

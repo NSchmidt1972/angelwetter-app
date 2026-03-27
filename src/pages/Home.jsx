@@ -6,8 +6,7 @@ import { useAppResumeTick } from '@/hooks/useAppResumeSync';
 import { Card } from '@/components/ui';
 import { withTimeout } from '@/utils/async';
 import usePageMeta from '@/hooks/usePageMeta';
-import { usePermissions } from '@/permissions/usePermissions';
-import { FEATURES } from '@/permissions/features';
+import { useWaterTemperatureAccess } from '@/hooks/useWaterTemperatureAccess';
 import { fetchWaterTemperatureHistory } from '@/services/waterTemperatureService';
 
 export default function Home() {
@@ -18,18 +17,18 @@ export default function Home() {
 
   const { weather, loading, error } = useWeatherCache();
   const resumeTick = useAppResumeTick({ enabled: true });
-  const { currentClub, hasFeatureForRole } = usePermissions();
+  const { currentClubId, canSeeWaterTemperature } = useWaterTemperatureAccess();
   const [waterTemperature, setWaterTemperature] = useState(null);
   const [waterTemperatureHistory, setWaterTemperatureHistory] = useState([]);
   const [waterTemperatureLoading, setWaterTemperatureLoading] = useState(true);
   const weatherData = weather;
   const errorMessage = error && !weatherData ? '⚠️ Wetterdaten konnten nicht geladen werden.' : null;
-  const canSeeWaterTemperature = Boolean(currentClub?.id) && hasFeatureForRole(FEATURES.WATER_TEMPERATURE);
+
   useEffect(() => {
     let active = true;
 
     async function loadWaterTemperature() {
-      if (!canSeeWaterTemperature || !currentClub?.id) {
+      if (!canSeeWaterTemperature || !currentClubId) {
         setWaterTemperature(null);
         setWaterTemperatureHistory([]);
         setWaterTemperatureLoading(false);
@@ -40,7 +39,7 @@ export default function Home() {
       try {
         const rows = await withTimeout(
           fetchWaterTemperatureHistory({
-            clubId: currentClub.id,
+            clubId: currentClubId,
             days: 7,
             limit: 1000,
           }),
@@ -67,7 +66,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [weatherData?.savedAt, canSeeWaterTemperature, currentClub?.id, resumeTick]);
+  }, [weatherData?.savedAt, canSeeWaterTemperature, currentClubId, resumeTick]);
 
   return (
     <Card className="p-4 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans">
