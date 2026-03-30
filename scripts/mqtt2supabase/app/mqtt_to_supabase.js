@@ -85,6 +85,16 @@ if (keyType === "publishable" || keyType === "anon_jwt") {
   console.error("[FATAL] SUPABASE_SERVICE_ROLE_KEY is not a service key:", keyType);
 }
 
+const SENSOR_UPSERT_CONFLICT = {
+  temperature: "device_id,topic,measured_at",
+  battery: "device_id,topic,measured_at",
+  gps: "device_id,topic,fix_time_utc,lat,lon",
+};
+
+async function upsertSensorLog(table, row, onConflict) {
+  return supabase.from(table).upsert(row, { onConflict });
+}
+
 function parseUtcCompactToIso(utcStr) {
   if (!utcStr || typeof utcStr !== "string") return null;
   const m = utcStr.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\.\d+)?$/);
@@ -117,6 +127,16 @@ function parseAnyTimestampToIso(value) {
   if (compact) return compact;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function resolveGpsFixTime(payload, fallbackIso = null) {
+  return (
+    parseAnyTimestampToIso(payload?.utc) ||
+    parseUtcCompactToIso(payload?.utc) ||
+    parseAnyTimestampToIso(payload?.timestamp) ||
+    parseAnyTimestampToIso(payload?.measured_at) ||
+    fallbackIso
+  );
 }
 
 function asNonEmptyString(value) {
@@ -236,7 +256,11 @@ client.on("message", async (topic, message) => {
           payload,
         };
 
-        const { error } = await supabase.from("temperature_log").insert(tempRow);
+        const { error } = await upsertSensorLog(
+          "temperature_log",
+          tempRow,
+          SENSOR_UPSERT_CONFLICT.temperature,
+        );
         if (error) console.error("Supabase temperature insert error:", formatSupabaseError(error));
         else console.log("[OK] inserted state temperature", tempRow.device_id, tempRow.temperature_c, tempRow.measured_at);
       } else {
@@ -264,7 +288,11 @@ client.on("message", async (topic, message) => {
           payload: battery,
         };
 
-        const { error } = await supabase.from("batt_log").insert(battRow);
+        const { error } = await upsertSensorLog(
+          "batt_log",
+          battRow,
+          SENSOR_UPSERT_CONFLICT.battery,
+        );
         if (error) console.error("Supabase battery insert error:", formatSupabaseError(error));
         else console.log("[OK] inserted state battery", battRow.device_id, battRow.voltage_v, battRow.percent, battRow.valid);
       } else {
@@ -279,7 +307,7 @@ client.on("message", async (topic, message) => {
         const gpsRow = {
           device_id: deviceId,
           topic: normalizedTopic,
-          fix_time_utc: parseAnyTimestampToIso(gps?.utc) ?? parseUtcCompactToIso(gps?.utc),
+          fix_time_utc: resolveGpsFixTime(gps, measuredAt),
           lat,
           lon,
           alt: toFiniteNumberOrNull(gps?.alt),
@@ -293,7 +321,11 @@ client.on("message", async (topic, message) => {
           payload: gps,
         };
 
-        const { error } = await supabase.from("gps_log").insert(gpsRow);
+        const { error } = await upsertSensorLog(
+          "gps_log",
+          gpsRow,
+          SENSOR_UPSERT_CONFLICT.gps,
+        );
         if (error) console.error("Supabase gps insert error:", formatSupabaseError(error));
         else console.log("[OK] inserted state gps", gpsRow.device_id, gpsRow.fix_time_utc ?? "");
       } else {
@@ -332,7 +364,11 @@ client.on("message", async (topic, message) => {
         payload,
       };
 
-      const { error } = await supabase.from("temperature_log").insert(row);
+      const { error } = await upsertSensorLog(
+        "temperature_log",
+        row,
+        SENSOR_UPSERT_CONFLICT.temperature,
+      );
       if (error) console.error("Supabase temperature insert error:", formatSupabaseError(error));
       else console.log("[OK] inserted temperature", row.device_id, row.temperature_c, row.measured_at);
       return;
@@ -374,7 +410,11 @@ client.on("message", async (topic, message) => {
         payload,
       };
 
-      const { error } = await supabase.from("batt_log").insert(row);
+      const { error } = await upsertSensorLog(
+        "batt_log",
+        row,
+        SENSOR_UPSERT_CONFLICT.battery,
+      );
       if (error) console.error("Supabase battery insert error:", formatSupabaseError(error));
       else console.log("[OK] inserted battery", row.device_id, row.voltage_v, row.percent);
       return;
@@ -395,7 +435,7 @@ client.on("message", async (topic, message) => {
       const row = {
         device_id: deviceId,
         topic: normalizedTopic,
-        fix_time_utc: parseAnyTimestampToIso(payload?.utc) ?? parseUtcCompactToIso(payload?.utc),
+        fix_time_utc: resolveGpsFixTime(payload),
         lat,
         lon,
         alt: toFiniteNumberOrNull(payload?.alt),
@@ -409,7 +449,11 @@ client.on("message", async (topic, message) => {
         payload,
       };
 
-      const { error } = await supabase.from("gps_log").insert(row);
+      const { error } = await upsertSensorLog(
+        "gps_log",
+        row,
+        SENSOR_UPSERT_CONFLICT.gps,
+      );
       if (error) console.error("Supabase gps insert error:", formatSupabaseError(error));
       else console.log("[OK] inserted gps", row.device_id, row.fix_time_utc ?? "");
       return;
@@ -444,7 +488,11 @@ client.on("message", async (topic, message) => {
         payload,
       };
 
-      const { error } = await supabase.from("temperature_log").insert(row);
+      const { error } = await upsertSensorLog(
+        "temperature_log",
+        row,
+        SENSOR_UPSERT_CONFLICT.temperature,
+      );
       if (error) console.error("Supabase temperature insert error:", formatSupabaseError(error));
       else console.log("[OK] inserted temperature", row.device_id, row.temperature_c, row.measured_at);
       return;
